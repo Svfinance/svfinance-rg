@@ -1,4 +1,6 @@
-const API_URL = "https://finance-control-api-production.up.railway.app/api";
+const API_URL = "https://finance-control-api-production.up.railway.app";
+
+// ================= AUTH =================
 
 export async function loginUser(email, password) {
   const response = await fetch(`${API_URL}/login`, {
@@ -6,15 +8,18 @@ export async function loginUser(email, password) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
+
   const data = await response.json();
+
   if (response.ok && data.token) {
-    localStorage.setItem("token",        data.token);
-    localStorage.setItem("name",         data.name         || "");
-    localStorage.setItem("role",         data.role         || "");
-    localStorage.setItem("company_id",   String(data.company_id || ""));
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("name", data.name || "");
+    localStorage.setItem("role", data.role || "");
+    localStorage.setItem("company_id", String(data.company_id || ""));
     localStorage.setItem("company_name", data.company_name || "");
-    localStorage.setItem("plan",         data.plan         || "free");
+    localStorage.setItem("plan", data.plan || "free");
   }
+
   return { ok: response.ok, data };
 }
 
@@ -24,6 +29,7 @@ export async function registerUser(email, password, name, company_name) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password, name, company_name }),
   });
+
   return response;
 }
 
@@ -38,16 +44,20 @@ export function logoutUser() {
 
 export function getAuthHeaders() {
   const token = localStorage.getItem("token");
+
   return {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
   };
 }
 
+// ================= TRANSACTIONS =================
+
 export async function getTransactions() {
   const response = await fetch(`${API_URL}/transactions`, {
     headers: getAuthHeaders(),
   });
+
   return response;
 }
 
@@ -57,6 +67,7 @@ export async function createTransaction(data) {
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
+
   return response;
 }
 
@@ -66,6 +77,7 @@ export async function updateTransaction(id, data) {
     headers: getAuthHeaders(),
     body: JSON.stringify(data),
   });
+
   return response;
 }
 
@@ -74,5 +86,6 @@ export async function deleteTransaction(id) {
     method: "DELETE",
     headers: getAuthHeaders(),
   });
+
   return response;
 }
