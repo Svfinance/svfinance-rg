@@ -39,45 +39,68 @@ const EMPTY_FORM = {
 
 export default function Sales() {
   const { theme, themeId } = useTheme();
-  const isGlass = themeId === "glass";
+  const isGlass     = themeId === "glass";
   const colorScheme = isGlass ? "light" : "dark";
-  const isMobile = useIsMobile();
-  const navigate = useNavigate();
+  const isMobile    = useIsMobile();
+  const navigate    = useNavigate();
 
-  const [sidebarOpen, setSidebarOpen]     = useState(false);
-  const [orders, setOrders]               = useState([]);
-  const [clients, setClients]             = useState([]);
-  const [products, setProducts]           = useState([]);
-  const [loading, setLoading]             = useState(true);
-  const [view, setView]                   = useState("list");
-  const [editing, setEditing]             = useState(null);
-  const [form, setForm]                   = useState(EMPTY_FORM);
-  const [items, setItems]                 = useState([]);
-  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const role     = localStorage.getItem("role")    || "viewer";
+  const myUserId = parseInt(localStorage.getItem("user_id") || "0");
+  const isSeller = role === "seller";
+
+  const [sidebarOpen, setSidebarOpen]         = useState(false);
+  const [allOrders, setAllOrders]             = useState([]);
+  const [clients, setClients]                 = useState([]);
+  const [products, setProducts]               = useState([]);
+  const [loading, setLoading]                 = useState(true);
+  const [view, setView]                       = useState("list");
+  const [editing, setEditing]                 = useState(null);
+  const [form, setForm]                       = useState(EMPTY_FORM);
+  const [items, setItems]                     = useState([]);
+  const [deleteConfirm, setDeleteConfirm]     = useState(null);
   const [completeConfirm, setCompleteConfirm] = useState(null);
-  const [toast, setToast]                 = useState(null);
-  const [filterStatus, setFilterStatus]   = useState("all");
-  const [search, setSearch]               = useState("");
-  const [completing, setCompleting]       = useState(false);
+  const [toast, setToast]                     = useState(null);
+  const [filterStatus, setFilterStatus]       = useState("all");
+  const [filterUser, setFilterUser]           = useState("all");
+  const [search, setSearch]                   = useState("");
+  const [completing, setCompleting]           = useState(false);
+  const [teamUsers, setTeamUsers]             = useState([]);
 
   async function fetchAll() {
     setLoading(true);
     try {
-      const [resO, resC, resP] = await Promise.all([
+      const requests = [
         fetch(`${API}/orders`,   { headers: { Authorization: `Bearer ${token()}` } }),
         fetch(`${API}/clients`,  { headers: { Authorization: `Bearer ${token()}` } }),
         fetch(`${API}/products`, { headers: { Authorization: `Bearer ${token()}` } }),
-      ]);
-      if (resO.status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
-      const [dataO, dataC, dataP] = await Promise.all([resO.json(), resC.json(), resP.json()]);
-      setOrders(Array.isArray(dataO) ? dataO : []);
+      ];
+      // admin/financial busca lista de usuários para filtro
+      if (role === "admin" || role === "financial") {
+        requests.push(fetch(`${API}/company/users`, { headers: { Authorization: `Bearer ${token()}` } }));
+      }
+
+      const responses = await Promise.all(requests);
+      if (responses[0].status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
+      const [dataO, dataC, dataP] = await Promise.all([responses[0].json(), responses[1].json(), responses[2].json()]);
+
+      setAllOrders(Array.isArray(dataO) ? dataO : []);
       setClients(Array.isArray(dataC) ? dataC : []);
       setProducts(Array.isArray(dataP) ? dataP : []);
+
+      if (responses[3]) {
+        const dataU = await responses[3].json();
+        setTeamUsers(Array.isArray(dataU) ? dataU : []);
+      }
     } catch { showToast("Erro ao carregar dados.", "error"); }
     finally { setLoading(false); }
   }
 
   useEffect(() => { fetchAll(); }, []);
+
+  // ✅ vendedor vê só as próprias vendas
+  const orders = isSeller
+    ? allOrders.filter(o => o.user_id === myUserId)
+    : allOrders;
 
   function showToast(msg, type = "success") {
     setToast({ msg, type });
@@ -143,7 +166,7 @@ export default function Sales() {
   async function handleComplete(order) {
     setCompleting(true);
     try {
-      const res = await fetch(`${API}/orders/${order.id}/complete`, {
+      const res  = await fetch(`${API}/orders/${order.id}/complete`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
       });
@@ -163,21 +186,23 @@ export default function Sales() {
     try {
       const res = await fetch(`${API}/orders/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token()}` } });
       if (res.ok) { showToast("Venda removida."); setDeleteConfirm(null); fetchAll(); }
-      else showToast("Erro ao remover.", "error");
+      else { const err = await res.json(); showToast(err.msg || "Erro ao remover.", "error"); }
     } catch { showToast("Erro de conexão.", "error"); }
   }
 
+  // ✅ filtros combinados
   const filtered = orders.filter(o => {
     const statusOk = filterStatus === "all" || o.status === filterStatus;
+    const userOk   = filterUser === "all" || String(o.user_id) === String(filterUser);
     const searchOk = o.number.toLowerCase().includes(search.toLowerCase()) ||
                      o.client_name.toLowerCase().includes(search.toLowerCase());
-    return statusOk && searchOk;
+    return statusOk && userOk && searchOk;
   });
 
-  const totalVendas    = orders.filter(o => o.status === "done").reduce((s, o) => s + o.total, 0);
-  const totalAbertas   = orders.filter(o => o.status === "open").length;
-  const totalAndamento = orders.filter(o => o.status === "in_progress").length;
-  const totalConcluidas= orders.filter(o => o.status === "done").length;
+  const totalVendas     = orders.filter(o => o.status === "done").reduce((s, o) => s + o.total, 0);
+  const totalAbertas    = orders.filter(o => o.status === "open").length;
+  const totalAndamento  = orders.filter(o => o.status === "in_progress").length;
+  const totalConcluidas = orders.filter(o => o.status === "done").length;
 
   // ── estilos ──
   const inputStyle = {
@@ -187,8 +212,8 @@ export default function Sales() {
     boxSizing: "border-box", transition: "border-color 0.2s", colorScheme,
     ...(isGlass && { backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }),
   };
-  const selectStyle = { ...inputStyle, cursor: "pointer" };
-  const modalBg = isGlass
+  const selectStyle  = { ...inputStyle, cursor: "pointer" };
+  const modalBg      = isGlass
     ? { backdropFilter:"blur(18px) saturate(180%)", WebkitBackdropFilter:"blur(18px) saturate(180%)", background:"rgba(255,255,255,0.55)", border:"1px solid rgba(255,255,255,0.6)" }
     : { background: theme.bgModal, border: `1px solid ${theme.borderCard}` };
   const btnPrimary   = { background: theme.primaryGrad, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", fontSize:"0.9rem", boxShadow:`0 4px 15px ${theme.primary}33` };
@@ -197,6 +222,8 @@ export default function Sales() {
   const sectionLabel = { fontSize:"11px", fontWeight:700, letterSpacing:"0.12em", textTransform:"uppercase", color:theme.textMuted, margin:"0 0 14px 2px" };
   const fieldStyle   = { display:"flex", flexDirection:"column", gap:6 };
   const labelStyle   = { color:theme.textSecondary, fontSize:"0.8rem", fontWeight:600 };
+  const th           = { textAlign:"left", padding:"12px 16px", color:theme.textMuted, fontWeight:600, fontSize:"0.75rem", textTransform:"uppercase", letterSpacing:"0.05em", background: isGlass?"rgba(255,255,255,0.1)":theme.bgCard, borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, whiteSpace:"nowrap" };
+  const td           = { padding:"12px 16px", verticalAlign:"middle" };
 
   // ══════════════════════
   // VIEW: FORMULÁRIO
@@ -212,7 +239,6 @@ export default function Sales() {
               {editing ? `Editar Venda — ${editing.number}` : "Nova Venda"}
             </h1>
           </div>
-
           <form onSubmit={handleSubmit}>
             <div style={formCard}>
               <p style={sectionLabel}>📋 Dados da Venda</p>
@@ -245,13 +271,11 @@ export default function Sales() {
               </div>
             </div>
 
-            {/* ITENS */}
             <div style={formCard}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
                 <p style={{ ...sectionLabel, marginBottom:0 }}>📦 Produtos & Serviços</p>
                 <button type="button" style={{ ...btnSecondary, fontSize:"0.82rem", padding:"7px 14px" }} onClick={addItem}>+ Adicionar Item</button>
               </div>
-
               {items.length === 0 ? (
                 <div style={{ textAlign:"center", color:theme.textMuted, padding:"32px 0" }}>Nenhum item. Clique em "+ Adicionar Item".</div>
               ) : (
@@ -321,55 +345,29 @@ export default function Sales() {
   // ══════════════════════
   return (
     <PageLayout>
-
       <style>{`
-        .card3d-sv {
-          background: ${isGlass?"rgba(255,255,255,0.22)":theme.bgCard};
-          border-radius:14px; padding:16px 20px;
-          display:flex; align-items:center; gap:14px;
-          backdrop-filter:${isGlass?"blur(18px) saturate(180%)":"blur(6px)"};
-          -webkit-backdrop-filter:${isGlass?"blur(18px) saturate(180%)":"blur(6px)"};
-          transition:transform 0.35s ease, box-shadow 0.35s ease;
-          transform:perspective(700px) rotateX(5deg) rotateY(-3deg);
-          box-shadow:${isGlass?"0 4px 20px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.7)":"0 20px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)"};
-          position:relative; overflow:hidden; cursor:default;
-        }
+        .card3d-sv { background:${isGlass?"rgba(255,255,255,0.22)":theme.bgCard}; border-radius:14px; padding:16px 20px; display:flex; align-items:center; gap:14px; backdrop-filter:${isGlass?"blur(18px) saturate(180%)":"blur(6px)"}; -webkit-backdrop-filter:${isGlass?"blur(18px) saturate(180%)":"blur(6px)"}; transition:transform 0.35s ease, box-shadow 0.35s ease; transform:perspective(700px) rotateX(5deg) rotateY(-3deg); box-shadow:${isGlass?"0 4px 20px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.7)":"0 20px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)"}; position:relative; overflow:hidden; cursor:default; }
         .card3d-sv::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,${isGlass?"rgba(255,255,255,0.8)":"rgba(255,255,255,0.1)"},transparent); }
         .card3d-sv:hover { transform:perspective(700px) rotateX(0deg) rotateY(0deg) translateZ(20px) translateY(-10px); box-shadow:${isGlass?"0 20px 48px rgba(0,0,0,0.1)":"0 36px 72px rgba(0,0,0,0.5)"}; }
-        .table3d-sv {
-          background:${isGlass?"rgba(255,255,255,0.18)":theme.bgCard};
-          border:1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderCard};
-          border-radius:16px; overflow-x:auto; -webkit-overflow-scrolling:touch;
-          box-shadow:${isGlass?"0 4px 24px rgba(0,0,0,0.07)":"0 12px 32px rgba(0,0,0,0.3)"};
-          ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":"backdrop-filter:blur(4px);"}
-        }
+        .table3d-sv { background:${isGlass?"rgba(255,255,255,0.18)":theme.bgCard}; border:1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderCard}; border-radius:16px; overflow-x:auto; -webkit-overflow-scrolling:touch; box-shadow:${isGlass?"0 4px 24px rgba(0,0,0,0.07)":"0 12px 32px rgba(0,0,0,0.3)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":"backdrop-filter:blur(4px);"} }
         .sv-row { transition:background 0.15s; }
         .sv-row:hover { background:${isGlass?"rgba(255,255,255,0.15)":`${theme.primary}0d`} !important; }
-        .btn-complete {
-          background: linear-gradient(135deg, #22c55e, #16a34a);
-          color:#fff; border:none; border-radius:8px;
-          padding:6px 12px; cursor:pointer; font-size:0.82rem;
-          font-weight:700; white-space:nowrap;
-          box-shadow: 0 4px 12px rgba(34,197,94,0.4);
-          transition: transform 0.15s, box-shadow 0.15s;
-        }
+        .btn-complete { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; border:none; border-radius:8px; padding:6px 12px; cursor:pointer; font-size:0.82rem; font-weight:700; white-space:nowrap; box-shadow:0 4px 12px rgba(34,197,94,0.4); transition:transform 0.15s, box-shadow 0.15s; }
         .btn-complete:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(34,197,94,0.5); }
-        @media (max-width:768px) {
-          .card3d-sv { transform:none !important; }
-          .card3d-sv:hover { transform:translateY(-6px) !important; }
-        }
+        @media (max-width:768px) { .card3d-sv { transform:none !important; } .card3d-sv:hover { transform:translateY(-6px) !important; } }
       `}</style>
 
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <div style={{ flex:1, padding: isMobile?"72px 16px 40px":"32px 36px", overflowY:"auto", position:"relative", zIndex:1 }}>
 
-        {/* HEADER */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28, flexWrap:"wrap", gap:12 }}>
           <div style={{ display:"flex", alignItems:"center", gap:14 }}>
             <img src={logoGif} alt="logo" style={{ width: isMobile?44:60, height: isMobile?44:60, objectFit:"contain", filter:"drop-shadow(0 0 10px rgba(255,255,255,0.3))" }} />
             <div>
-              <h1 style={{ fontSize: isMobile?"20px":"1.75rem", fontWeight:700, margin:0, color:theme.textPrimary }}>Vendas</h1>
+              <h1 style={{ fontSize: isMobile?"20px":"1.75rem", fontWeight:700, margin:0, color:theme.textPrimary }}>
+                Vendas {isSeller && <span style={{ fontSize:"0.75rem", color:theme.textMuted, fontWeight:400 }}>(suas vendas)</span>}
+              </h1>
               <p style={{ color:theme.textMuted, margin:"4px 0 0", fontSize:"0.85rem" }}>Gerencie suas vendas e ordens de serviço</p>
             </div>
           </div>
@@ -379,10 +377,10 @@ export default function Sales() {
         {/* CARDS */}
         <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16, marginBottom:28 }}>
           {[
-            { icon:"💰", label:"Faturado",      value: fmt(totalVendas),   color:"#22c55e", border: isGlass?"rgba(255,255,255,0.5)":"rgba(34,197,94,0.3)"  },
-            { icon:"🔵", label:"Abertas",        value: totalAbertas,       color:"#3b82f6", border: isGlass?"rgba(255,255,255,0.5)":"rgba(59,130,246,0.3)"  },
-            { icon:"🟡", label:"Em andamento",   value: totalAndamento,     color:"#f59e0b", border: isGlass?"rgba(255,255,255,0.5)":"rgba(245,158,11,0.3)"  },
-            { icon:"✅", label:"Concluídas",     value: totalConcluidas,    color:"#22c55e", border: isGlass?"rgba(255,255,255,0.5)":"rgba(34,197,94,0.3)"   },
+            { icon:"💰", label:"Faturado",     value: fmt(totalVendas),   color:"#22c55e", border: isGlass?"rgba(255,255,255,0.5)":"rgba(34,197,94,0.3)"  },
+            { icon:"🔵", label:"Abertas",       value: totalAbertas,       color:"#3b82f6", border: isGlass?"rgba(255,255,255,0.5)":"rgba(59,130,246,0.3)"  },
+            { icon:"🟡", label:"Em andamento",  value: totalAndamento,     color:"#f59e0b", border: isGlass?"rgba(255,255,255,0.5)":"rgba(245,158,11,0.3)"  },
+            { icon:"✅", label:"Concluídas",    value: totalConcluidas,    color:"#22c55e", border: isGlass?"rgba(255,255,255,0.5)":"rgba(34,197,94,0.3)"   },
           ].map((c,i) => (
             <div key={i} className="card3d-sv" style={{ border:`1px solid ${c.border}` }}>
               <div style={{ fontSize:"1.5rem" }}>{c.icon}</div>
@@ -396,9 +394,21 @@ export default function Sales() {
 
         {/* FILTROS */}
         <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:20, alignItems:"center" }}>
-          <input style={{ ...inputStyle, width: isMobile?"100%":"280px" }}
-            type="text" placeholder="🔍 Buscar por número ou cliente..."
+          <input style={{ ...inputStyle, width: isMobile?"100%":"240px" }}
+            type="text" placeholder="🔍 Buscar número ou cliente..."
             value={search} onChange={e => setSearch(e.target.value)} />
+
+          {/* ✅ filtro por vendedor — só para admin/financial */}
+          {!isSeller && teamUsers.length > 0 && (
+            <select style={{ ...selectStyle, width: isMobile?"100%":"200px" }}
+              value={filterUser} onChange={e => setFilterUser(e.target.value)}>
+              <option value="all">👥 Todos os vendedores</option>
+              {teamUsers.filter(u => u.role === "seller" || u.role === "admin").map(u => (
+                <option key={u.id} value={u.id}>{u.name} ({u.role})</option>
+              ))}
+            </select>
+          )}
+
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {["all",...Object.keys(STATUS_MAP)].map(s => (
               <button key={s} style={{
@@ -428,68 +438,65 @@ export default function Sales() {
               <thead>
                 <tr>
                   {(isMobile
-                    ?["Número","Cliente","Status","Total","Ações"]
-                    :["Número","Cliente","Origem","Itens","Total","Criado em","Concluído em","Status","Ações"]
-                  ).map(h => (
-                    <th key={h} style={{ textAlign:"left", padding:"12px 16px", color:theme.textMuted, fontWeight:600, fontSize:"0.75rem", textTransform:"uppercase", letterSpacing:"0.05em", background: isGlass?"rgba(255,255,255,0.1)":theme.bgCard, borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, whiteSpace:"nowrap" }}>{h}</th>
-                  ))}
+                    ? ["Número","Cliente","Status","Total","Ações"]
+                    : ["Número","Cliente","Vendedor","Origem","Total","Criado em","Concluído em","Status","Ações"]
+                  ).map(h => <th key={h} style={th}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(o => {
-                  const st = STATUS_MAP[o.status] || STATUS_MAP.open;
-                  const isDone = o.status === "done";
+                  const st          = STATUS_MAP[o.status] || STATUS_MAP.open;
+                  const isDone      = o.status === "done";
                   const isCancelled = o.status === "cancelled";
+                  // ✅ vendedor só opera as próprias vendas
+                  const canOperate  = !isSeller || o.user_id === myUserId;
+                  const sellerName  = teamUsers.find(u => u.id === o.user_id)?.name || "—";
+
                   return (
                     <tr key={o.id} className="sv-row" style={{ borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.15)":theme.border}` }}>
-                      <td style={{ padding:"12px 16px", verticalAlign:"middle", fontWeight:700, color:theme.primary }}>{o.number}</td>
-                      <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
+                      <td style={{ ...td, fontWeight:700, color:theme.primary }}>{o.number}</td>
+                      <td style={td}>
                         <div style={{ fontWeight:600, color:theme.textPrimary }}>{o.client_name}</div>
                       </td>
                       {!isMobile && (
-                        <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
+                        <td style={td}>
+                          <span style={{ color:theme.textMuted, fontSize:"0.82rem" }}>{sellerName}</span>
+                        </td>
+                      )}
+                      {!isMobile && (
+                        <td style={td}>
                           <span style={{ display:"inline-block", padding:"3px 10px", borderRadius:20, fontSize:"0.72rem", fontWeight:600, background: o.origin==="quote"?`${theme.accent}22`:`${theme.primary}22`, color: o.origin==="quote"?theme.accent:theme.primary }}>
                             {o.origin==="quote"?"🧾 Orçamento":"✏️ Direta"}
                           </span>
                         </td>
                       )}
+                      <td style={{ ...td, fontWeight:700, color: isDone?theme.income:theme.textPrimary }}>{fmt(o.total)}</td>
+                      {!isMobile && <td style={{ ...td, color:theme.textMuted }}>{fmtDate(o.created_at)}</td>}
                       {!isMobile && (
-                        <td style={{ padding:"12px 16px", verticalAlign:"middle", color:theme.textMuted }}>
-                          {(o.items||[]).length} {(o.items||[]).length===1?"item":"itens"}
+                        <td style={td}>
+                          {isDone ? <span style={{ color:"#22c55e", fontWeight:600, fontSize:"0.85rem" }}>✅ {fmtDate(o.finished_at)}</span> : "—"}
                         </td>
                       )}
-                      <td style={{ padding:"12px 16px", verticalAlign:"middle", fontWeight:700, color: isDone?theme.income:theme.textPrimary }}>{fmt(o.total)}</td>
-                      {!isMobile && <td style={{ padding:"12px 16px", verticalAlign:"middle", color:theme.textMuted }}>{fmtDate(o.created_at)}</td>}
-                      {!isMobile && (
-                        <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
-                          {isDone ? (
-                            <span style={{ color:"#22c55e", fontWeight:600, fontSize:"0.85rem" }}>✅ {fmtDate(o.finished_at)}</span>
-                          ) : "—"}
-                        </td>
-                      )}
-                      <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
+                      <td style={td}>
                         {isDone ? (
-                          <span style={{ display:"inline-block", padding:"4px 12px", borderRadius:20, fontSize:"0.75rem", fontWeight:700, background:st.bg, color:st.color, border:`1px solid ${st.color}44` }}>
-                            ✅ Concluída
-                          </span>
+                          <span style={{ display:"inline-block", padding:"4px 12px", borderRadius:20, fontSize:"0.75rem", fontWeight:700, background:st.bg, color:st.color, border:`1px solid ${st.color}44` }}>✅ Concluída</span>
                         ) : (
-                          <select style={{ border:"none", borderRadius:20, padding:"4px 10px", fontSize:"0.75rem", fontWeight:600, cursor:"pointer", outline:"none", colorScheme, color:st.color, background:st.bg }} value={o.status} onChange={e => changeStatus(o, e.target.value)} disabled={isDone}>
+                          <select style={{ border:"none", borderRadius:20, padding:"4px 10px", fontSize:"0.75rem", fontWeight:600, cursor: canOperate?"pointer":"not-allowed", outline:"none", colorScheme, color:st.color, background:st.bg }} value={o.status} onChange={e => canOperate && changeStatus(o, e.target.value)} disabled={isDone || !canOperate}>
                             {Object.entries(STATUS_MAP).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
                           </select>
                         )}
                       </td>
-                      <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
+                      <td style={td}>
                         <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                          {/* BOTÃO CONCLUIR VENDA — destaque verde */}
-                          {!isDone && !isCancelled && (
-                            <button className="btn-complete" onClick={() => setCompleteConfirm(o)}>
-                              💰 Concluir Venda
-                            </button>
+                          {!isDone && !isCancelled && canOperate && (
+                            <button className="btn-complete" onClick={() => setCompleteConfirm(o)}>💰 Concluir</button>
                           )}
-                          {!isDone && (
+                          {!isDone && canOperate && (
                             <button style={{ background: isGlass?"rgba(255,255,255,0.25)":`${theme.primary}22`, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":`${theme.primary}44`}`, borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={() => openEdit(o)}>✏️</button>
                           )}
-                          <button style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={() => setDeleteConfirm(o)}>🗑️</button>
+                          {canOperate && (
+                            <button style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={() => setDeleteConfirm(o)}>🗑️</button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -501,39 +508,26 @@ export default function Sales() {
         </div>
       </div>
 
-      {/* MODAL CONCLUIR VENDA */}
+      {/* MODAL CONCLUIR */}
       {completeConfirm && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={() => !completing && setCompleteConfirm(null)}>
           <div style={{ ...modalBg, border: isGlass?"1px solid rgba(34,197,94,0.4)":`1px solid rgba(34,197,94,0.3)`, borderRadius:18, padding: isMobile?"28px 20px":36, width: isMobile?"92%":"100%", maxWidth:460, boxShadow: isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
             <div style={{ textAlign:"center", marginBottom:24 }}>
               <div style={{ fontSize:"3rem", marginBottom:12 }}>💰</div>
               <h2 style={{ margin:"0 0 8px", fontSize:"1.3rem", fontWeight:700, color:theme.textPrimary }}>Concluir Venda</h2>
-              <p style={{ color:theme.textMuted, margin:0, fontSize:"0.9rem" }}>
-                Confirmar conclusão de <strong style={{ color:theme.textPrimary }}>{completeConfirm.number}</strong>?
-              </p>
+              <p style={{ color:theme.textMuted, margin:0, fontSize:"0.9rem" }}>Confirmar conclusão de <strong style={{ color:theme.textPrimary }}>{completeConfirm.number}</strong>?</p>
             </div>
-            {/* Resumo */}
             <div style={{ background: isGlass?"rgba(34,197,94,0.1)":"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.25)", borderRadius:12, padding:"16px 20px", marginBottom:24 }}>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8, fontSize:"0.88rem" }}>
-                <span style={{ color:theme.textMuted }}>Cliente</span>
-                <span style={{ color:theme.textPrimary, fontWeight:600 }}>{completeConfirm.client_name}</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8, fontSize:"0.88rem" }}>
-                <span style={{ color:theme.textMuted }}>Itens</span>
-                <span style={{ color:theme.textPrimary }}>{(completeConfirm.items||[]).length} item(ns)</span>
-              </div>
-              <div style={{ display:"flex", justifyContent:"space-between", borderTop:`1px solid rgba(34,197,94,0.2)`, paddingTop:10, marginTop:4 }}>
-                <span style={{ color:"#22c55e", fontWeight:700 }}>Total a receber</span>
-                <span style={{ color:"#22c55e", fontWeight:700, fontSize:"1.1rem" }}>{fmt(completeConfirm.total)}</span>
-              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8, fontSize:"0.88rem" }}><span style={{ color:theme.textMuted }}>Cliente</span><span style={{ color:theme.textPrimary, fontWeight:600 }}>{completeConfirm.client_name}</span></div>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8, fontSize:"0.88rem" }}><span style={{ color:theme.textMuted }}>Itens</span><span style={{ color:theme.textPrimary }}>{(completeConfirm.items||[]).length} item(ns)</span></div>
+              <div style={{ display:"flex", justifyContent:"space-between", borderTop:`1px solid rgba(34,197,94,0.2)`, paddingTop:10, marginTop:4 }}><span style={{ color:"#22c55e", fontWeight:700 }}>Total a receber</span><span style={{ color:"#22c55e", fontWeight:700, fontSize:"1.1rem" }}>{fmt(completeConfirm.total)}</span></div>
             </div>
             <p style={{ color:theme.textMuted, fontSize:"0.82rem", textAlign:"center", marginBottom:20 }}>
               ✅ O valor será lançado automaticamente em <strong>Transações</strong> como entrada.
-              {completeConfirm.items?.some(i=>i.product_id) && <><br/>📦 O estoque dos produtos será baixado automaticamente.</>}
             </p>
             <div style={{ display:"flex", gap:12, flexDirection: isMobile?"column":"row" }}>
               <button style={{ ...btnSecondary, flex:1 }} onClick={() => setCompleteConfirm(null)} disabled={completing}>Cancelar</button>
-              <button style={{ flex:2, background:"linear-gradient(135deg, #22c55e, #16a34a)", color:"#fff", border:"none", borderRadius:10, padding:"12px 20px", fontWeight:700, cursor: completing?"not-allowed":"pointer", fontSize:"1rem", boxShadow:"0 4px 15px rgba(34,197,94,0.4)", opacity: completing?0.7:1 }} onClick={() => handleComplete(completeConfirm)} disabled={completing}>
+              <button style={{ flex:2, background:"linear-gradient(135deg,#22c55e,#16a34a)", color:"#fff", border:"none", borderRadius:10, padding:"12px 20px", fontWeight:700, cursor: completing?"not-allowed":"pointer", fontSize:"1rem", boxShadow:"0 4px 15px rgba(34,197,94,0.4)", opacity: completing?0.7:1 }} onClick={() => handleComplete(completeConfirm)} disabled={completing}>
                 {completing ? "Processando..." : "💰 Confirmar Venda"}
               </button>
             </div>
