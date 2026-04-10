@@ -34,27 +34,345 @@ function useIsMobile() {
   return isMobile;
 }
 
+// ══════════════════════════════
+// DASHBOARD VENDEDOR
+// ══════════════════════════════
+function SellerDashboard({ theme, isMobile, isGlass, token }) {
+  const [quotes, setQuotes]   = useState([]);
+  const [orders, setOrders]   = useState([]);
+  const [loading, setLoading] = useState(true);
+  const userName = localStorage.getItem("name") || "Vendedor";
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        const [qRes, oRes] = await Promise.all([
+          fetch(`${API_URL}/quotes`,  { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_URL}/orders`,  { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        const qData = await qRes.json();
+        const oData = await oRes.json();
+        setQuotes(Array.isArray(qData) ? qData : []);
+        setOrders(Array.isArray(oData) ? oData : []);
+      } catch { setQuotes([]); setOrders([]); }
+      setLoading(false);
+    }
+    load();
+  }, [token]);
+
+  if (loading) return <p style={{ color: theme.textMuted, padding: 20 }}>Carregando...</p>;
+
+  const totalQuotes    = quotes.length;
+  const approvedQuotes = quotes.filter(q => q.status === "approved").length;
+  const pendingQuotes  = quotes.filter(q => q.status === "draft" || q.status === "sent").length;
+  const totalOrders    = orders.length;
+  const doneOrders     = orders.filter(o => o.status === "done").length;
+  const openOrders     = orders.filter(o => o.status === "open" || o.status === "in_progress").length;
+  const totalSold      = orders.filter(o => o.status === "done").reduce((s, o) => s + o.total, 0);
+  const totalPending   = orders.filter(o => o.status !== "done" && o.status !== "cancelled").reduce((s, o) => s + o.total, 0);
+
+  const cardStyle = (color) => ({
+    background: isGlass ? "rgba(255,255,255,0.22)" : theme.bgCard,
+    border: `1px solid ${isGlass ? "rgba(255,255,255,0.4)" : theme.borderCard}`,
+    borderTop: `3px solid ${color}`,
+    borderRadius: 16, padding: "20px 18px",
+    backdropFilter: isGlass ? "blur(18px)" : "none",
+  });
+
+  const labelStyle = { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, color: theme.textMuted };
+  const valueStyle = (color) => ({ color, fontSize: isMobile ? 20 : 26, fontWeight: 700, margin: "8px 0 4px" });
+  const subStyle   = { fontSize: 12, color: theme.textMuted };
+
+  return (
+    <div style={{ padding: isMobile ? "16px" : "32px 40px" }}>
+
+      {/* SAUDAÇÃO */}
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ color: theme.textPrimary, margin: "0 0 4px", fontSize: isMobile ? 20 : 26, fontWeight: 700 }}>
+          👋 Olá, {userName}!
+        </h2>
+        <p style={{ color: theme.textMuted, margin: 0, fontSize: 14 }}>
+          Aqui está o resumo das suas atividades de vendas
+        </p>
+      </div>
+
+      {/* CARDS ORÇAMENTOS */}
+      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.textMuted, margin: "0 0 14px 2px" }}>
+        🧾 Orçamentos
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3, 1fr)", gap: 16, marginBottom: 28 }}>
+        <div style={cardStyle(theme.primary)}>
+          <div style={labelStyle}>Total</div>
+          <div style={valueStyle(theme.primary)}>{totalQuotes}</div>
+          <div style={subStyle}>orçamentos criados</div>
+        </div>
+        <div style={cardStyle("#22c55e")}>
+          <div style={labelStyle}>Aprovados</div>
+          <div style={valueStyle("#22c55e")}>{approvedQuotes}</div>
+          <div style={subStyle}>prontos para vender</div>
+        </div>
+        <div style={{ ...cardStyle("#f59e0b"), gridColumn: isMobile ? "1 / -1" : "auto" }}>
+          <div style={labelStyle}>Pendentes</div>
+          <div style={valueStyle("#f59e0b")}>{pendingQuotes}</div>
+          <div style={subStyle}>aguardando resposta</div>
+        </div>
+      </div>
+
+      {/* CARDS VENDAS */}
+      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.textMuted, margin: "0 0 14px 2px" }}>
+        🛒 Vendas
+      </p>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
+        <div style={cardStyle(theme.primary)}>
+          <div style={labelStyle}>Total</div>
+          <div style={valueStyle(theme.primary)}>{totalOrders}</div>
+          <div style={subStyle}>vendas criadas</div>
+        </div>
+        <div style={cardStyle("#22c55e")}>
+          <div style={labelStyle}>Concluídas</div>
+          <div style={valueStyle("#22c55e")}>{doneOrders}</div>
+          <div style={subStyle}>pagas e finalizadas</div>
+        </div>
+        <div style={cardStyle("#3b82f6")}>
+          <div style={labelStyle}>Em aberto</div>
+          <div style={valueStyle("#3b82f6")}>{openOrders}</div>
+          <div style={subStyle}>aguardando pagamento</div>
+        </div>
+        <div style={{ ...cardStyle("#22c55e"), gridColumn: isMobile ? "1 / -1" : "auto" }}>
+          <div style={labelStyle}>💰 Total Vendido</div>
+          <div style={{ ...valueStyle("#22c55e"), fontSize: isMobile ? 16 : 20 }}>{fmt(totalSold)}</div>
+          <div style={subStyle}>em vendas concluídas</div>
+        </div>
+      </div>
+
+      {/* PENDENTE EM ABERTO */}
+      {totalPending > 0 && (
+        <div style={{ background: isGlass ? "rgba(59,130,246,0.1)" : "rgba(59,130,246,0.08)", border: "1px solid rgba(59,130,246,0.25)", borderRadius: 14, padding: "16px 20px", marginBottom: 28, display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <div style={{ color: theme.textPrimary, fontWeight: 700, fontSize: 15 }}>⏳ Valor pendente de recebimento</div>
+            <div style={{ color: theme.textMuted, fontSize: 13, marginTop: 4 }}>{openOrders} venda(s) ainda em aberto</div>
+          </div>
+          <div style={{ color: "#3b82f6", fontWeight: 700, fontSize: isMobile ? 18 : 22 }}>{fmt(totalPending)}</div>
+        </div>
+      )}
+
+      {/* ÚLTIMAS VENDAS */}
+      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.textMuted, margin: "0 0 14px 2px" }}>
+        📋 Últimas Vendas
+      </p>
+      <div style={{ background: isGlass ? "rgba(255,255,255,0.18)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.35)" : theme.borderCard}`, borderRadius: 16, overflow: "hidden", backdropFilter: isGlass ? "blur(18px)" : "none" }}>
+        {orders.length === 0 ? (
+          <div style={{ padding: 40, textAlign: "center", color: theme.textMuted }}>
+            <div style={{ fontSize: "2rem", marginBottom: 8 }}>📭</div>
+            <p>Nenhuma venda criada ainda</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
+              <thead>
+                <tr style={{ background: isGlass ? "rgba(255,255,255,0.1)" : theme.bgCard, borderBottom: `1px solid ${theme.borderCard}` }}>
+                  {["Número", "Cliente", "Status", "Total"].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "12px 16px", color: theme.textMuted, fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {orders.slice(0, 8).map(o => {
+                  const statusColors = {
+                    open:        { color: "#3b82f6", label: "Aberta" },
+                    in_progress: { color: "#f59e0b", label: "Em andamento" },
+                    done:        { color: "#22c55e", label: "Concluída" },
+                    cancelled:   { color: "#ef4444", label: "Cancelada" },
+                  };
+                  const st = statusColors[o.status] || statusColors.open;
+                  return (
+                    <tr key={o.id} style={{ borderBottom: `1px solid ${theme.borderCard}` }}>
+                      <td style={{ padding: "12px 16px", fontWeight: 700, color: theme.primary }}>{o.number}</td>
+                      <td style={{ padding: "12px 16px", color: theme.textPrimary }}>{o.client_name}</td>
+                      <td style={{ padding: "12px 16px" }}>
+                        <span style={{ background: `${st.color}22`, color: st.color, border: `1px solid ${st.color}44`, borderRadius: 20, padding: "3px 10px", fontSize: "0.75rem", fontWeight: 600 }}>{st.label}</span>
+                      </td>
+                      <td style={{ padding: "12px 16px", fontWeight: 700, color: "#22c55e" }}>{fmt(o.total)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════
+// DASHBOARD ESTOQUE
+// ══════════════════════════════
+function StockDashboard({ theme, isMobile, isGlass, token }) {
+  const [products, setProducts] = useState([]);
+  const [alerts, setAlerts]     = useState([]);
+  const [loading, setLoading]   = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true);
+      try {
+        const [pRes, aRes] = await Promise.all([
+          fetch(`${API_URL}/products`,      { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${API_URL}/stock/alerts`,  { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+        const pData = await pRes.json();
+        const aData = await aRes.json();
+        setProducts(Array.isArray(pData) ? pData : []);
+        setAlerts(Array.isArray(aData) ? aData : []);
+      } catch { setProducts([]); setAlerts([]); }
+      setLoading(false);
+    }
+    load();
+  }, [token]);
+
+  if (loading) return <p style={{ color: theme.textMuted, padding: 20 }}>Carregando...</p>;
+
+  const totalProducts  = products.filter(p => p.type === "product").length;
+  const totalServices  = products.filter(p => p.type === "service").length;
+  const totalActive    = products.filter(p => p.active).length;
+  const totalAlerts    = alerts.length;
+
+  const cardStyle = (color) => ({
+    background: isGlass ? "rgba(255,255,255,0.22)" : theme.bgCard,
+    border: `1px solid ${isGlass ? "rgba(255,255,255,0.4)" : theme.borderCard}`,
+    borderTop: `3px solid ${color}`,
+    borderRadius: 16, padding: "20px 18px",
+    backdropFilter: isGlass ? "blur(18px)" : "none",
+  });
+
+  const labelStyle = { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, color: theme.textMuted };
+  const valueStyle = (color) => ({ color, fontSize: isMobile ? 20 : 26, fontWeight: 700, margin: "8px 0 4px" });
+  const subStyle   = { fontSize: 12, color: theme.textMuted };
+
+  return (
+    <div style={{ padding: isMobile ? "16px" : "32px 40px" }}>
+      <div style={{ marginBottom: 28 }}>
+        <h2 style={{ color: theme.textPrimary, margin: "0 0 4px", fontSize: isMobile ? 20 : 26, fontWeight: 700 }}>📦 Painel de Estoque</h2>
+        <p style={{ color: theme.textMuted, margin: 0, fontSize: 14 }}>Visão geral dos produtos e alertas</p>
+      </div>
+
+      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.textMuted, margin: "0 0 14px 2px" }}>📊 Resumo</p>
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
+        <div style={cardStyle(theme.primary)}>
+          <div style={labelStyle}>Produtos</div>
+          <div style={valueStyle(theme.primary)}>{totalProducts}</div>
+          <div style={subStyle}>itens físicos</div>
+        </div>
+        <div style={cardStyle("#6366f1")}>
+          <div style={labelStyle}>Serviços</div>
+          <div style={valueStyle("#6366f1")}>{totalServices}</div>
+          <div style={subStyle}>serviços cadastrados</div>
+        </div>
+        <div style={cardStyle("#22c55e")}>
+          <div style={labelStyle}>Ativos</div>
+          <div style={valueStyle("#22c55e")}>{totalActive}</div>
+          <div style={subStyle}>disponíveis para venda</div>
+        </div>
+        <div style={{ ...cardStyle("#ef4444"), gridColumn: isMobile ? "1 / -1" : "auto" }}>
+          <div style={labelStyle}>⚠️ Alertas</div>
+          <div style={valueStyle("#ef4444")}>{totalAlerts}</div>
+          <div style={subStyle}>abaixo do estoque mínimo</div>
+        </div>
+      </div>
+
+      {totalAlerts > 0 && (
+        <>
+          <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ef4444", margin: "0 0 14px 2px" }}>⚠️ Produtos com estoque baixo</p>
+          <div style={{ background: isGlass ? "rgba(239,68,68,0.08)" : "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 16, overflow: "hidden", marginBottom: 28 }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
+              <thead>
+                <tr style={{ borderBottom: "1px solid rgba(239,68,68,0.15)" }}>
+                  {["Produto", "Estoque Atual", "Mínimo", "Situação"].map(h => (
+                    <th key={h} style={{ textAlign: "left", padding: "12px 16px", color: theme.textMuted, fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase" }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {alerts.map(p => (
+                  <tr key={p.id} style={{ borderBottom: "1px solid rgba(239,68,68,0.1)" }}>
+                    <td style={{ padding: "12px 16px", color: theme.textPrimary, fontWeight: 600 }}>{p.name}</td>
+                    <td style={{ padding: "12px 16px", color: "#ef4444", fontWeight: 700 }}>{p.stock_qty} {p.unit}</td>
+                    <td style={{ padding: "12px 16px", color: theme.textMuted }}>{p.stock_min} {p.unit}</td>
+                    <td style={{ padding: "12px 16px" }}>
+                      <span style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 20, padding: "3px 10px", fontSize: "0.75rem", fontWeight: 600 }}>
+                        {p.stock_qty === 0 ? "🚫 Sem estoque" : "⚠️ Estoque baixo"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.textMuted, margin: "0 0 14px 2px" }}>📋 Todos os Produtos</p>
+      <div style={{ background: isGlass ? "rgba(255,255,255,0.18)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.35)" : theme.borderCard}`, borderRadius: 16, overflow: "hidden", backdropFilter: isGlass ? "blur(18px)" : "none" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
+            <thead>
+              <tr style={{ background: isGlass ? "rgba(255,255,255,0.1)" : theme.bgCard, borderBottom: `1px solid ${theme.borderCard}` }}>
+                {["Produto", "Tipo", "Preço", "Estoque", "Status"].map(h => (
+                  <th key={h} style={{ textAlign: "left", padding: "12px 16px", color: theme.textMuted, fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase", whiteSpace: "nowrap" }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {products.map(p => (
+                <tr key={p.id} style={{ borderBottom: `1px solid ${theme.borderCard}` }}>
+                  <td style={{ padding: "12px 16px", color: theme.textPrimary, fontWeight: 600 }}>{p.name}</td>
+                  <td style={{ padding: "12px 16px", color: theme.textMuted }}>{p.type === "product" ? "📦 Produto" : "⚙️ Serviço"}</td>
+                  <td style={{ padding: "12px 16px", color: theme.textPrimary }}>{fmt(p.price)}</td>
+                  <td style={{ padding: "12px 16px", color: p.stock_qty <= p.stock_min ? "#ef4444" : "#22c55e", fontWeight: 600 }}>
+                    {p.type === "product" ? `${p.stock_qty} un` : "—"}
+                  </td>
+                  <td style={{ padding: "12px 16px" }}>
+                    <span style={{ background: p.active ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.1)", color: p.active ? "#22c55e" : "#ef4444", borderRadius: 20, padding: "3px 10px", fontSize: "0.75rem", fontWeight: 600 }}>
+                      {p.active ? "Ativo" : "Inativo"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════
+// DASHBOARD PRINCIPAL
+// ══════════════════════════════
 function Dashboard() {
   const { theme, themeId } = useTheme();
   const isMobile = useIsMobile();
-  const isGlass = themeId === "glass";
-  const isGray  = themeId === "gray";   // ← ÚNICA ADIÇÃO
+  const isGlass  = themeId === "glass";
+  const isGray   = themeId === "gray";
+
+  const role  = localStorage.getItem("role")  || "viewer";
+  const token = localStorage.getItem("token") || "";
 
   const [transactions, setTransactions] = useState([]);
-  const [filtered, setFiltered] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-  const [type, setType] = useState("income");
-  const [category, setCategory] = useState("");
-  const [date, setDate] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [filterYear, setFilterYear] = useState("");
-  const [filterMonth, setFilterMonth] = useState("");
-  const [filterType, setFilterType] = useState("");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const token = localStorage.getItem("token");
+  const [filtered, setFiltered]         = useState([]);
+  const [loading, setLoading]           = useState(true);
+  const [description, setDescription]   = useState("");
+  const [amount, setAmount]             = useState("");
+  const [type, setType]                 = useState("income");
+  const [category, setCategory]         = useState("");
+  const [date, setDate]                 = useState("");
+  const [editingId, setEditingId]       = useState(null);
+  const [filterYear, setFilterYear]     = useState("");
+  const [filterMonth, setFilterMonth]   = useState("");
+  const [filterType, setFilterType]     = useState("");
+  const [sidebarOpen, setSidebarOpen]   = useState(false);
 
   const fetchTransactions = async () => {
     if (!token) return;
@@ -63,15 +381,11 @@ function Dashboard() {
       const res = await fetch(`${API_URL}/transactions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      if (res.status === 401) {
-        localStorage.removeItem("token");
-        window.location.href = "/";
-        return;
-      }
+      if (res.status === 401) { localStorage.removeItem("token"); window.location.href = "/"; return; }
       const data = await res.json();
       if (Array.isArray(data)) { setTransactions(data); setFiltered(data); }
       else { setTransactions([]); setFiltered([]); }
-    } catch (err) { setTransactions([]); setFiltered([]); }
+    } catch { setTransactions([]); setFiltered([]); }
     setLoading(false);
   };
 
@@ -86,8 +400,7 @@ function Dashboard() {
   }, [filterYear, filterMonth, filterType, transactions]);
 
   const clearFilters = () => {
-    setFilterYear(""); setFilterMonth("");
-    setFilterType(""); setFiltered(transactions);
+    setFilterYear(""); setFilterMonth(""); setFilterType(""); setFiltered(transactions);
   };
 
   const handleSubmit = async (e) => {
@@ -99,16 +412,11 @@ function Dashboard() {
     try {
       const url    = editingId ? `${API_URL}/transactions/${editingId}` : `${API_URL}/transactions`;
       const method = editingId ? "PUT" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(body)
-      });
+      const res = await fetch(url, { method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) { alert(data.msg || "Erro ao salvar"); return; }
-    } catch (err) { alert("Erro de conexão com servidor"); }
-    setDescription(""); setAmount(""); setCategory("");
-    setDate(""); setEditingId(null);
+    } catch { alert("Erro de conexão com servidor"); }
+    setDescription(""); setAmount(""); setCategory(""); setDate(""); setEditingId(null);
     fetchTransactions();
   };
 
@@ -120,14 +428,12 @@ function Dashboard() {
 
   const deleteTransaction = async (id) => {
     try {
-      await fetch(`${API_URL}/transactions/${id}`, {
-        method: "DELETE", headers: { Authorization: `Bearer ${token}` }
-      });
-    } catch (err) { console.log("Erro ao deletar", err); }
+      await fetch(`${API_URL}/transactions/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+    } catch { }
     fetchTransactions();
   };
 
-  const income  = filtered.filter(t => t.type === "income").reduce((a, b) => a + b.amount, 0);
+  const income  = filtered.filter(t => t.type === "income").reduce((a, b)  => a + b.amount, 0);
   const expense = filtered.filter(t => t.type === "expense").reduce((a, b) => a + b.amount, 0);
   const balance = income - expense;
 
@@ -166,10 +472,6 @@ function Dashboard() {
   });
   const radarData = Object.values(categoryMapFull).slice(0, 7);
 
-  if (loading) {
-    return <h2 style={{ color: theme.textPrimary, padding: "20px" }}>Carregando...</h2>;
-  }
-
   const contentPadding = isMobile ? "16px 16px 0" : "32px 40px 0";
   const heroHeight     = isMobile ? "220px" : "340px";
   const logoSize       = isMobile ? "100px" : "180px";
@@ -181,11 +483,9 @@ function Dashboard() {
   const colorScheme    = isGlass ? "light" : "dark";
 
   const inputStyle = {
-    background: theme.bgInput,
-    color: theme.textPrimary,
+    background: theme.bgInput, color: theme.textPrimary,
     border: `1px solid ${theme.borderInput}`,
-    padding: "8px", borderRadius: "6px",
-    colorScheme,
+    padding: "8px", borderRadius: "6px", colorScheme,
     ...(isGlass && { backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)" }),
   };
 
@@ -201,240 +501,176 @@ function Dashboard() {
     color: "white", cursor: "pointer",
   };
 
+  // ── HERO (compartilhado entre roles) ──
+  const Hero = () => (
+    (isGlass || isGray) ? (
+      <div style={{ position:"relative", height: heroHeight, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+        <div style={{ position:"absolute", inset:0, backdropFilter:"blur(2px)", WebkitBackdropFilter:"blur(2px)" }} />
+        <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:10, paddingTop: isMobile?48:0 }}>
+          <img src={logoGif} alt="Finance Control" style={{ width:logoSize, height:logoSize, objectFit:"contain", filter:"drop-shadow(0 0 20px rgba(255,255,255,0.6))" }} />
+          <h1 style={{ fontSize:titleSize, fontWeight:700, margin:0, letterSpacing:"1.5px", color:theme.textPrimary, textAlign:"center" }}>Painel Financeiro</h1>
+          <p style={{ color:theme.textMuted, margin:0, fontSize:13, letterSpacing:"0.5px" }}>Visão completa das suas finanças</p>
+        </div>
+      </div>
+    ) : (
+      <div style={{ position:"relative", height:heroHeight, backgroundImage:`url(${topoDashboard})`, backgroundSize:"cover", backgroundPosition:"center 39%", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+        <div style={{ position:"absolute", inset:0, background:`linear-gradient(180deg, ${theme.bgPrimary}33 0%, ${theme.bgPrimary}88 60%, ${theme.bgPrimary} 100%)` }} />
+        <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:10, paddingTop: isMobile?48:0 }}>
+          <img src={logoGif} alt="Finance Control" style={{ width:logoSize, height:logoSize, objectFit:"contain", filter:"drop-shadow(0 0 20px rgba(255,255,255,0.5))" }} />
+          <h1 style={{ fontSize:titleSize, fontWeight:700, margin:0, letterSpacing:"1.5px", color:"white", textShadow:"0 2px 20px rgba(0,0,0,0.9)", textAlign:"center" }}>Painel Financeiro</h1>
+          <p style={{ color:"rgba(255,255,255,0.5)", margin:0, fontSize:13, letterSpacing:"0.5px" }}>Visão completa das suas finanças</p>
+        </div>
+      </div>
+    )
+  );
+
   return (
     <PageLayout>
-
       <style>{`
-        .card3d {
-          background: ${theme.bgCard};
-          border: 1px solid ${theme.borderCard};
-          border-radius: 16px; padding: 22px 18px 16px; cursor: default;
-          transition: transform 0.3s ease, box-shadow 0.3s ease;
-          transform: perspective(700px) rotateX(5deg) rotateY(-3deg);
-          box-shadow: ${isGlass
-            ? "0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)"
-            : "0 24px 48px rgba(0,0,0,0.55), 0 6px 12px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07)"};
-          ${isGlass ? "backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);" : ""}
-        }
-        .card3d:hover {
-          transform: perspective(700px) rotateX(0deg) rotateY(0deg) translateY(-8px);
-          box-shadow: ${isGlass
-            ? "0 20px 48px rgba(0,0,0,0.12)"
-            : "0 36px 72px rgba(0,0,0,0.65), 0 12px 24px rgba(0,0,0,0.4)"};
-        }
-        .card3d-income  { border-top: 2px solid ${theme.income}; }
-        .card3d-expense { border-top: 2px solid ${theme.expense}; }
-        .card3d-balance { border-top: 2px solid ${theme.accent}; }
-        .chart3d {
-          background: ${theme.bgCard};
-          border: 1px solid ${theme.borderCard};
-          border-radius: 16px; padding: 20px;
-          transition: transform 0.3s ease, box-shadow 0.3s ease;
-          transform: perspective(900px) rotateX(3deg) rotateY(-1.5deg);
-          box-shadow: ${isGlass
-            ? "0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)"
-            : "0 16px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)"};
-          ${isGlass ? "backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);" : ""}
-        }
-        .chart3d:hover {
-          transform: perspective(900px) rotateX(0deg) rotateY(0deg) translateY(-5px);
-          box-shadow: ${isGlass ? "0 20px 48px rgba(0,0,0,0.12)" : "0 28px 56px rgba(0,0,0,0.55)"};
-        }
-        .section-card {
-          background: ${theme.bgCard};
-          border: 1px solid ${theme.borderCard};
-          border-radius: 16px; padding: 20px;
-          box-shadow: ${isGlass ? "0 4px 24px rgba(0,0,0,0.06)" : "0 8px 32px rgba(0,0,0,0.3)"};
-          ${isGlass ? "backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);" : ""}
-        }
-        .section-label {
-          font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
-          text-transform: uppercase; color: ${theme.textMuted};
-          margin: 0 0 14px 2px; display: flex; align-items: center; gap: 8px;
-        }
-        .section-label::after {
-          content: ""; flex: 1; height: 1px; background: ${theme.border};
-        }
-        @media (max-width: 768px) {
-          .card3d { transform: none !important; }
-          .card3d:hover { transform: translateY(-4px) !important; }
-          .chart3d { transform: none !important; }
-          .chart3d:hover { transform: translateY(-3px) !important; }
-          .table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-          .form-mobile { display: flex !important; flex-direction: column !important; gap: 12px !important; }
-          .form-mobile input, .form-mobile select, .form-mobile button { width: 100% !important; }
-        }
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: ${theme.primary}44; border-radius: 4px; }
+        .card3d { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:22px 18px 16px; cursor:default; transition:transform 0.3s ease, box-shadow 0.3s ease; transform:perspective(700px) rotateX(5deg) rotateY(-3deg); box-shadow:${isGlass?"0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)":"0 24px 48px rgba(0,0,0,0.55), 0 6px 12px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
+        .card3d:hover { transform:perspective(700px) rotateX(0deg) rotateY(0deg) translateY(-8px); box-shadow:${isGlass?"0 20px 48px rgba(0,0,0,0.12)":"0 36px 72px rgba(0,0,0,0.65), 0 12px 24px rgba(0,0,0,0.4)"}; }
+        .card3d-income  { border-top:2px solid ${theme.income}; }
+        .card3d-expense { border-top:2px solid ${theme.expense}; }
+        .card3d-balance { border-top:2px solid ${theme.accent}; }
+        .chart3d { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:20px; transition:transform 0.3s ease, box-shadow 0.3s ease; transform:perspective(900px) rotateX(3deg) rotateY(-1.5deg); box-shadow:${isGlass?"0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)":"0 16px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
+        .chart3d:hover { transform:perspective(900px) rotateX(0deg) rotateY(0deg) translateY(-5px); box-shadow:${isGlass?"0 20px 48px rgba(0,0,0,0.12)":"0 28px 56px rgba(0,0,0,0.55)"}; }
+        .section-card { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:20px; box-shadow:${isGlass?"0 4px 24px rgba(0,0,0,0.06)":"0 8px 32px rgba(0,0,0,0.3)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
+        .section-label { font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:${theme.textMuted}; margin:0 0 14px 2px; display:flex; align-items:center; gap:8px; }
+        .section-label::after { content:""; flex:1; height:1px; background:${theme.border}; }
+        @media (max-width:768px) { .card3d { transform:none !important; } .card3d:hover { transform:translateY(-4px) !important; } .chart3d { transform:none !important; } .chart3d:hover { transform:translateY(-3px) !important; } .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; } .form-mobile { display:flex !important; flex-direction:column !important; gap:12px !important; } .form-mobile input, .form-mobile select, .form-mobile button { width:100% !important; } }
+        ::-webkit-scrollbar { width:5px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:${theme.primary}44; border-radius:4px; }
       `}</style>
 
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-      <div style={{ flex: 1, overflowY: "auto", position: "relative", zIndex: 1 }}>
+      <div style={{ flex:1, overflowY:"auto", position:"relative", zIndex:1 }}>
+        <Hero />
 
-        {/* ══════════════════════
-            HERO
-            ══════════════════════ */}
-        {(isGlass || isGray) ? (
-          // glass e gray: hero limpo sem foto, só logo + título sobre o fundo
-          <div style={{
-            position: "relative", height: heroHeight,
-            display: "flex", alignItems: "center",
-            justifyContent: "center", overflow: "hidden",
-          }}>
-            <div style={{ position:"absolute", inset:0, backdropFilter:"blur(2px)", WebkitBackdropFilter:"blur(2px)" }} />
-            <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:10, paddingTop: isMobile?48:0 }}>
-              <img src={logoGif} alt="Finance Control" style={{ width: logoSize, height: logoSize, objectFit:"contain", filter:"drop-shadow(0 0 20px rgba(255,255,255,0.6))" }} />
-              <h1 style={{ fontSize: titleSize, fontWeight:700, margin:0, letterSpacing:"1.5px", color: theme.textPrimary, textAlign:"center" }}>Painel Financeiro</h1>
-              <p style={{ color: theme.textMuted, margin:0, fontSize:13, letterSpacing:"0.5px" }}>Visão completa das suas finanças</p>
-            </div>
-          </div>
-        ) : (
-          // demais temas (blue, aurora): hero com topodashboard.jpg
-          <div style={{
-            position: "relative", height: heroHeight,
-            backgroundImage: `url(${topoDashboard})`,
-            backgroundSize: "cover", backgroundPosition: "center 39%",
-            display: "flex", alignItems: "center",
-            justifyContent: "center", overflow: "hidden",
-          }}>
-            <div style={{ position:"absolute", inset:0, background:`linear-gradient(180deg, ${theme.bgPrimary}33 0%, ${theme.bgPrimary}88 60%, ${theme.bgPrimary} 100%)` }} />
-            <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:10, paddingTop: isMobile?48:0 }}>
-              <img src={logoGif} alt="Finance Control" style={{ width: logoSize, height: logoSize, objectFit:"contain", filter:"drop-shadow(0 0 20px rgba(255,255,255,0.5))" }} />
-              <h1 style={{ fontSize: titleSize, fontWeight:700, margin:0, letterSpacing:"1.5px", color:"white", textShadow:"0 2px 20px rgba(0,0,0,0.9)", textAlign:"center" }}>Painel Financeiro</h1>
-              <p style={{ color:"rgba(255,255,255,0.5)", margin:0, fontSize:13, letterSpacing:"0.5px" }}>Visão completa das suas finanças</p>
-            </div>
-          </div>
+        {/* ── SELLER: dashboard de vendas ── */}
+        {role === "seller" && (
+          <SellerDashboard theme={theme} isMobile={isMobile} isGlass={isGlass} token={token} />
         )}
 
-        {/* CONTEÚDO */}
-        <div style={{ padding: contentPadding }}>
+        {/* ── STOCK: dashboard de estoque ── */}
+        {role === "stock" && (
+          <StockDashboard theme={theme} isMobile={isMobile} isGlass={isGlass} token={token} />
+        )}
 
-          {/* FILTROS */}
-          <div style={{ marginBottom: 28 }}>
-            <Filters
-              filterYear={filterYear} setFilterYear={setFilterYear}
-              filterMonth={filterMonth} setFilterMonth={setFilterMonth}
-              filterType={filterType} setFilterType={setFilterType}
-              clearFilters={clearFilters} inputStyle={inputStyle}
-            />
-          </div>
-
-          {/* CARDS */}
-          <div style={{ marginBottom: 28 }}>
-            <p className="section-label">📊 Resumo Financeiro</p>
-            <div style={{ display: "grid", gridTemplateColumns: cardsColumns, gap: 16 }}>
-
-              <div className="card3d card3d-income">
-                <div style={cardIcon}>📈</div>
-                <div style={{ ...cardLabel, color: theme.textMuted }}>Entradas</div>
-                <h2 style={{ color: theme.income, margin: "8px 0 4px", fontSize: isMobile ? 20 : 24, fontWeight: 700 }}>{fmt(income)}</h2>
-                <div style={{ ...cardSub, color: theme.textMuted }}>{filtered.filter(t => t.type === "income").length} transações</div>
-                <div style={{ height: 4, borderRadius: 4, overflow: "hidden", background: `${theme.income}22`, marginTop: 8 }}>
-                  <div style={{ height: "100%", borderRadius: 4, width: income > 0 ? "100%" : "0%", background: theme.income, transition: "width 0.6s" }} />
-                </div>
-              </div>
-
-              <div className="card3d card3d-expense">
-                <div style={cardIcon}>📉</div>
-                <div style={{ ...cardLabel, color: theme.textMuted }}>Saídas</div>
-                <h2 style={{ color: theme.expense, margin: "8px 0 4px", fontSize: isMobile ? 20 : 24, fontWeight: 700 }}>- {fmt(expense)}</h2>
-                <div style={{ ...cardSub, color: theme.textMuted }}>{filtered.filter(t => t.type === "expense").length} transações</div>
-                <div style={{ height: 4, borderRadius: 4, overflow: "hidden", background: `${theme.expense}22`, marginTop: 8 }}>
-                  <div style={{ height: "100%", borderRadius: 4, width: income > 0 ? `${Math.min((expense / income) * 100, 100)}%` : "0%", background: theme.expense, transition: "width 0.6s" }} />
-                </div>
-              </div>
-
-              <div className="card3d card3d-balance">
-                <div style={cardIcon}>💰</div>
-                <div style={{ ...cardLabel, color: theme.textMuted }}>Saldo Atual</div>
-                <h2 style={{ color: balance >= 0 ? theme.income : theme.expense, margin: "8px 0 4px", fontSize: isMobile ? 20 : 24, fontWeight: 700 }}>{fmt(balance)}</h2>
-                <div style={{ ...cardSub, color: theme.textMuted }}>{filtered.length} transações no total</div>
-                <div style={{ height: 4, borderRadius: 4, overflow: "hidden", background: `${theme.accent}22`, marginTop: 8 }}>
-                  <div style={{ height: "100%", borderRadius: 4, width: income > 0 ? `${Math.min((Math.max(balance, 0) / income) * 100, 100)}%` : "0%", background: theme.accent, transition: "width 0.6s" }} />
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          {/* FORMULÁRIO */}
-          <div style={{ marginBottom: 28 }}>
-            <p className="section-label">✏️ {editingId ? "Editar Transação" : "Nova Transação"}</p>
-            <div className="section-card">
-              <TransactionForm
-                editingId={editingId} handleSubmit={handleSubmit}
-                description={description} setDescription={setDescription}
-                amount={amount} setAmount={setAmount}
-                type={type} setType={setType}
-                category={category} setCategory={setCategory}
-                date={date} setDate={setDate}
-                form={{ display: "grid", gridTemplateColumns: formColumns, gap: "10px" }}
-                inputStyle={inputStyle} card={cardTransparent}
+        {/* ── ADMIN / FINANCIAL / VIEWER: dashboard financeiro completo ── */}
+        {(role === "admin" || role === "financial" || role === "viewer") && (
+          <div style={{ padding: contentPadding }}>
+            <div style={{ marginBottom:28 }}>
+              <Filters
+                filterYear={filterYear} setFilterYear={setFilterYear}
+                filterMonth={filterMonth} setFilterMonth={setFilterMonth}
+                filterType={filterType} setFilterType={setFilterType}
+                clearFilters={clearFilters} inputStyle={inputStyle}
               />
             </div>
-          </div>
 
-          {/* GRÁFICOS */}
-          <div style={{ marginBottom: 28 }}>
-            <p className="section-label">📈 Análise Gráfica</p>
-            <div style={{ display: "grid", gridTemplateColumns: chartsColumns, gap: 16 }}>
-
-              <div className="chart3d"><CategoryChart chartData={chartData} card={cardTransparent} /></div>
-              <div className="chart3d"><MonthlyChart monthlyData={monthlyData} card={cardTransparent} /></div>
-              <div className="chart3d" style={isMobile ? { gridColumn: "1" } : {}}><BalanceChart data={balanceData} card={cardTransparent} /></div>
-
-              <div className="chart3d" style={isMobile ? { gridColumn: "1" } : {}}>
-                <h3 style={{ ...chartTitle, color: theme.textSecondary }}>🕸️ Radar por Categoria</h3>
-                {radarData.length === 0 ? (
-                  <p style={{ color: theme.textMuted, textAlign: "center", paddingTop: 40 }}>Sem dados suficientes</p>
-                ) : (
-                  <ResponsiveContainer width="100%" height={isMobile ? 200 : 260}>
-                    <RadarChart data={radarData}>
-                      <PolarGrid stroke={theme.border} />
-                      <PolarAngleAxis dataKey="category" stroke={theme.textMuted} tick={{ fontSize: 10, fill: theme.textSecondary }} />
-                      <Radar name="Entradas" dataKey="Entradas" stroke={theme.income} fill={theme.income} fillOpacity={0.2} />
-                      <Radar name="Saídas" dataKey="Saídas" stroke={theme.expense} fill={theme.expense} fillOpacity={0.2} />
-                      <Legend />
-                      <Tooltip contentStyle={{ background: theme.bgSecondary, border: `1px solid ${theme.borderCard}`, borderRadius: 8 }} formatter={(v) => [fmt(v)]} />
-                    </RadarChart>
-                  </ResponsiveContainer>
-                )}
+            <div style={{ marginBottom:28 }}>
+              <p className="section-label">📊 Resumo Financeiro</p>
+              <div style={{ display:"grid", gridTemplateColumns:cardsColumns, gap:16 }}>
+                <div className="card3d card3d-income">
+                  <div style={cardIcon}>📈</div>
+                  <div style={{ ...cardLabel, color:theme.textMuted }}>Entradas</div>
+                  <h2 style={{ color:theme.income, margin:"8px 0 4px", fontSize: isMobile?20:24, fontWeight:700 }}>{fmt(income)}</h2>
+                  <div style={{ ...cardSub, color:theme.textMuted }}>{filtered.filter(t=>t.type==="income").length} transações</div>
+                  <div style={{ height:4, borderRadius:4, overflow:"hidden", background:`${theme.income}22`, marginTop:8 }}>
+                    <div style={{ height:"100%", borderRadius:4, width: income>0?"100%":"0%", background:theme.income, transition:"width 0.6s" }} />
+                  </div>
+                </div>
+                <div className="card3d card3d-expense">
+                  <div style={cardIcon}>📉</div>
+                  <div style={{ ...cardLabel, color:theme.textMuted }}>Saídas</div>
+                  <h2 style={{ color:theme.expense, margin:"8px 0 4px", fontSize: isMobile?20:24, fontWeight:700 }}>- {fmt(expense)}</h2>
+                  <div style={{ ...cardSub, color:theme.textMuted }}>{filtered.filter(t=>t.type==="expense").length} transações</div>
+                  <div style={{ height:4, borderRadius:4, overflow:"hidden", background:`${theme.expense}22`, marginTop:8 }}>
+                    <div style={{ height:"100%", borderRadius:4, width: income>0?`${Math.min((expense/income)*100,100)}%`:"0%", background:theme.expense, transition:"width 0.6s" }} />
+                  </div>
+                </div>
+                <div className="card3d card3d-balance">
+                  <div style={cardIcon}>💰</div>
+                  <div style={{ ...cardLabel, color:theme.textMuted }}>Saldo Atual</div>
+                  <h2 style={{ color: balance>=0?theme.income:theme.expense, margin:"8px 0 4px", fontSize: isMobile?20:24, fontWeight:700 }}>{fmt(balance)}</h2>
+                  <div style={{ ...cardSub, color:theme.textMuted }}>{filtered.length} transações no total</div>
+                  <div style={{ height:4, borderRadius:4, overflow:"hidden", background:`${theme.accent}22`, marginTop:8 }}>
+                    <div style={{ height:"100%", borderRadius:4, width: income>0?`${Math.min((Math.max(balance,0)/income)*100,100)}%`:"0%", background:theme.accent, transition:"width 0.6s" }} />
+                  </div>
+                </div>
               </div>
-
             </div>
-          </div>
 
-          {/* TRANSAÇÕES */}
-          <div style={{ marginBottom: 28 }}>
-            <p className="section-label">🧾 Histórico de Transações</p>
-            <div className="section-card table-scroll">
-              <TransactionList
-                filtered={filtered}
-                editTransaction={editTransaction}
-                deleteTransaction={deleteTransaction}
-                row={{ display: "grid", gridTemplateColumns: rowColumns, gap: "8px", padding: "10px", borderBottom: `1px solid ${theme.border}` }}
-                editBtn={editBtn} deleteBtn={deleteBtn} card={cardTransparent}
-              />
+            {/* Formulário só para admin e financial */}
+            {(role === "admin" || role === "financial") && (
+              <div style={{ marginBottom:28 }}>
+                <p className="section-label">✏️ {editingId?"Editar Transação":"Nova Transação"}</p>
+                <div className="section-card">
+                  <TransactionForm
+                    editingId={editingId} handleSubmit={handleSubmit}
+                    description={description} setDescription={setDescription}
+                    amount={amount} setAmount={setAmount}
+                    type={type} setType={setType}
+                    category={category} setCategory={setCategory}
+                    date={date} setDate={setDate}
+                    form={{ display:"grid", gridTemplateColumns:formColumns, gap:"10px" }}
+                    inputStyle={inputStyle} card={cardTransparent}
+                  />
+                </div>
+              </div>
+            )}
+
+            <div style={{ marginBottom:28 }}>
+              <p className="section-label">📈 Análise Gráfica</p>
+              <div style={{ display:"grid", gridTemplateColumns:chartsColumns, gap:16 }}>
+                <div className="chart3d"><CategoryChart chartData={chartData} card={cardTransparent} /></div>
+                <div className="chart3d"><MonthlyChart monthlyData={monthlyData} card={cardTransparent} /></div>
+                <div className="chart3d" style={isMobile?{gridColumn:"1"}:{}}><BalanceChart data={balanceData} card={cardTransparent} /></div>
+                <div className="chart3d" style={isMobile?{gridColumn:"1"}:{}}>
+                  <h3 style={{ ...chartTitle, color:theme.textSecondary }}>🕸️ Radar por Categoria</h3>
+                  {radarData.length === 0 ? (
+                    <p style={{ color:theme.textMuted, textAlign:"center", paddingTop:40 }}>Sem dados suficientes</p>
+                  ) : (
+                    <ResponsiveContainer width="100%" height={isMobile?200:260}>
+                      <RadarChart data={radarData}>
+                        <PolarGrid stroke={theme.border} />
+                        <PolarAngleAxis dataKey="category" stroke={theme.textMuted} tick={{ fontSize:10, fill:theme.textSecondary }} />
+                        <Radar name="Entradas" dataKey="Entradas" stroke={theme.income} fill={theme.income} fillOpacity={0.2} />
+                        <Radar name="Saídas" dataKey="Saídas" stroke={theme.expense} fill={theme.expense} fillOpacity={0.2} />
+                        <Legend />
+                        <Tooltip contentStyle={{ background:theme.bgSecondary, border:`1px solid ${theme.borderCard}`, borderRadius:8 }} formatter={(v) => [fmt(v)]} />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div style={{ height: 48 }} />
-        </div>
+            <div style={{ marginBottom:28 }}>
+              <p className="section-label">🧾 Histórico de Transações</p>
+              <div className="section-card table-scroll">
+                <TransactionList
+                  filtered={filtered}
+                  editTransaction={role==="viewer" ? null : editTransaction}
+                  deleteTransaction={role==="viewer" ? null : deleteTransaction}
+                  row={{ display:"grid", gridTemplateColumns:rowColumns, gap:"8px", padding:"10px", borderBottom:`1px solid ${theme.border}` }}
+                  editBtn={editBtn} deleteBtn={deleteBtn} card={cardTransparent}
+                />
+              </div>
+            </div>
+
+            <div style={{ height:48 }} />
+          </div>
+        )}
       </div>
     </PageLayout>
   );
 }
 
-// =========================
-// ESTILOS ESTÁTICOS
-// =========================
-
-const cardIcon        = { fontSize: 20, marginBottom: 6 };
-const cardLabel       = { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700 };
-const cardSub         = { fontSize: 12, marginBottom: 4 };
-const chartTitle      = { fontSize: 14, fontWeight: 600, margin: "0 0 16px 0" };
-const cardTransparent = { background: "transparent", border: "none", padding: 0, borderRadius: 0, marginTop: 0 };
+const cardIcon        = { fontSize:20, marginBottom:6 };
+const cardLabel       = { fontSize:11, textTransform:"uppercase", letterSpacing:"0.6px", fontWeight:700 };
+const cardSub         = { fontSize:12, marginBottom:4 };
+const chartTitle      = { fontSize:14, fontWeight:600, margin:"0 0 16px 0" };
+const cardTransparent = { background:"transparent", border:"none", padding:0, borderRadius:0, marginTop:0 };
 
 export default Dashboard;
