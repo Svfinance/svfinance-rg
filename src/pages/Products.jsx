@@ -21,14 +21,9 @@ function useIsMobile() {
   return isMobile;
 }
 
-const EMPTY_FORM = {
-  name: "", description: "", type: "service",
-  unit: "un", cost: "", price: "", category: "", active: true,
-  stock_min: 0, stock_qty_initial: 0,
-};
-
-const EMPTY_MOVEMENT = { type: "in", qty: "", cost: "", reason: "", date: "" };
-const EMPTY_SERVICE  = { client_id: "", duration_min: "", amount: "", notes: "", date: "" };
+const EMPTY_FORM     = { name:"", description:"", type:"service", unit:"un", cost:"", price:"", category:"", active:true, stock_min:0, stock_qty_initial:0 };
+const EMPTY_MOVEMENT = { type:"in", qty:"", cost:"", reason:"", date:"" };
+const EMPTY_SERVICE  = { client_id:"", duration_min:"", amount:"", notes:"", date:"" };
 
 export default function Products() {
   const { theme, themeId } = useTheme();
@@ -37,29 +32,30 @@ export default function Products() {
   const isMobile    = useIsMobile();
   const navigate    = useNavigate();
 
+  // ✅ controle de role
+  const role       = localStorage.getItem("role") || "viewer";
+  const isSeller   = role === "seller";
+  const canEdit    = role === "admin" || role === "financial" || role === "stock";
+
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [products, setProducts]             = useState([]);
   const [clients, setClients]               = useState([]);
   const [loading, setLoading]               = useState(true);
   const [filterType, setFilterType]         = useState("all");
   const [search, setSearch]                 = useState("");
-
   const [modalOpen, setModalOpen]           = useState(false);
   const [editing, setEditing]               = useState(null);
   const [form, setForm]                     = useState(EMPTY_FORM);
   const [deleteConfirm, setDeleteConfirm]   = useState(null);
-
   const [detailProduct, setDetailProduct]   = useState(null);
   const [activeTab, setActiveTab]           = useState("info");
   const [movements, setMovements]           = useState([]);
   const [serviceRecords, setServiceRecords] = useState([]);
   const [loadingDetail, setLoadingDetail]   = useState(false);
-
   const [movModal, setMovModal]             = useState(false);
   const [movForm, setMovForm]               = useState(EMPTY_MOVEMENT);
   const [svcModal, setSvcModal]             = useState(false);
   const [svcForm, setSvcForm]               = useState(EMPTY_SERVICE);
-
   const [toast, setToast]                   = useState(null);
 
   async function fetchProducts() {
@@ -109,203 +105,151 @@ export default function Products() {
   function openDetail(p) { setDetailProduct(p); setActiveTab("info"); }
   function closeDetail()  { setDetailProduct(null); }
 
-  function openCreate() { setEditing(null); setForm(EMPTY_FORM); setModalOpen(true); }
+  function openCreate() {
+    if (!canEdit) return;
+    setEditing(null); setForm(EMPTY_FORM); setModalOpen(true);
+  }
   function openEdit(p) {
+    if (!canEdit) return;
     setEditing(p);
-    setForm({
-      name: p.name, description: p.description || "", type: p.type,
-      unit: p.unit || "un", cost: p.cost, price: p.price,
-      category: p.category || "", active: p.active,
-      stock_min: p.stock_min || 0,
-      stock_qty_initial: 0, // não edita estoque inicial no edit
-    });
+    setForm({ name:p.name, description:p.description||"", type:p.type, unit:p.unit||"un", cost:p.cost, price:p.price, category:p.category||"", active:p.active, stock_min:p.stock_min||0, stock_qty_initial:0 });
     setModalOpen(true);
   }
   function closeModal() { setModalOpen(false); setEditing(null); }
 
   async function handleSubmit(e) {
     e.preventDefault();
-    const payload = {
-      ...form,
-      cost:              parseFloat(form.cost) || 0,
-      price:             parseFloat(form.price),
-      stock_min:         parseFloat(form.stock_min || 0),
-      stock_qty_initial: editing ? undefined : parseFloat(form.stock_qty_initial || 0),
-    };
+    const payload = { ...form, cost:parseFloat(form.cost)||0, price:parseFloat(form.price), stock_min:parseFloat(form.stock_min||0), stock_qty_initial: editing?undefined:parseFloat(form.stock_qty_initial||0) };
     const url    = editing ? `${API}/products/${editing.id}` : `${API}/products`;
     const method = editing ? "PUT" : "POST";
     try {
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
-        body: JSON.stringify(payload),
-      });
-      if (res.ok) {
-        showToast(editing ? "Produto atualizado!" : "Produto criado!");
-        closeModal(); fetchProducts();
-      } else {
-        const err = await res.json();
-        showToast(err.msg || "Erro.", "error");
-      }
+      const res = await fetch(url, { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body:JSON.stringify(payload) });
+      if (res.ok) { showToast(editing?"Produto atualizado!":"Produto criado!"); closeModal(); fetchProducts(); }
+      else { const err = await res.json(); showToast(err.msg||"Erro.", "error"); }
     } catch { showToast("Erro de conexão.", "error"); }
   }
 
   async function handleToggle(p) {
-    await fetch(`${API}/products/${p.id}/toggle`, { method: "PATCH", headers: { Authorization: `Bearer ${token()}` } });
+    if (!canEdit) return;
+    await fetch(`${API}/products/${p.id}/toggle`, { method:"PATCH", headers:{ Authorization:`Bearer ${token()}` } });
     fetchProducts();
   }
 
   async function handleDelete(id) {
-    const res = await fetch(`${API}/products/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token()}` } });
-    if (res.ok) { showToast("Produto removido."); setDeleteConfirm(null); fetchProducts(); if (detailProduct?.id === id) closeDetail(); }
+    if (!canEdit) return;
+    const res = await fetch(`${API}/products/${id}`, { method:"DELETE", headers:{ Authorization:`Bearer ${token()}` } });
+    if (res.ok) { showToast("Produto removido."); setDeleteConfirm(null); fetchProducts(); if (detailProduct?.id===id) closeDetail(); }
     else showToast("Erro ao remover.", "error");
   }
 
   async function handleMovimentar(e) {
     e.preventDefault();
-    if (!movForm.qty || parseFloat(movForm.qty) <= 0) { showToast("Quantidade inválida.", "error"); return; }
-    const payload = { ...movForm, qty: parseFloat(movForm.qty), cost: movForm.cost ? parseFloat(movForm.cost) : undefined };
-    const res = await fetch(`${API}/stock/${detailProduct.id}/movements`, {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` }, body: JSON.stringify(payload),
-    });
+    if (!movForm.qty || parseFloat(movForm.qty)<=0) { showToast("Quantidade inválida.", "error"); return; }
+    const payload = { ...movForm, qty:parseFloat(movForm.qty), cost:movForm.cost?parseFloat(movForm.cost):undefined };
+    const res = await fetch(`${API}/stock/${detailProduct.id}/movements`, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body:JSON.stringify(payload) });
     if (res.ok) {
       showToast("Movimentação registrada!");
       setMovModal(false); setMovForm(EMPTY_MOVEMENT);
       fetchProducts(); fetchMovements(detailProduct.id);
       const updated = await res.json();
-      setDetailProduct(prev => ({ ...prev, stock_qty: updated.stock_qty, stock_avg_cost: updated.stock_avg_cost }));
-    } else { const err = await res.json(); showToast(err.msg || "Erro.", "error"); }
+      setDetailProduct(prev => ({ ...prev, stock_qty:updated.stock_qty, stock_avg_cost:updated.stock_avg_cost }));
+    } else { const err = await res.json(); showToast(err.msg||"Erro.", "error"); }
   }
 
   async function handleRegistrarServico(e) {
     e.preventDefault();
-    const payload = { ...svcForm, duration_min: svcForm.duration_min ? parseInt(svcForm.duration_min) : undefined, amount: parseFloat(svcForm.amount || detailProduct.price), client_id: svcForm.client_id || undefined };
-    const res = await fetch(`${API}/services/${detailProduct.id}/records`, {
-      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` }, body: JSON.stringify(payload),
-    });
+    const payload = { ...svcForm, duration_min:svcForm.duration_min?parseInt(svcForm.duration_min):undefined, amount:parseFloat(svcForm.amount||detailProduct.price), client_id:svcForm.client_id||undefined };
+    const res = await fetch(`${API}/services/${detailProduct.id}/records`, { method:"POST", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body:JSON.stringify(payload) });
     if (res.ok) {
       showToast("Serviço registrado!");
       setSvcModal(false); setSvcForm(EMPTY_SERVICE);
       fetchProducts(); fetchServiceRecords(detailProduct.id);
       const updated = await res.json();
-      setDetailProduct(prev => ({ ...prev, services_count: updated.services_count }));
-    } else { const err = await res.json(); showToast(err.msg || "Erro.", "error"); }
+      setDetailProduct(prev => ({ ...prev, services_count:updated.services_count }));
+    } else { const err = await res.json(); showToast(err.msg||"Erro.", "error"); }
   }
 
   async function deleteSvcRecord(id) {
-    const res = await fetch(`${API}/services/records/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token()}` } });
+    if (!canEdit) return;
+    const res = await fetch(`${API}/services/records/${id}`, { method:"DELETE", headers:{ Authorization:`Bearer ${token()}` } });
     if (res.ok) { showToast("Registro removido."); fetchProducts(); fetchServiceRecords(detailProduct.id); }
     else showToast("Erro ao remover.", "error");
   }
 
   const filtered = products.filter(p => {
-    const typeOk   = filterType === "all" || p.type === filterType;
-    const searchOk = p.name.toLowerCase().includes(search.toLowerCase()) || (p.category || "").toLowerCase().includes(search.toLowerCase());
+    const typeOk   = filterType==="all" || p.type===filterType;
+    const searchOk = p.name.toLowerCase().includes(search.toLowerCase()) || (p.category||"").toLowerCase().includes(search.toLowerCase());
     return typeOk && searchOk;
   });
 
-  const totalProducts = products.filter(p => p.type === "product").length;
-  const totalServices = products.filter(p => p.type === "service").length;
-  const avgMargin     = products.length ? (products.reduce((s, p) => s + p.margin, 0) / products.length).toFixed(1) : 0;
-  const stockAlerts   = products.filter(p => p.type === "product" && p.stock_qty <= p.stock_min).length;
+  const totalProducts = products.filter(p=>p.type==="product").length;
+  const totalServices = products.filter(p=>p.type==="service").length;
+  const avgMargin     = products.length ? (products.reduce((s,p)=>s+p.margin,0)/products.length).toFixed(1) : 0;
+  const stockAlerts   = products.filter(p=>p.type==="product"&&p.stock_qty<=p.stock_min).length;
 
-  const inputStyle = {
-    background: theme.bgInput, border: `1px solid ${isGlass ? "rgba(255,255,255,0.4)" : theme.borderInput}`,
-    borderRadius: 10, padding: "10px 14px", color: theme.textPrimary,
-    fontSize: "0.9rem", outline: "none", width: "100%",
-    boxSizing: "border-box", transition: "border-color 0.2s", colorScheme,
-    ...(isGlass && { backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }),
-  };
-  const selectStyle  = { ...inputStyle, cursor: "pointer" };
-  const modalBg      = isGlass
-    ? { backdropFilter:"blur(18px) saturate(180%)", WebkitBackdropFilter:"blur(18px) saturate(180%)", background:"rgba(255,255,255,0.55)", border:"1px solid rgba(255,255,255,0.6)" }
-    : { background: theme.bgModal, border: `1px solid ${theme.borderCard}` };
-  const btnPrimary   = { background: theme.primaryGrad, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", fontSize:"0.9rem", boxShadow:`0 4px 15px ${theme.primary}33` };
-  const btnSecondary = { background: isGlass?"rgba(255,255,255,0.3)":theme.bgCard, color:theme.textSecondary, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderCard}`, borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", fontSize:"0.9rem" };
-  const labelStyle   = { color: theme.textSecondary, fontSize: "0.8rem", fontWeight: 600 };
-  const fieldStyle   = { display: "flex", flexDirection: "column", gap: 6 };
-  const tabStyle     = (active) => ({
-    padding: "8px 18px", borderRadius: 8, fontSize: "0.85rem", fontWeight: 600,
-    cursor: "pointer", border: "none", transition: "all 0.2s",
-    background: active ? theme.primaryGrad : (isGlass ? "rgba(255,255,255,0.2)" : theme.bgCard),
-    color: active ? "#fff" : theme.textMuted,
-    boxShadow: active ? `0 4px 12px ${theme.primary}33` : "none",
-  });
+  const inputStyle = { background:theme.bgInput, border:`1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderInput}`, borderRadius:10, padding:"10px 14px", color:theme.textPrimary, fontSize:"0.9rem", outline:"none", width:"100%", boxSizing:"border-box", transition:"border-color 0.2s", colorScheme, ...(isGlass&&{backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}) };
+  const selectStyle  = { ...inputStyle, cursor:"pointer" };
+  const modalBg      = isGlass ? { backdropFilter:"blur(18px) saturate(180%)", WebkitBackdropFilter:"blur(18px) saturate(180%)", background:"rgba(255,255,255,0.55)", border:"1px solid rgba(255,255,255,0.6)" } : { background:theme.bgModal, border:`1px solid ${theme.borderCard}` };
+  const btnPrimary   = { background:theme.primaryGrad, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", fontSize:"0.9rem", boxShadow:`0 4px 15px ${theme.primary}33` };
+  const btnSecondary = { background:isGlass?"rgba(255,255,255,0.3)":theme.bgCard, color:theme.textSecondary, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderCard}`, borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", fontSize:"0.9rem" };
+  const labelStyle   = { color:theme.textSecondary, fontSize:"0.8rem", fontWeight:600 };
+  const fieldStyle   = { display:"flex", flexDirection:"column", gap:6 };
+  const tabStyle     = (active) => ({ padding:"8px 18px", borderRadius:8, fontSize:"0.85rem", fontWeight:600, cursor:"pointer", border:"none", transition:"all 0.2s", background:active?theme.primaryGrad:(isGlass?"rgba(255,255,255,0.2)":theme.bgCard), color:active?"#fff":theme.textMuted, boxShadow:active?`0 4px 12px ${theme.primary}33`:"none" });
+
+  // colunas da tabela conforme role
+  const tableHeaders = isMobile
+    ? ["Nome","Tipo","Preço","Estq.","Ações"]
+    : canEdit
+      ? ["Nome","Tipo","Unid.","Custo","Preço","Margem","Estq./Serv.","Status","Ações"]
+      : ["Nome","Tipo","Unid.","Preço","Estq./Serv."];
 
   return (
     <PageLayout>
       <style>{`
-        .card3d-pr {
-          background: ${isGlass ? "rgba(255,255,255,0.25)" : theme.bgCard};
-          border-radius: 14px; padding: 16px 20px;
-          display: flex; align-items: center; gap: 14px;
-          backdrop-filter: ${isGlass ? "blur(18px) saturate(180%)" : "blur(6px)"};
-          -webkit-backdrop-filter: ${isGlass ? "blur(18px) saturate(180%)" : "blur(6px)"};
-          transition: transform 0.35s ease, box-shadow 0.35s ease;
-          transform: perspective(700px) rotateX(5deg) rotateY(-3deg);
-          box-shadow: ${isGlass
-            ? "0 4px 20px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.7)"
-            : "0 20px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)"};
-          position: relative; overflow: hidden; cursor: default;
-        }
-        .card3d-pr::before {
-          content:''; position:absolute; top:0; left:0; right:0; height:1px;
-          background: linear-gradient(90deg,transparent,${isGlass ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.1)"},transparent);
-        }
-        .card3d-pr:hover {
-          transform: perspective(700px) rotateX(0deg) rotateY(0deg) translateZ(20px) translateY(-10px);
-          box-shadow: ${isGlass ? "0 20px 48px rgba(0,0,0,0.1)" : "0 36px 72px rgba(0,0,0,0.5)"};
-        }
-        .table3d-pr {
-          background: ${theme.bgCard}; border: 1px solid ${isGlass ? "rgba(255,255,255,0.4)" : theme.borderCard};
-          border-radius: 16px; overflow-x: auto; -webkit-overflow-scrolling: touch;
-          box-shadow: ${isGlass ? "0 4px 24px rgba(0,0,0,0.07)" : "0 12px 32px rgba(0,0,0,0.3)"};
-          ${isGlass ? "backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);" : "backdrop-filter: blur(4px);"}
-        }
-        .pr-row { cursor: pointer; transition: background 0.15s; }
-        .pr-row:hover { background: ${isGlass ? "rgba(255,255,255,0.15)" : `${theme.primary}0d`} !important; }
-        .detail-panel {
-          background: ${isGlass ? "rgba(255,255,255,0.2)" : theme.bgCard};
-          border: 1px solid ${isGlass ? "rgba(255,255,255,0.4)" : theme.borderCard};
-          border-radius: 16px; padding: 24px;
-          box-shadow: ${isGlass ? "0 4px 24px rgba(0,0,0,0.07)" : "0 8px 32px rgba(0,0,0,0.3)"};
-          ${isGlass ? "backdrop-filter: blur(18px) saturate(180%); -webkit-backdrop-filter: blur(18px) saturate(180%);" : ""}
-        }
-        @media (max-width: 768px) {
-          .card3d-pr { transform: none !important; }
-          .card3d-pr:hover { transform: translateY(-6px) !important; }
-        }
+        .card3d-pr { background:${isGlass?"rgba(255,255,255,0.25)":theme.bgCard}; border-radius:14px; padding:16px 20px; display:flex; align-items:center; gap:14px; backdrop-filter:${isGlass?"blur(18px) saturate(180%)":"blur(6px)"}; -webkit-backdrop-filter:${isGlass?"blur(18px) saturate(180%)":"blur(6px)"}; transition:transform 0.35s ease, box-shadow 0.35s ease; transform:perspective(700px) rotateX(5deg) rotateY(-3deg); box-shadow:${isGlass?"0 4px 20px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.7)":"0 20px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.04)"}; position:relative; overflow:hidden; cursor:default; }
+        .card3d-pr::before { content:''; position:absolute; top:0; left:0; right:0; height:1px; background:linear-gradient(90deg,transparent,${isGlass?"rgba(255,255,255,0.8)":"rgba(255,255,255,0.1)"},transparent); }
+        .card3d-pr:hover { transform:perspective(700px) rotateX(0deg) rotateY(0deg) translateZ(20px) translateY(-10px); box-shadow:${isGlass?"0 20px 48px rgba(0,0,0,0.1)":"0 36px 72px rgba(0,0,0,0.5)"}; }
+        .table3d-pr { background:${theme.bgCard}; border:1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderCard}; border-radius:16px; overflow-x:auto; -webkit-overflow-scrolling:touch; box-shadow:${isGlass?"0 4px 24px rgba(0,0,0,0.07)":"0 12px 32px rgba(0,0,0,0.3)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":"backdrop-filter:blur(4px);"} }
+        .pr-row { cursor:pointer; transition:background 0.15s; }
+        .pr-row:hover { background:${isGlass?"rgba(255,255,255,0.15)":`${theme.primary}0d`} !important; }
+        .detail-panel { background:${isGlass?"rgba(255,255,255,0.2)":theme.bgCard}; border:1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderCard}; border-radius:16px; padding:24px; box-shadow:${isGlass?"0 4px 24px rgba(0,0,0,0.07)":"0 8px 32px rgba(0,0,0,0.3)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
+        @media (max-width:768px) { .card3d-pr { transform:none !important; } .card3d-pr:hover { transform:translateY(-6px) !important; } }
       `}</style>
 
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-      <div style={{ flex:1, padding: isMobile?"72px 16px 40px":"32px 36px", overflowY:"auto", position:"relative", zIndex:1 }}>
+      <div style={{ flex:1, padding:isMobile?"72px 16px 40px":"32px 36px", overflowY:"auto", position:"relative", zIndex:1 }}>
 
         {/* HEADER */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28, flexWrap:"wrap", gap:12 }}>
           <div style={{ display:"flex", alignItems:"center", gap:14 }}>
-            <img src={logoGif} alt="logo" style={{ width: isMobile?44:60, height: isMobile?44:60, objectFit:"contain", filter:"drop-shadow(0 0 10px rgba(255,255,255,0.3))" }} />
+            <img src={logoGif} alt="logo" style={{ width:isMobile?44:60, height:isMobile?44:60, objectFit:"contain", filter:"drop-shadow(0 0 10px rgba(255,255,255,0.3))" }} />
             <div>
-              <h1 style={{ fontSize: isMobile?"20px":"1.75rem", fontWeight:700, margin:0, color:theme.textPrimary }}>Produtos & Serviços</h1>
-              <p style={{ color:theme.textMuted, margin:"4px 0 0", fontSize:"0.85rem" }}>Catálogo, estoque e histórico de serviços</p>
+              <h1 style={{ fontSize:isMobile?"20px":"1.75rem", fontWeight:700, margin:0, color:theme.textPrimary }}>Produtos & Serviços</h1>
+              <p style={{ color:theme.textMuted, margin:"4px 0 0", fontSize:"0.85rem" }}>
+                {isSeller ? "Consulta de catálogo e estoque" : "Catálogo, estoque e histórico de serviços"}
+              </p>
             </div>
           </div>
-          <button style={{ ...btnPrimary, whiteSpace:"nowrap" }} onClick={openCreate}>+ Novo Item</button>
+          {/* ✅ botão novo item só para quem pode editar */}
+          {canEdit && (
+            <button style={{ ...btnPrimary, whiteSpace:"nowrap" }} onClick={openCreate}>+ Novo Item</button>
+          )}
         </div>
 
-        {/* CARDS */}
-        <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16, marginBottom:28 }}>
+        {/* CARDS — seller não vê margem */}
+        <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16, marginBottom:28 }}>
           {[
-            { icon:"📦", label:"Produtos",      value: totalProducts, color:theme.primary, border: isGlass?"rgba(255,255,255,0.5)":`${theme.primary}44` },
-            { icon:"⚙️", label:"Serviços",      value: totalServices, color:theme.purple,  border: isGlass?"rgba(255,255,255,0.5)":`${theme.purple}44`  },
-            { icon:"📊", label:"Margem Média",  value: `${avgMargin}%`, color:theme.income, border: isGlass?"rgba(255,255,255,0.5)":`${theme.income}44` },
-            { icon:"⚠️", label:"Alertas Estq.", value: stockAlerts, color: stockAlerts > 0 ? "#ef4444" : theme.income, border: isGlass?"rgba(255,255,255,0.5)": stockAlerts > 0?"rgba(239,68,68,0.3)":`${theme.income}44` },
-          ].map((c, i) => (
+            { icon:"📦", label:"Produtos",      value:totalProducts, color:theme.primary, border:isGlass?"rgba(255,255,255,0.5)":`${theme.primary}44` },
+            { icon:"⚙️", label:"Serviços",      value:totalServices, color:theme.purple,  border:isGlass?"rgba(255,255,255,0.5)":`${theme.purple}44`  },
+            ...(!isSeller ? [{ icon:"📊", label:"Margem Média", value:`${avgMargin}%`, color:theme.income, border:isGlass?"rgba(255,255,255,0.5)":`${theme.income}44` }] : []),
+            { icon:"⚠️", label:"Alertas Estq.", value:stockAlerts, color:stockAlerts>0?"#ef4444":theme.income, border:isGlass?"rgba(255,255,255,0.5)":stockAlerts>0?"rgba(239,68,68,0.3)":`${theme.income}44` },
+          ].map((c,i) => (
             <div key={i} className="card3d-pr" style={{ border:`1px solid ${c.border}` }}>
               <div style={{ fontSize:"1.5rem" }}>{c.icon}</div>
               <div>
                 <div style={{ color:theme.textMuted, fontSize:"0.75rem", marginBottom:2 }}>{c.label}</div>
-                <div style={{ color:c.color, fontWeight:700, fontSize: isMobile?"1rem":"1.15rem" }}>{c.value}</div>
+                <div style={{ color:c.color, fontWeight:700, fontSize:isMobile?"1rem":"1.15rem" }}>{c.value}</div>
               </div>
             </div>
           ))}
@@ -313,10 +257,10 @@ export default function Products() {
 
         {/* FILTROS */}
         <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:20, alignItems:"center" }}>
-          <input style={{ ...inputStyle, width: isMobile?"100%":"280px" }} type="text" placeholder="🔍 Buscar por nome ou categoria..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input style={{ ...inputStyle, width:isMobile?"100%":"280px" }} type="text" placeholder="🔍 Buscar por nome ou categoria..." value={search} onChange={e=>setSearch(e.target.value)} />
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-            {["all","product","service"].map(f => (
-              <button key={f} style={{ background: filterType===f ? `${theme.primary}33` : (isGlass?"rgba(255,255,255,0.2)":theme.bgCard), color: filterType===f ? theme.textActive : theme.textMuted, border: filterType===f ? `1px solid ${theme.primary}66` : `1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderCard}`, borderRadius:8, padding:"6px 14px", fontSize:"0.82rem", cursor:"pointer", ...(isGlass && { backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)" }) }} onClick={() => setFilterType(f)}>
+            {["all","product","service"].map(f=>(
+              <button key={f} style={{ background:filterType===f?`${theme.primary}33`:(isGlass?"rgba(255,255,255,0.2)":theme.bgCard), color:filterType===f?theme.textActive:theme.textMuted, border:filterType===f?`1px solid ${theme.primary}66`:`1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderCard}`, borderRadius:8, padding:"6px 14px", fontSize:"0.82rem", cursor:"pointer", ...(isGlass&&{backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}) }} onClick={()=>setFilterType(f)}>
                 {f==="all"?"Todos":f==="product"?"📦 Produtos":"⚙️ Serviços"}
               </button>
             ))}
@@ -324,77 +268,81 @@ export default function Products() {
         </div>
 
         {/* LAYOUT */}
-        <div style={{ display:"grid", gridTemplateColumns: detailProduct && !isMobile ? "1fr 380px" : "1fr", gap:20, alignItems:"start" }}>
+        <div style={{ display:"grid", gridTemplateColumns:detailProduct&&!isMobile?"1fr 380px":"1fr", gap:20, alignItems:"start" }}>
 
           {/* TABELA */}
           <div className="table3d-pr">
             {loading ? (
               <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:"60px 0", color:theme.textMuted }}>Carregando...</div>
-            ) : filtered.length === 0 ? (
+            ) : filtered.length===0 ? (
               <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"60px 0", gap:12, color:theme.textMuted }}>
                 <span style={{ fontSize:"2rem" }}>📭</span><p>Nenhum item encontrado</p>
               </div>
             ) : (
-              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.88rem", minWidth: isMobile?"520px":"unset" }}>
+              <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.88rem", minWidth:isMobile?"520px":"unset" }}>
                 <thead>
                   <tr>
-                    {(isMobile
-                      ? ["Nome","Tipo","Preço","Margem","Ações"]
-                      : ["Nome","Tipo","Unid.","Custo","Preço","Margem","Estq./Serv.","Status","Ações"]
-                    ).map(h => (
-                      <th key={h} style={{ textAlign:"left", padding:"12px 16px", color:theme.textMuted, fontWeight:600, fontSize:"0.75rem", textTransform:"uppercase", letterSpacing:"0.05em", background: isGlass?"rgba(255,255,255,0.1)":theme.bgCard, borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, whiteSpace:"nowrap" }}>{h}</th>
+                    {tableHeaders.map(h=>(
+                      <th key={h} style={{ textAlign:"left", padding:"12px 16px", color:theme.textMuted, fontWeight:600, fontSize:"0.75rem", textTransform:"uppercase", letterSpacing:"0.05em", background:isGlass?"rgba(255,255,255,0.1)":theme.bgCard, borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, whiteSpace:"nowrap" }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.map(p => {
-                    const isAlert    = p.type === "product" && p.stock_qty <= p.stock_min;
-                    const isSelected = detailProduct?.id === p.id;
+                    const isAlert    = p.type==="product" && p.stock_qty<=p.stock_min;
+                    const isSelected = detailProduct?.id===p.id;
                     return (
                       <tr key={p.id} className="pr-row"
-                        style={{ borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.15)":theme.border}`, background: isSelected ? (isGlass?"rgba(255,255,255,0.2)":`${theme.primary}11`) : "transparent" }}
-                        onClick={() => openDetail(p)}>
+                        style={{ borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.15)":theme.border}`, background:isSelected?(isGlass?"rgba(255,255,255,0.2)":`${theme.primary}11`):"transparent" }}
+                        onClick={()=>openDetail(p)}>
                         <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
                           <div style={{ fontWeight:600, color:theme.textPrimary }}>{p.name}</div>
-                          {!isMobile && p.category && <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{p.category}</div>}
+                          {!isMobile&&p.category&&<div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{p.category}</div>}
                         </td>
                         <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
-                          <span style={{ display:"inline-block", padding:"3px 8px", borderRadius:20, fontSize:"0.72rem", fontWeight:600, background: p.type==="product"?`${theme.primary}22`:`${theme.purple}22`, color: p.type==="product"?theme.primary:theme.purple }}>
+                          <span style={{ display:"inline-block", padding:"3px 8px", borderRadius:20, fontSize:"0.72rem", fontWeight:600, background:p.type==="product"?`${theme.primary}22`:`${theme.purple}22`, color:p.type==="product"?theme.primary:theme.purple }}>
                             {p.type==="product"?"📦":"⚙️"}{!isMobile&&(p.type==="product"?" Produto":" Serviço")}
                           </span>
                         </td>
-                        {!isMobile && <td style={{ padding:"12px 16px", verticalAlign:"middle", color:theme.textSecondary }}>{p.unit}</td>}
-                        {!isMobile && <td style={{ padding:"12px 16px", verticalAlign:"middle", color:theme.textPrimary }}>{fmt(p.cost)}</td>}
+                        {!isMobile&&<td style={{ padding:"12px 16px", verticalAlign:"middle", color:theme.textSecondary }}>{p.unit}</td>}
+                        {/* ✅ custo só para quem pode editar */}
+                        {!isMobile&&canEdit&&<td style={{ padding:"12px 16px", verticalAlign:"middle", color:theme.textPrimary }}>{fmt(p.cost)}</td>}
                         <td style={{ padding:"12px 16px", verticalAlign:"middle", fontWeight:600, color:theme.textPrimary }}>{fmt(p.price)}</td>
-                        <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
-                          <span style={{ display:"inline-block", padding:"3px 8px", borderRadius:20, fontSize:"0.72rem", fontWeight:600, background: p.margin>=30?`${theme.income}22`:`${theme.warning}22`, color: p.margin>=30?theme.income:theme.warning }}>{p.margin}%</span>
-                        </td>
-                        {!isMobile && (
+                        {/* ✅ margem só para quem pode editar */}
+                        {!isMobile&&canEdit&&(
                           <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
-                            {p.type === "product" ? (
+                            <span style={{ display:"inline-block", padding:"3px 8px", borderRadius:20, fontSize:"0.72rem", fontWeight:600, background:p.margin>=30?`${theme.income}22`:`${theme.warning}22`, color:p.margin>=30?theme.income:theme.warning }}>{p.margin}%</span>
+                          </td>
+                        )}
+                        {!isMobile&&(
+                          <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
+                            {p.type==="product" ? (
                               <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                                <span style={{ fontWeight:700, color: isAlert?"#ef4444":theme.income }}>{p.stock_qty}</span>
+                                <span style={{ fontWeight:700, color:isAlert?"#ef4444":theme.income }}>{p.stock_qty}</span>
                                 <span style={{ fontSize:"0.72rem", color:theme.textMuted }}>{p.unit}</span>
-                                {isAlert && <span title="Estoque baixo!">⚠️</span>}
+                                {isAlert&&<span>⚠️</span>}
                               </div>
                             ) : (
-                              <span style={{ color:theme.textMuted, fontSize:"0.85rem" }}>{p.services_count} realizado{p.services_count !== 1 ? "s" : ""}</span>
+                              <span style={{ color:theme.textMuted, fontSize:"0.85rem" }}>{p.services_count} realizado{p.services_count!==1?"s":""}</span>
                             )}
                           </td>
                         )}
-                        {!isMobile && (
+                        {/* ✅ status e ações só para quem pode editar */}
+                        {!isMobile&&canEdit&&(
                           <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
-                            <button style={{ display:"inline-block", padding:"3px 10px", borderRadius:20, fontSize:"0.75rem", fontWeight:600, cursor:"pointer", border:`1px solid ${p.active?theme.income:theme.textMuted}44`, background: p.active?`${theme.income}22`:"rgba(100,116,139,0.12)", color: p.active?theme.income:theme.textMuted }} onClick={e => { e.stopPropagation(); handleToggle(p); }}>
+                            <button style={{ display:"inline-block", padding:"3px 10px", borderRadius:20, fontSize:"0.75rem", fontWeight:600, cursor:"pointer", border:`1px solid ${p.active?theme.income:theme.textMuted}44`, background:p.active?`${theme.income}22`:"rgba(100,116,139,0.12)", color:p.active?theme.income:theme.textMuted }} onClick={e=>{ e.stopPropagation(); handleToggle(p); }}>
                               {p.active?"Ativo":"Inativo"}
                             </button>
                           </td>
                         )}
-                        <td style={{ padding:"12px 16px", verticalAlign:"middle" }} onClick={e => e.stopPropagation()}>
-                          <div style={{ display:"flex", gap:6 }}>
-                            <button style={{ background:`${theme.primary}22`, border:`1px solid ${theme.primary}44`, borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={() => openEdit(p)}>✏️</button>
-                            <button style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={() => setDeleteConfirm(p)}>🗑️</button>
-                          </div>
-                        </td>
+                        {canEdit&&(
+                          <td style={{ padding:"12px 16px", verticalAlign:"middle" }} onClick={e=>e.stopPropagation()}>
+                            <div style={{ display:"flex", gap:6 }}>
+                              <button style={{ background:`${theme.primary}22`, border:`1px solid ${theme.primary}44`, borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={()=>openEdit(p)}>✏️</button>
+                              <button style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={()=>setDeleteConfirm(p)}>🗑️</button>
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })}
@@ -409,39 +357,42 @@ export default function Products() {
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
                 <div>
                   <div style={{ fontWeight:700, fontSize:"1rem", color:theme.textPrimary, marginBottom:2 }}>{detailProduct.name}</div>
-                  <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{detailProduct.type === "product" ? "📦 Produto" : "⚙️ Serviço"} · {detailProduct.category || "Sem categoria"}</div>
+                  <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{detailProduct.type==="product"?"📦 Produto":"⚙️ Serviço"} · {detailProduct.category||"Sem categoria"}</div>
                 </div>
-                <button style={{ background: isGlass?"rgba(255,255,255,0.3)":theme.bgCard, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderCard}`, borderRadius:8, color:theme.textMuted, padding:"4px 10px", cursor:"pointer", fontSize:13 }} onClick={closeDetail}>✕</button>
+                <button style={{ background:isGlass?"rgba(255,255,255,0.3)":theme.bgCard, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderCard}`, borderRadius:8, color:theme.textMuted, padding:"4px 10px", cursor:"pointer", fontSize:13 }} onClick={closeDetail}>✕</button>
               </div>
 
               <div style={{ display:"flex", gap:8, marginBottom:20, flexWrap:"wrap" }}>
-                <button style={tabStyle(activeTab==="info")} onClick={() => setActiveTab("info")}>ℹ️ Info</button>
-                {detailProduct.type === "product"  && <button style={tabStyle(activeTab==="stock")}    onClick={() => setActiveTab("stock")}>📦 Estoque</button>}
-                {detailProduct.type === "service"  && <button style={tabStyle(activeTab==="services")} onClick={() => setActiveTab("services")}>⚙️ Serviços</button>}
+                <button style={tabStyle(activeTab==="info")} onClick={()=>setActiveTab("info")}>ℹ️ Info</button>
+                {detailProduct.type==="product"&&<button style={tabStyle(activeTab==="stock")} onClick={()=>setActiveTab("stock")}>📦 Estoque</button>}
+                {detailProduct.type==="service"&&canEdit&&<button style={tabStyle(activeTab==="services")} onClick={()=>setActiveTab("services")}>⚙️ Serviços</button>}
               </div>
 
-              {activeTab === "info" && (
+              {/* ✅ INFO — seller não vê custo, margem, lucro */}
+              {activeTab==="info" && (
                 <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
                   {[
-                    { label:"Preço de Venda", value: fmt(detailProduct.price), color:theme.income },
-                    { label:"Custo",          value: fmt(detailProduct.cost),  color:theme.expense },
-                    { label:"Lucro",          value: fmt(detailProduct.profit || detailProduct.price - detailProduct.cost), color:theme.primary },
-                    { label:"Margem",         value: `${detailProduct.margin}%`, color:theme.warning },
+                    { label:"Preço de Venda", value:fmt(detailProduct.price), color:theme.income },
+                    ...(!isSeller ? [
+                      { label:"Custo",   value:fmt(detailProduct.cost), color:theme.expense },
+                      { label:"Lucro",   value:fmt(detailProduct.profit||detailProduct.price-detailProduct.cost), color:theme.primary },
+                      { label:"Margem",  value:`${detailProduct.margin}%`, color:theme.warning },
+                    ] : []),
                     ...(detailProduct.type==="product" ? [
-                      { label:"Estoque Atual",   value: `${detailProduct.stock_qty} ${detailProduct.unit}`, color: detailProduct.stock_qty <= detailProduct.stock_min ? "#ef4444" : theme.income },
-                      { label:"Estoque Mínimo",  value: `${detailProduct.stock_min} ${detailProduct.unit}`, color:theme.textSecondary },
-                      { label:"Custo Médio",     value: fmt(detailProduct.stock_avg_cost), color:theme.textSecondary },
+                      { label:"Estoque Atual",  value:`${detailProduct.stock_qty} ${detailProduct.unit}`, color:detailProduct.stock_qty<=detailProduct.stock_min?"#ef4444":theme.income },
+                      { label:"Estoque Mínimo", value:`${detailProduct.stock_min} ${detailProduct.unit}`, color:theme.textSecondary },
+                      ...(!isSeller ? [{ label:"Custo Médio", value:fmt(detailProduct.stock_avg_cost), color:theme.textSecondary }] : []),
                     ] : [
-                      { label:"Serviços Realizados", value: detailProduct.services_count, color:theme.primary },
+                      { label:"Serviços Realizados", value:detailProduct.services_count, color:theme.primary },
                     ]),
-                  ].map((f,i) => (
-                    <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background: isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:8, border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.border}` }}>
+                  ].map((f,i)=>(
+                    <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:8, border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.border}` }}>
                       <span style={{ fontSize:"0.82rem", color:theme.textMuted }}>{f.label}</span>
                       <span style={{ fontSize:"0.88rem", fontWeight:700, color:f.color }}>{f.value}</span>
                     </div>
                   ))}
-                  {detailProduct.description && (
-                    <div style={{ padding:"10px 12px", background: isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:8, border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.border}` }}>
+                  {detailProduct.description&&(
+                    <div style={{ padding:"10px 12px", background:isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:8, border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.border}` }}>
                       <div style={{ fontSize:"0.72rem", color:theme.textMuted, marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>Descrição</div>
                       <div style={{ fontSize:"0.85rem", color:theme.textSecondary }}>{detailProduct.description}</div>
                     </div>
@@ -449,38 +400,43 @@ export default function Products() {
                 </div>
               )}
 
-              {activeTab === "stock" && (
+              {/* ESTOQUE — seller vê mas não pode movimentar */}
+              {activeTab==="stock" && (
                 <div>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
                     <div>
-                      <span style={{ fontSize:"1.3rem", fontWeight:700, color: detailProduct.stock_qty <= detailProduct.stock_min ? "#ef4444" : theme.income }}>{detailProduct.stock_qty}</span>
+                      <span style={{ fontSize:"1.3rem", fontWeight:700, color:detailProduct.stock_qty<=detailProduct.stock_min?"#ef4444":theme.income }}>{detailProduct.stock_qty}</span>
                       <span style={{ fontSize:"0.85rem", color:theme.textMuted, marginLeft:4 }}>{detailProduct.unit} em estoque</span>
                     </div>
-                    <button style={{ ...btnPrimary, fontSize:"0.82rem", padding:"7px 14px" }} onClick={() => { setMovForm(EMPTY_MOVEMENT); setMovModal(true); }}>+ Movimentar</button>
+                    {/* ✅ botão movimentar só para quem pode editar */}
+                    {canEdit&&(
+                      <button style={{ ...btnPrimary, fontSize:"0.82rem", padding:"7px 14px" }} onClick={()=>{ setMovForm(EMPTY_MOVEMENT); setMovModal(true); }}>+ Movimentar</button>
+                    )}
                   </div>
-                  {detailProduct.stock_qty <= detailProduct.stock_min && (
+                  {detailProduct.stock_qty<=detailProduct.stock_min&&(
                     <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:10, padding:"10px 14px", marginBottom:12, fontSize:"0.82rem", color:"#ef4444", display:"flex", gap:8, alignItems:"center" }}>
                       ⚠️ Estoque abaixo do mínimo ({detailProduct.stock_min} {detailProduct.unit})!
                     </div>
                   )}
                   {loadingDetail ? (
                     <div style={{ textAlign:"center", color:theme.textMuted, padding:"20px 0" }}>Carregando...</div>
-                  ) : movements.length === 0 ? (
+                  ) : movements.length===0 ? (
                     <div style={{ textAlign:"center", color:theme.textMuted, padding:"24px 0" }}>Nenhuma movimentação registrada.</div>
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:320, overflowY:"auto" }}>
-                      {movements.map(m => (
-                        <div key={m.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", background: isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:8, border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.border}` }}>
+                      {movements.map(m=>(
+                        <div key={m.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"10px 12px", background:isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:8, border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.border}` }}>
                           <div>
-                            <span style={{ display:"inline-block", padding:"2px 8px", borderRadius:20, fontSize:"0.7rem", fontWeight:700, marginRight:8, background: m.type==="in"?"rgba(34,197,94,0.15)":m.type==="out"?"rgba(239,68,68,0.15)":"rgba(245,158,11,0.15)", color: m.type==="in"?theme.income:m.type==="out"?"#ef4444":"#f59e0b" }}>
+                            <span style={{ display:"inline-block", padding:"2px 8px", borderRadius:20, fontSize:"0.7rem", fontWeight:700, marginRight:8, background:m.type==="in"?"rgba(34,197,94,0.15)":m.type==="out"?"rgba(239,68,68,0.15)":"rgba(245,158,11,0.15)", color:m.type==="in"?theme.income:m.type==="out"?"#ef4444":"#f59e0b" }}>
                               {m.type==="in"?"Entrada":m.type==="out"?"Saída":"Ajuste"}
                             </span>
                             <span style={{ fontSize:"0.88rem", fontWeight:700, color:theme.textPrimary }}>{m.type==="adjust"?"→ ":""}{m.qty} {detailProduct.unit}</span>
-                            {m.reason && <div style={{ fontSize:"0.75rem", color:theme.textMuted, marginTop:2 }}>{m.reason}</div>}
+                            {m.reason&&<div style={{ fontSize:"0.75rem", color:theme.textMuted, marginTop:2 }}>{m.reason}</div>}
                           </div>
                           <div style={{ textAlign:"right" }}>
-                            {m.cost && <div style={{ fontSize:"0.8rem", color:theme.textMuted }}>{fmt(m.cost)}/un</div>}
-                            <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{m.date ? m.date.split("-").reverse().join("/") : "—"}</div>
+                            {/* ✅ custo só para quem pode editar */}
+                            {canEdit&&m.cost&&<div style={{ fontSize:"0.8rem", color:theme.textMuted }}>{fmt(m.cost)}/un</div>}
+                            <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{m.date?m.date.split("-").reverse().join("/"):"—"}</div>
                           </div>
                         </div>
                       ))}
@@ -489,29 +445,29 @@ export default function Products() {
                 </div>
               )}
 
-              {activeTab === "services" && (
+              {activeTab==="services"&&canEdit&&(
                 <div>
                   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
-                    <span style={{ fontSize:"0.9rem", color:theme.textMuted }}><strong style={{ color:theme.primary, fontSize:"1.1rem" }}>{detailProduct.services_count}</strong> serviço{detailProduct.services_count !== 1 ? "s" : ""} realizado{detailProduct.services_count !== 1 ? "s" : ""}</span>
-                    <button style={{ ...btnPrimary, fontSize:"0.82rem", padding:"7px 14px" }} onClick={() => { setSvcForm({...EMPTY_SERVICE, amount: detailProduct.price}); setSvcModal(true); }}>+ Registrar</button>
+                    <span style={{ fontSize:"0.9rem", color:theme.textMuted }}><strong style={{ color:theme.primary, fontSize:"1.1rem" }}>{detailProduct.services_count}</strong> serviço{detailProduct.services_count!==1?"s":""} realizado{detailProduct.services_count!==1?"s":""}</span>
+                    <button style={{ ...btnPrimary, fontSize:"0.82rem", padding:"7px 14px" }} onClick={()=>{ setSvcForm({...EMPTY_SERVICE,amount:detailProduct.price}); setSvcModal(true); }}>+ Registrar</button>
                   </div>
                   {loadingDetail ? (
                     <div style={{ textAlign:"center", color:theme.textMuted, padding:"20px 0" }}>Carregando...</div>
-                  ) : serviceRecords.length === 0 ? (
+                  ) : serviceRecords.length===0 ? (
                     <div style={{ textAlign:"center", color:theme.textMuted, padding:"24px 0" }}>Nenhum serviço registrado.</div>
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:8, maxHeight:320, overflowY:"auto" }}>
-                      {serviceRecords.map(r => (
-                        <div key={r.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"10px 12px", background: isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:8, border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.border}` }}>
+                      {serviceRecords.map(r=>(
+                        <div key={r.id} style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", padding:"10px 12px", background:isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:8, border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.border}` }}>
                           <div>
                             <div style={{ fontWeight:600, color:theme.income, fontSize:"0.9rem" }}>{fmt(r.amount)}</div>
-                            {r.client_name && <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>👤 {r.client_name}</div>}
-                            {r.duration_min && <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>⏱️ {r.duration_min} min</div>}
-                            {r.notes && <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{r.notes}</div>}
+                            {r.client_name&&<div style={{ fontSize:"0.75rem", color:theme.textMuted }}>👤 {r.client_name}</div>}
+                            {r.duration_min&&<div style={{ fontSize:"0.75rem", color:theme.textMuted }}>⏱️ {r.duration_min} min</div>}
+                            {r.notes&&<div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{r.notes}</div>}
                           </div>
                           <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6 }}>
-                            <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{r.date ? r.date.split("-").reverse().join("/") : "—"}</div>
-                            <button style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:6, padding:"3px 8px", cursor:"pointer", fontSize:"0.8rem", color:"#ef4444" }} onClick={() => deleteSvcRecord(r.id)}>🗑️</button>
+                            <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{r.date?r.date.split("-").reverse().join("/"):"—"}</div>
+                            <button style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:6, padding:"3px 8px", cursor:"pointer", fontSize:"0.8rem", color:"#ef4444" }} onClick={()=>deleteSvcRecord(r.id)}>🗑️</button>
                           </div>
                         </div>
                       ))}
@@ -524,22 +480,20 @@ export default function Products() {
         </div>
       </div>
 
-      {/* MODAL CRIAR/EDITAR */}
-      {modalOpen && (
+      {/* MODAL CRIAR/EDITAR — só para canEdit */}
+      {modalOpen&&canEdit&&(
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={closeModal}>
-          <div style={{ ...modalBg, borderRadius:18, padding: isMobile?"24px 20px":32, width: isMobile?"92%":"100%", maxWidth:620, maxHeight:"90vh", overflowY:"auto", boxShadow: isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
+          <div style={{ ...modalBg, borderRadius:18, padding:isMobile?"24px 20px":32, width:isMobile?"92%":"100%", maxWidth:620, maxHeight:"90vh", overflowY:"auto", boxShadow:isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
               <h2 style={{ margin:0, fontSize:"1.2rem", fontWeight:700, color:theme.textPrimary }}>{editing?"✏️ Editar Item":"➕ Novo Item"}</h2>
-              <button style={{ background: isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer", fontSize:14 }} onClick={closeModal}>✕</button>
+              <button style={{ background:isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer", fontSize:14 }} onClick={closeModal}>✕</button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div style={{ display:"grid", gridTemplateColumns: isMobile?"1fr":"1fr 1fr", gap:16, marginBottom:24 }}>
-
+              <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:16, marginBottom:24 }}>
                 <div style={{ ...fieldStyle, gridColumn:"1 / -1" }}>
                   <label style={labelStyle}>Nome *</label>
                   <input style={inputStyle} required placeholder="Nome do produto ou serviço" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} />
                 </div>
-
                 <div style={fieldStyle}>
                   <label style={labelStyle}>Tipo *</label>
                   <select style={selectStyle} value={form.type} onChange={e=>setForm({...form,type:e.target.value})}>
@@ -547,81 +501,68 @@ export default function Products() {
                     <option value="product">📦 Produto</option>
                   </select>
                 </div>
-
                 <div style={fieldStyle}>
                   <label style={labelStyle}>Unidade</label>
                   <select style={selectStyle} value={form.unit} onChange={e=>setForm({...form,unit:e.target.value})}>
-                    {["un","hr","kg","g","m","m²","m³","L","cx","pc","par","vb"].map(u => <option key={u} value={u}>{u}</option>)}
+                    {["un","hr","kg","g","m","m²","m³","L","cx","pc","par","vb"].map(u=><option key={u} value={u}>{u}</option>)}
                   </select>
                 </div>
-
                 <div style={fieldStyle}>
                   <label style={labelStyle}>Custo (R$)</label>
                   <input style={inputStyle} type="number" step="0.01" min="0" placeholder="0,00" value={form.cost} onChange={e=>setForm({...form,cost:e.target.value})} />
                 </div>
-
                 <div style={fieldStyle}>
                   <label style={labelStyle}>Preço de Venda (R$) *</label>
                   <input style={inputStyle} type="number" step="0.01" min="0" required placeholder="0,00" value={form.price} onChange={e=>setForm({...form,price:e.target.value})} />
                 </div>
-
-                {/* CAMPOS SÓ PARA PRODUTO */}
-                {form.type === "product" && (
+                {form.type==="product"&&(
                   <>
                     <div style={fieldStyle}>
                       <label style={labelStyle}>Estoque Mínimo</label>
                       <input style={inputStyle} type="number" step="0.01" min="0" placeholder="0" value={form.stock_min} onChange={e=>setForm({...form,stock_min:e.target.value})} />
                     </div>
-
-                    {/* ✅ ESTOQUE INICIAL — só na criação */}
-                    {!editing && (
+                    {!editing&&(
                       <div style={fieldStyle}>
                         <label style={labelStyle}>Estoque Inicial</label>
                         <input style={inputStyle} type="number" step="0.01" min="0" placeholder="0" value={form.stock_qty_initial} onChange={e=>setForm({...form,stock_qty_initial:e.target.value})} />
-                        <span style={{ fontSize:"0.72rem", color:theme.textMuted, paddingLeft:4 }}>
-                          Será registrado como entrada de estoque automática
-                        </span>
+                        <span style={{ fontSize:"0.72rem", color:theme.textMuted, paddingLeft:4 }}>Será registrado como entrada automática</span>
                       </div>
                     )}
                   </>
                 )}
-
-                {form.price > 0 && (
+                {form.price>0&&(
                   <div style={{ gridColumn:"1 / -1" }}>
-                    <div style={{ background: isGlass?"rgba(255,255,255,0.2)":`${theme.primary}11`, border:`1px solid ${isGlass?"rgba(255,255,255,0.4)":`${theme.primary}22`}`, borderRadius:10, padding:"10px 16px", display:"flex", gap:24, fontSize:"0.88rem", color:theme.textSecondary, flexWrap:"wrap" }}>
+                    <div style={{ background:isGlass?"rgba(255,255,255,0.2)":`${theme.primary}11`, border:`1px solid ${isGlass?"rgba(255,255,255,0.4)":`${theme.primary}22`}`, borderRadius:10, padding:"10px 16px", display:"flex", gap:24, fontSize:"0.88rem", color:theme.textSecondary, flexWrap:"wrap" }}>
                       <span>💡 Lucro: <strong style={{ color:theme.income }}>{fmt((parseFloat(form.price)||0)-(parseFloat(form.cost)||0))}</strong></span>
                       <span>Margem: <strong style={{ color:theme.warning }}>{form.price>0?(((parseFloat(form.price)-parseFloat(form.cost||0))/parseFloat(form.price))*100).toFixed(1):0}%</strong></span>
                     </div>
                   </div>
                 )}
-
                 <div style={{ ...fieldStyle, gridColumn:"1 / -1" }}>
                   <label style={labelStyle}>Categoria</label>
                   <input style={inputStyle} placeholder="Ex: Mão de obra, Elétrica, TI..." value={form.category} onChange={e=>setForm({...form,category:e.target.value})} />
                 </div>
-
                 <div style={{ ...fieldStyle, gridColumn:"1 / -1" }}>
                   <label style={labelStyle}>Descrição</label>
                   <textarea style={{ ...inputStyle, resize:"vertical", minHeight:70 }} placeholder="Detalhes..." value={form.description} onChange={e=>setForm({...form,description:e.target.value})} />
                 </div>
-
               </div>
-              <div style={{ display:"flex", justifyContent:"flex-end", gap:12, flexDirection: isMobile?"column":"row" }}>
-                <button type="button" style={{ ...btnSecondary, width: isMobile?"100%":"auto" }} onClick={closeModal}>Cancelar</button>
-                <button type="submit" style={{ ...btnPrimary, width: isMobile?"100%":"auto" }}>{editing?"Salvar Alterações":"Criar Item"}</button>
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:12, flexDirection:isMobile?"column":"row" }}>
+                <button type="button" style={{ ...btnSecondary, width:isMobile?"100%":"auto" }} onClick={closeModal}>Cancelar</button>
+                <button type="submit" style={{ ...btnPrimary, width:isMobile?"100%":"auto" }}>{editing?"Salvar Alterações":"Criar Item"}</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL MOVIMENTAÇÃO */}
-      {movModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={() => setMovModal(false)}>
-          <div style={{ ...modalBg, borderRadius:18, padding: isMobile?"24px 20px":32, width: isMobile?"92%":"100%", maxWidth:480, boxShadow: isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
+      {/* MODAL MOVIMENTAÇÃO — só para canEdit */}
+      {movModal&&canEdit&&(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={()=>setMovModal(false)}>
+          <div style={{ ...modalBg, borderRadius:18, padding:isMobile?"24px 20px":32, width:isMobile?"92%":"100%", maxWidth:480, boxShadow:isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
               <h2 style={{ margin:0, fontSize:"1.1rem", fontWeight:700, color:theme.textPrimary }}>📦 Movimentar Estoque</h2>
-              <button style={{ background: isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer", fontSize:14 }} onClick={() => setMovModal(false)}>✕</button>
+              <button style={{ background:isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer", fontSize:14 }} onClick={()=>setMovModal(false)}>✕</button>
             </div>
             <form onSubmit={handleMovimentar}>
               <div style={{ display:"flex", flexDirection:"column", gap:16, marginBottom:24 }}>
@@ -634,10 +575,10 @@ export default function Products() {
                   </select>
                 </div>
                 <div style={fieldStyle}>
-                  <label style={labelStyle}>{movForm.type === "adjust" ? "Novo Estoque Total *" : "Quantidade *"}</label>
+                  <label style={labelStyle}>{movForm.type==="adjust"?"Novo Estoque Total *":"Quantidade *"}</label>
                   <input style={inputStyle} required type="number" step="0.01" min="0.01" placeholder="0" value={movForm.qty} onChange={e=>setMovForm({...movForm,qty:e.target.value})} />
                 </div>
-                {movForm.type === "in" && (
+                {movForm.type==="in"&&(
                   <div style={fieldStyle}>
                     <label style={labelStyle}>Custo Unitário (R$)</label>
                     <input style={inputStyle} type="number" step="0.01" min="0" placeholder="0,00" value={movForm.cost} onChange={e=>setMovForm({...movForm,cost:e.target.value})} />
@@ -652,22 +593,22 @@ export default function Products() {
                   <input style={inputStyle} type="date" value={movForm.date} onChange={e=>setMovForm({...movForm,date:e.target.value})} />
                 </div>
               </div>
-              <div style={{ display:"flex", justifyContent:"flex-end", gap:12, flexDirection: isMobile?"column":"row" }}>
-                <button type="button" style={{ ...btnSecondary, width: isMobile?"100%":"auto" }} onClick={() => setMovModal(false)}>Cancelar</button>
-                <button type="submit" style={{ ...btnPrimary, width: isMobile?"100%":"auto" }}>Registrar</button>
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:12, flexDirection:isMobile?"column":"row" }}>
+                <button type="button" style={{ ...btnSecondary, width:isMobile?"100%":"auto" }} onClick={()=>setMovModal(false)}>Cancelar</button>
+                <button type="submit" style={{ ...btnPrimary, width:isMobile?"100%":"auto" }}>Registrar</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL SERVIÇO */}
-      {svcModal && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={() => setSvcModal(false)}>
-          <div style={{ ...modalBg, borderRadius:18, padding: isMobile?"24px 20px":32, width: isMobile?"92%":"100%", maxWidth:480, boxShadow: isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
+      {/* MODAL SERVIÇO — só para canEdit */}
+      {svcModal&&canEdit&&(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={()=>setSvcModal(false)}>
+          <div style={{ ...modalBg, borderRadius:18, padding:isMobile?"24px 20px":32, width:isMobile?"92%":"100%", maxWidth:480, boxShadow:isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25tea 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
               <h2 style={{ margin:0, fontSize:"1.1rem", fontWeight:700, color:theme.textPrimary }}>⚙️ Registrar Serviço</h2>
-              <button style={{ background: isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer", fontSize:14 }} onClick={() => setSvcModal(false)}>✕</button>
+              <button style={{ background:isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer", fontSize:14 }} onClick={()=>setSvcModal(false)}>✕</button>
             </div>
             <form onSubmit={handleRegistrarServico}>
               <div style={{ display:"flex", flexDirection:"column", gap:16, marginBottom:24 }}>
@@ -675,7 +616,7 @@ export default function Products() {
                   <label style={labelStyle}>Cliente</label>
                   <select style={selectStyle} value={svcForm.client_id} onChange={e=>setSvcForm({...svcForm,client_id:e.target.value})}>
                     <option value="">— Sem cliente —</option>
-                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div style={fieldStyle}>
@@ -695,34 +636,34 @@ export default function Products() {
                   <textarea style={{ ...inputStyle, resize:"vertical", minHeight:60 }} placeholder="Detalhes do serviço..." value={svcForm.notes} onChange={e=>setSvcForm({...svcForm,notes:e.target.value})} />
                 </div>
               </div>
-              <div style={{ display:"flex", justifyContent:"flex-end", gap:12, flexDirection: isMobile?"column":"row" }}>
-                <button type="button" style={{ ...btnSecondary, width: isMobile?"100%":"auto" }} onClick={() => setSvcModal(false)}>Cancelar</button>
-                <button type="submit" style={{ ...btnPrimary, width: isMobile?"100%":"auto" }}>Registrar</button>
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:12, flexDirection:isMobile?"column":"row" }}>
+                <button type="button" style={{ ...btnSecondary, width:isMobile?"100%":"auto" }} onClick={()=>setSvcModal(false)}>Cancelar</button>
+                <button type="submit" style={{ ...btnPrimary, width:isMobile?"100%":"auto" }}>Registrar</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MODAL DELETE */}
-      {deleteConfirm && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={() => setDeleteConfirm(null)}>
-          <div style={{ ...modalBg, border:"1px solid rgba(239,68,68,0.3)", borderRadius:18, padding: isMobile?"24px 20px":32, width: isMobile?"92%":"100%", maxWidth:400, boxShadow: isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
+      {/* MODAL DELETE — só para canEdit */}
+      {deleteConfirm&&canEdit&&(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={()=>setDeleteConfirm(null)}>
+          <div style={{ ...modalBg, border:"1px solid rgba(239,68,68,0.3)", borderRadius:18, padding:isMobile?"24px 20px":32, width:isMobile?"92%":"100%", maxWidth:400, boxShadow:isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
               <h2 style={{ margin:0, fontSize:"1.1rem", fontWeight:700, color:"#ef4444" }}>Excluir Item</h2>
-              <button style={{ background: isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer" }} onClick={() => setDeleteConfirm(null)}>✕</button>
+              <button style={{ background:isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer" }} onClick={()=>setDeleteConfirm(null)}>✕</button>
             </div>
             <p style={{ color:theme.textSecondary, marginBottom:24 }}>Excluir <strong style={{ color:theme.textPrimary }}>"{deleteConfirm.name}"</strong>? Esta ação não pode ser desfeita.</p>
-            <div style={{ display:"flex", gap:12, flexDirection: isMobile?"column":"row", justifyContent:"flex-end" }}>
-              <button style={{ ...btnSecondary, width: isMobile?"100%":"auto" }} onClick={() => setDeleteConfirm(null)}>Cancelar</button>
-              <button style={{ background:"#ef4444", color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:700, cursor:"pointer", width: isMobile?"100%":"auto" }} onClick={() => handleDelete(deleteConfirm.id)}>Excluir</button>
+            <div style={{ display:"flex", gap:12, flexDirection:isMobile?"column":"row", justifyContent:"flex-end" }}>
+              <button style={{ ...btnSecondary, width:isMobile?"100%":"auto" }} onClick={()=>setDeleteConfirm(null)}>Cancelar</button>
+              <button style={{ background:"#ef4444", color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:700, cursor:"pointer", width:isMobile?"100%":"auto" }} onClick={()=>handleDelete(deleteConfirm.id)}>Excluir</button>
             </div>
           </div>
         </div>
       )}
 
-      {toast && (
-        <div style={{ position:"fixed", bottom: isMobile?16:28, right: isMobile?16:28, left: isMobile?16:"auto", color:"#fff", padding:"12px 22px", borderRadius:12, fontWeight:600, fontSize:"0.9rem", zIndex:9999, boxShadow:"0 8px 30px rgba(0,0,0,0.4)", background: toast.type==="error"?"#ef4444":theme.primaryGrad, textAlign: isMobile?"center":"left" }}>
+      {toast&&(
+        <div style={{ position:"fixed", bottom:isMobile?16:28, right:isMobile?16:28, left:isMobile?16:"auto", color:"#fff", padding:"12px 22px", borderRadius:12, fontWeight:600, fontSize:"0.9rem", zIndex:9999, boxShadow:"0 8px 30px rgba(0,0,0,0.4)", background:toast.type==="error"?"#ef4444":theme.primaryGrad, textAlign:isMobile?"center":"left" }}>
           {toast.msg}
         </div>
       )}

@@ -10,25 +10,21 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { theme, themeId } = useTheme();
 
-  const isGlass      = themeId === "glass";
-  const isMobile     = window.innerWidth <= 768;
-  const role         = localStorage.getItem("role")         || "viewer";
-  const accountType  = localStorage.getItem("account_type") || "business";
-  const isPersonal   = accountType === "personal";
+  const isGlass  = themeId === "glass";
+  const isMobile = window.innerWidth <= 768;
+  const role     = localStorage.getItem("role") || "viewer";
 
   const allMenuItems = [
     { to: "/dashboard",    icon: "🏠", label: "Dashboard",  roles: null },
-    { to: "/transactions", icon: "💰", label: "Transações", roles: null },
-    { to: "/bills",        icon: "📄", label: "Contas",     roles: null },
-    { to: "/analytics",    icon: "📊", label: "Analytics",  roles: null },
-    ...(!isPersonal ? [
-      { to: "/clients",  icon: "👥", label: "Clientes",   roles: null },
-      { to: "/products", icon: "📦", label: "Produtos",   roles: ["admin", "financial", "stock", "seller"] },
-      { to: "/quotes",   icon: "🧾", label: "Orçamentos", roles: null },
-      { to: "/sales",    icon: "🛒", label: "Vendas",     roles: null },
-      { to: "/team",     icon: "👤", label: "Equipe",     roles: ["admin"] },
-    ] : []),
-    { to: "/settings", icon: "🎨", label: "Temas", roles: null },
+    { to: "/clients",      icon: "👥", label: "Clientes",   roles: null },
+    { to: "/transactions", icon: "💰", label: "Transações", roles: ["admin", "financial"] },
+    { to: "/bills",        icon: "📄", label: "Contas",     roles: ["admin", "financial"] },
+    { to: "/analytics",    icon: "📊", label: "Analytics",  roles: ["admin", "financial"] },
+    { to: "/products", icon: "📦", label: "Produtos", roles: ["admin", "financial", "stock", "seller"] },
+    { to: "/quotes",       icon: "🧾", label: "Orçamentos", roles: null },
+    { to: "/sales",        icon: "🛒", label: "Vendas",     roles: null },
+    { to: "/team",         icon: "👤", label: "Equipe",     roles: ["admin"] },
+    { to: "/settings",     icon: "🎨", label: "Temas",      roles: null },
   ];
 
   const menuItems = allMenuItems.filter(item =>
@@ -47,10 +43,23 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
     ? "4px 0 24px rgba(0,0,0,0.1), inset 1px 0 0 rgba(255,255,255,0.5)"
     : "4px 0 24px rgba(0,0,0,0.4), inset 1px 0 0 rgba(255,255,255,0.06)";
 
+  // ══════════════════════════════
+  // MOBILE
+  // ══════════════════════════════
   if (isMobile) {
     return (
       <>
-        <button onClick={() => setMobileOpen(!mobileOpen)} style={{ position:"fixed", top:16, left:16, zIndex:200, background:isGlass?"rgba(255,255,255,0.35)":theme.bgSecondary, backdropFilter:sidebarBackdrop, WebkitBackdropFilter:sidebarBackdrop, border:`1px solid ${sidebarBorder}`, borderRadius:10, color:theme.textPrimary, fontSize:20, width:44, height:44, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <button
+          onClick={() => setMobileOpen(!mobileOpen)}
+          style={{
+            position:"fixed", top:16, left:16, zIndex:200,
+            background: isGlass?"rgba(255,255,255,0.35)":theme.bgSecondary,
+            backdropFilter: sidebarBackdrop, WebkitBackdropFilter: sidebarBackdrop,
+            border:`1px solid ${sidebarBorder}`, borderRadius:10,
+            color:theme.textPrimary, fontSize:20, width:44, height:44,
+            cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+          }}
+        >
           {mobileOpen?"✕":"☰"}
         </button>
 
@@ -58,19 +67,32 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
           <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:150, backdropFilter:"blur(2px)" }} onClick={() => setMobileOpen(false)} />
         )}
 
-        <div style={{ position:"fixed", top:0, left:0, bottom:0, width:260, background:isGlass?"rgba(255,255,255,0.22)":theme.bgSecondary, backdropFilter:sidebarBackdrop, WebkitBackdropFilter:sidebarBackdrop, borderRight:`1px solid ${sidebarBorder}`, zIndex:160, display:"flex", flexDirection:"column", transition:"transform 0.3s ease", transform:mobileOpen?"translateX(0)":"translateX(-100%)", boxShadow:isGlass?"8px 0 32px rgba(0,0,0,0.15)":"8px 0 32px rgba(0,0,0,0.5)" }}>
-
+        <div style={{
+          position:"fixed", top:0, left:0, bottom:0, width:260,
+          background: isGlass?"rgba(255,255,255,0.22)":theme.bgSecondary,
+          backdropFilter:sidebarBackdrop, WebkitBackdropFilter:sidebarBackdrop,
+          borderRight:`1px solid ${sidebarBorder}`, zIndex:160,
+          display:"flex", flexDirection:"column",
+          transition:"transform 0.3s ease",
+          transform: mobileOpen?"translateX(0)":"translateX(-100%)",
+          boxShadow: isGlass?"8px 0 32px rgba(0,0,0,0.15)":"8px 0 32px rgba(0,0,0,0.5)",
+        }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"20px 20px 16px", borderBottom:`1px solid ${sidebarBorder}`, flexShrink:0 }}>
-            <div>
-              <span style={{ fontSize:18, fontWeight:700, color:theme.textPrimary, letterSpacing:1 }}>Finance</span>
-              {isPersonal && <div style={{ fontSize:10, color:theme.textMuted, letterSpacing:1, textTransform:"uppercase" }}>Pessoal</div>}
-            </div>
-            <button onClick={() => setMobileOpen(false)} style={{ background:isGlass?"rgba(255,255,255,0.3)":`${theme.primary}22`, border:"none", color:theme.textPrimary, borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:14 }}>✕</button>
+            <span style={{ fontSize:18, fontWeight:700, color:theme.textPrimary, letterSpacing:1 }}>Finance</span>
+            <button onClick={() => setMobileOpen(false)} style={{ background: isGlass?"rgba(255,255,255,0.3)":`${theme.primary}22`, border:"none", color:theme.textPrimary, borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:14 }}>✕</button>
           </div>
 
           <div style={{ flex:1, padding:"16px 12px", display:"flex", flexDirection:"column", gap:6, overflowY:"auto", minHeight:0 }}>
             {menuItems.map(item => (
-              <Link key={item.to} to={item.to} onClick={() => setMobileOpen(false)} style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px", borderRadius:12, textDecoration:"none", color:theme.textPrimary, fontSize:15, fontWeight:500, transition:"all 0.2s", flexShrink:0, background:isActive(item.to)?(isGlass?"rgba(255,255,255,0.35)":theme.sidebarActive):"transparent", border:isActive(item.to)?`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.sidebarBorder}`:"1px solid transparent" }}>
+              <Link key={item.to} to={item.to} onClick={() => setMobileOpen(false)} style={{
+                display:"flex", alignItems:"center", gap:14,
+                padding:"14px 16px", borderRadius:12,
+                textDecoration:"none", color:theme.textPrimary,
+                fontSize:15, fontWeight:500, transition:"all 0.2s",
+                flexShrink:0,
+                background: isActive(item.to) ? (isGlass?"rgba(255,255,255,0.35)":theme.sidebarActive) : "transparent",
+                border: isActive(item.to) ? `1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.sidebarBorder}` : "1px solid transparent",
+              }}>
                 <span style={{ fontSize:20 }}>{item.icon}</span>
                 <span style={{ fontWeight:500 }}>{item.label}</span>
               </Link>
@@ -78,7 +100,7 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
           </div>
 
           <div style={{ padding:"12px", flexShrink:0 }}>
-            <button onClick={handleLogout} style={{ width:"100%", padding:"14px 16px", background:isGlass?"rgba(239,68,68,0.12)":"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:12, color:"#ef4444", fontSize:15, fontWeight:600, cursor:"pointer", textAlign:"left" }}>
+            <button onClick={handleLogout} style={{ width:"100%", padding:"14px 16px", background: isGlass?"rgba(239,68,68,0.12)":"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)", borderRadius:12, color:"#ef4444", fontSize:15, fontWeight:600, cursor:"pointer", textAlign:"left" }}>
               🚪 Sair
             </button>
           </div>
@@ -87,33 +109,60 @@ function Sidebar({ sidebarOpen, setSidebarOpen }) {
     );
   }
 
+  // ══════════════════════════════
+  // DESKTOP
+  // ══════════════════════════════
   return (
-    <div style={{ height:"100vh", position:"sticky", top:0, background:sidebarGlassBg, backdropFilter:sidebarBackdrop, WebkitBackdropFilter:sidebarBackdrop, borderRight:`1px solid ${sidebarBorder}`, boxShadow:sidebarBoxShadow, padding:"20px 10px 10px", transition:"all 0.3s ease", overflow:"hidden", width:sidebarOpen?"220px":"70px", display:"flex", flexDirection:"column", zIndex:100 }}
+    <div
+      style={{
+        height:"100vh", position:"sticky", top:0,
+        background:sidebarGlassBg,
+        backdropFilter:sidebarBackdrop, WebkitBackdropFilter:sidebarBackdrop,
+        borderRight:`1px solid ${sidebarBorder}`,
+        boxShadow:sidebarBoxShadow,
+        padding:"20px 10px 10px", transition:"all 0.3s ease",
+        overflow:"hidden",
+        width: sidebarOpen?"220px":"70px",
+        display:"flex", flexDirection:"column",
+        zIndex:100,
+      }}
       onMouseEnter={() => setSidebarOpen(true)}
       onMouseLeave={() => setSidebarOpen(false)}
     >
+      {/* LOGO */}
       <div style={{ flexShrink:0, marginBottom:"20px" }}>
-        <div style={{ opacity:sidebarOpen?1:0, transition:"0.3s" }}>
-          <h2 style={{ whiteSpace:"nowrap", margin:0, fontWeight:"600", letterSpacing:"1px", color:theme.textPrimary }}>Finance</h2>
-          {isPersonal && <div style={{ fontSize:10, color:theme.textMuted, letterSpacing:1, textTransform:"uppercase", marginTop:2 }}>Pessoal</div>}
-        </div>
+        <h2 style={{ opacity: sidebarOpen?1:0, transition:"0.3s", whiteSpace:"nowrap", margin:0, fontWeight:"600", letterSpacing:"1px", color:theme.textPrimary }}>
+          Finance
+        </h2>
       </div>
 
+      {/* MENU COM SCROLL */}
       <div style={{ flex:1, overflowY:"auto", overflowX:"hidden", minHeight:0 }}>
         {menuItems.map(item => (
-          <MenuItem key={item.to} to={item.to} icon={item.icon} label={item.label} active={isActive(item.to)} sidebarOpen={sidebarOpen} theme={theme} isGlass={isGlass} />
+          <MenuItem
+            key={item.to}
+            to={item.to}
+            icon={item.icon}
+            label={item.label}
+            active={isActive(item.to)}
+            sidebarOpen={sidebarOpen}
+            theme={theme}
+            isGlass={isGlass}
+          />
         ))}
       </div>
 
+      {/* BOTÃO SAIR — sempre visível */}
       <div style={{ flexShrink:0, borderTop:`1px solid ${sidebarBorder}`, paddingTop:"10px", marginTop:"10px" }}>
-        <div style={{ padding:"12px", cursor:"pointer", borderRadius:"10px", transition:"all 0.2s ease" }}
+        <div
+          style={{ padding:"12px", cursor:"pointer", borderRadius:"10px", transition:"all 0.2s ease" }}
           onMouseEnter={e => e.currentTarget.style.background="rgba(239,68,68,0.12)"}
           onMouseLeave={e => e.currentTarget.style.background="transparent"}
           onClick={handleLogout}
         >
           <span style={{ textDecoration:"none", color:theme.textPrimary, display:"flex", alignItems:"center", gap:"12px", width:"100%" }}>
             <span style={{ fontSize:"18px", minWidth:"24px", textAlign:"center" }}>🚪</span>
-            <span style={{ opacity:sidebarOpen?1:0, transition:"0.3s", whiteSpace:"nowrap", color:"#ef4444", fontWeight:500 }}>Sair</span>
+            <span style={{ opacity: sidebarOpen?1:0, transition:"0.3s", whiteSpace:"nowrap", color:"#ef4444", fontWeight:500 }}>Sair</span>
           </span>
         </div>
       </div>
@@ -127,13 +176,14 @@ function MenuItem({ to, icon, label, active, sidebarOpen, theme, isGlass }) {
   const hoverBg      = isGlass?"rgba(255,255,255,0.2)":`${theme.primary}11`;
 
   return (
-    <div style={{ padding:"12px", cursor:"pointer", borderRadius:"10px", transition:"all 0.2s ease", marginBottom:"6px", background:active?activeBg:"transparent", border:active?`1px solid ${activeBorder}`:"1px solid transparent", boxShadow:active?(isGlass?"0 4px 16px rgba(0,0,0,0.08)":`0 4px 16px ${theme.sidebarShadow}`):"none" }}
+    <div
+      style={{ padding:"12px", cursor:"pointer", borderRadius:"10px", transition:"all 0.2s ease", marginBottom:"6px", background: active?activeBg:"transparent", border: active?`1px solid ${activeBorder}`:"1px solid transparent", boxShadow: active?(isGlass?"0 4px 16px rgba(0,0,0,0.08)":`0 4px 16px ${theme.sidebarShadow}`):"none" }}
       onMouseEnter={e => { if (!active) e.currentTarget.style.background=hoverBg; }}
       onMouseLeave={e => { if (!active) e.currentTarget.style.background="transparent"; }}
     >
       <Link to={to} style={{ textDecoration:"none", color:theme.textPrimary, display:"flex", alignItems:"center", gap:"12px", width:"100%" }}>
         <span style={{ fontSize:"18px", minWidth:"24px", textAlign:"center" }}>{icon}</span>
-        <span style={{ opacity:sidebarOpen?1:0, transition:"0.3s", whiteSpace:"nowrap", color:theme.textPrimary, fontWeight:active?600:400 }}>{label}</span>
+        <span style={{ opacity: sidebarOpen?1:0, transition:"0.3s", whiteSpace:"nowrap", color:theme.textPrimary, fontWeight: active?600:400 }}>{label}</span>
       </Link>
     </div>
   );
