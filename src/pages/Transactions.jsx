@@ -24,7 +24,6 @@ const SOURCE_MAP = {
   bill:   { label: "Contas",   icon: "📄" },
 };
 
-// ✅ categorias por tipo de conta
 const PERSONAL_CATEGORIES = {
   expense: ["🍔 Alimentação","🚗 Transporte","🏠 Moradia","💊 Saúde","🎬 Lazer","👗 Vestuário","📚 Educação","💡 Energia","📱 Telefone/Internet","🐾 Pet","✈️ Viagem","💳 Cartão","💰 Investimento","🎁 Presentes","Outros"],
   income:  ["💼 Salário","🔄 Freelance","💹 Investimentos","🏠 Aluguel Recebido","🎁 Presente","💰 Reembolso","Outros"],
@@ -33,6 +32,22 @@ const BUSINESS_CATEGORIES = {
   expense: ["Fornecedores","Salários","Aluguel","Marketing","Equipamentos","Serviços","Impostos","Logística","Outros"],
   income:  ["Vendas","Serviços Prestados","Consultoria","Outros"],
 };
+
+// ✅ helpers de data para recorrência
+function addMonths(dateStr, n) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1 + n, d);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+}
+function addWeeks(dateStr, n) {
+  const dt = new Date(dateStr + "T00:00:00");
+  dt.setDate(dt.getDate() + n * 7);
+  return `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,"0")}-${String(dt.getDate()).padStart(2,"0")}`;
+}
+function addYears(dateStr, n) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return `${y + n}-${String(m).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+}
 
 export default function Transactions() {
   const { theme, themeId } = useTheme();
@@ -47,23 +62,29 @@ export default function Transactions() {
 
   const CATEGORIES = isPersonal ? PERSONAL_CATEGORIES : BUSINESS_CATEGORIES;
 
-  const [transactions, setTransactions]         = useState([]);
-  const [filtered, setFiltered]                 = useState([]);
-  const [loading, setLoading]                   = useState(true);
-  const [sidebarOpen, setSidebarOpen]           = useState(false);
-  const [searchText, setSearchText]             = useState("");
-  const [filterType, setFilterType]             = useState("");
-  const [filterMonth, setFilterMonth]           = useState("");
-  const [filterYear, setFilterYear]             = useState("");
-  const [filterCategory, setFilterCategory]     = useState("");
-  const [filterSource, setFilterSource]         = useState("all");
-  const [sortField, setSortField]               = useState("date");
-  const [sortDir, setSortDir]                   = useState("desc");
+  const [transactions, setTransactions]             = useState([]);
+  const [filtered, setFiltered]                     = useState([]);
+  const [loading, setLoading]                       = useState(true);
+  const [sidebarOpen, setSidebarOpen]               = useState(false);
+  const [searchText, setSearchText]                 = useState("");
+  const [filterType, setFilterType]                 = useState("");
+  const [filterMonth, setFilterMonth]               = useState("");
+  const [filterYear, setFilterYear]                 = useState("");
+  const [filterCategory, setFilterCategory]         = useState("");
+  const [filterSource, setFilterSource]             = useState("all");
+  const [sortField, setSortField]                   = useState("date");
+  const [sortDir, setSortDir]                       = useState("desc");
   const [editingTransaction, setEditingTransaction] = useState(null);
-  const [editForm, setEditForm]   = useState({ description:"", amount:"", type:"income", category:"", date:"" });
-  const [showForm, setShowForm]   = useState(false);
-  const [newForm, setNewForm]     = useState({ description:"", amount:"", type:"income", category:"", date:"" });
-  const [toast, setToast]         = useState(null);
+  const [editForm, setEditForm]     = useState({ description:"", amount:"", type:"income", category:"", date:"" });
+  const [showForm, setShowForm]     = useState(false);
+  const [newForm, setNewForm]       = useState({ description:"", amount:"", type:"income", category:"", date:"" });
+  const [toast, setToast]           = useState(null);
+
+  // ✅ estados de recorrência
+  const [recurring, setRecurring]               = useState(false);
+  const [recurringFreq, setRecurringFreq]       = useState("monthly");
+  const [recurringQty, setRecurringQty]         = useState(3);
+  const [savingRecurring, setSavingRecurring]   = useState(false);
 
   function showToast(msg, type = "success") {
     setToast({ msg, type });
@@ -90,10 +111,10 @@ export default function Transactions() {
   useEffect(() => {
     let result = [...transactions];
     if (!isPersonal && filterSource !== "all") result = result.filter(t => t.source === filterSource);
-    if (searchText)    result = result.filter(t => t.description?.toLowerCase().includes(searchText.toLowerCase()) || t.category?.toLowerCase().includes(searchText.toLowerCase()));
-    if (filterType)    result = result.filter(t => t.type === filterType);
-    if (filterMonth)   result = result.filter(t => t.date?.substring(5, 7) === filterMonth);
-    if (filterYear)    result = result.filter(t => t.date?.startsWith(filterYear));
+    if (searchText)     result = result.filter(t => t.description?.toLowerCase().includes(searchText.toLowerCase()) || t.category?.toLowerCase().includes(searchText.toLowerCase()));
+    if (filterType)     result = result.filter(t => t.type === filterType);
+    if (filterMonth)    result = result.filter(t => t.date?.substring(5, 7) === filterMonth);
+    if (filterYear)     result = result.filter(t => t.date?.startsWith(filterYear));
     if (filterCategory) result = result.filter(t => (t.category||"").includes(filterCategory.replace(/^.* /,"")));
     result.sort((a, b) => {
       let valA = a[sortField] ?? "", valB = b[sortField] ?? "";
@@ -105,37 +126,71 @@ export default function Transactions() {
     setFiltered(result);
   }, [searchText, filterType, filterMonth, filterYear, filterCategory, filterSource, sortField, sortDir, transactions]);
 
-  // ✅ anos disponíveis
-  const years = [...new Set(transactions.map(t => t.date?.substring(0, 4)).filter(Boolean))].sort().reverse();
-
-  // ✅ categorias únicas das transações (para o filtro)
+  const years         = [...new Set(transactions.map(t => t.date?.substring(0, 4)).filter(Boolean))].sort().reverse();
   const allCategories = [...new Set(transactions.map(t => t.category).filter(Boolean))].sort();
 
+  // ✅ submit com suporte a recorrência
   const handleNewSubmit = async (e) => {
-    e.preventDefault();
-    if (!newForm.description || !newForm.amount || !newForm.date) { showToast("Preencha todos os campos!", "error"); return; }
+    if (e?.preventDefault) e.preventDefault();
+    if (!newForm.description || !newForm.amount || !newForm.date) {
+      showToast("Preencha todos os campos!", "error"); return;
+    }
+    setSavingRecurring(true);
     try {
-      const res = await fetch(`${API_URL}/transactions`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ description:newForm.description, amount:Number(newForm.amount), type:newForm.type, category:newForm.category, date:newForm.date }),
-      });
-      if (res.ok) {
-        setNewForm({ description:"", amount:"", type:"income", category:"", date:"" });
-        setShowForm(false);
-        showToast("Transação criada!");
-        fetchTransactions();
-      } else { const data = await res.json(); showToast(data.msg || "Erro ao criar", "error"); }
+      if (!recurring) {
+        const res = await fetch(`${API_URL}/transactions`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ description:newForm.description, amount:Number(newForm.amount), type:newForm.type, category:newForm.category, date:newForm.date }),
+        });
+        if (res.ok) {
+          setNewForm({ description:"", amount:"", type:"income", category:"", date:"" });
+          setShowForm(false);
+          showToast("Transação criada!");
+          fetchTransactions();
+        } else { const data = await res.json(); showToast(data.msg || "Erro ao criar", "error"); }
+      } else {
+        const qty   = parseInt(recurringQty) || 2;
+        const dates = [newForm.date];
+        for (let i = 1; i < qty; i++) {
+          if (recurringFreq === "monthly") dates.push(addMonths(newForm.date, i));
+          if (recurringFreq === "weekly")  dates.push(addWeeks(newForm.date, i));
+          if (recurringFreq === "yearly")  dates.push(addYears(newForm.date, i));
+        }
+        const freqLabel = { monthly:"Mensal", weekly:"Semanal", yearly:"Anual" }[recurringFreq];
+        const results = await Promise.all(
+          dates.map((dt, i) =>
+            fetch(`${API_URL}/transactions`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+              body: JSON.stringify({
+                description: `${newForm.description} (${freqLabel} ${i+1}/${qty})`,
+                amount: Number(newForm.amount),
+                type: newForm.type,
+                category: newForm.category,
+                date: dt,
+              }),
+            })
+          )
+        );
+        if (results.every(r => r.ok)) {
+          setNewForm({ description:"", amount:"", type:"income", category:"", date:"" });
+          setRecurring(false); setRecurringQty(3);
+          setShowForm(false);
+          showToast(`✅ ${qty} transações recorrentes criadas!`);
+          fetchTransactions();
+        } else { showToast("Erro ao criar algumas transações.", "error"); }
+      }
     } catch { showToast("Erro de conexão", "error"); }
+    finally { setSavingRecurring(false); }
   };
 
-  // ✅ duplicar transação
   const duplicateTransaction = async (t) => {
     try {
       const res = await fetch(`${API_URL}/transactions`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ description: `${t.description} (cópia)`, amount: t.amount, type: t.type, category: t.category, date: t.date }),
+        body: JSON.stringify({ description:`${t.description} (cópia)`, amount:t.amount, type:t.type, category:t.category, date:t.date }),
       });
       if (res.ok) { showToast("Transação duplicada!"); fetchTransactions(); }
       else showToast("Erro ao duplicar", "error");
@@ -180,41 +235,34 @@ export default function Transactions() {
   const totalIncome  = filtered.filter(t => t.type==="income").reduce((a,b) => a+b.amount, 0);
   const totalExpense = filtered.filter(t => t.type==="expense").reduce((a,b) => a+b.amount, 0);
   const totalBalance = totalIncome - totalExpense;
-
-  const totalSales  = transactions.filter(t => t.source==="sale"  && t.type==="income").reduce((a,b)=>a+b.amount,0);
-  const totalBills  = transactions.filter(t => t.source==="bill").reduce((a,b)=>a+b.amount,0);
-  const totalManual = transactions.filter(t => t.source==="manual").reduce((a,b)=>a+b.amount,0);
+  const totalSales   = transactions.filter(t => t.source==="sale" && t.type==="income").reduce((a,b)=>a+b.amount,0);
+  const totalBills   = transactions.filter(t => t.source==="bill").reduce((a,b)=>a+b.amount,0);
+  const totalManual  = transactions.filter(t => t.source==="manual").reduce((a,b)=>a+b.amount,0);
 
   const fmt     = (v) => v.toLocaleString("pt-BR", { style:"currency", currency:"BRL" });
   const fmtDate = (d) => { if (!d) return "-"; const [y,m,day]=d.split("-"); return `${day}/${m}/${y}`; };
 
   function sourceLabel(source) {
-    const map = { manual:"✏️ Manual", sale:"🛒 Venda", bill:"📄 Conta" };
-    return map[source] || source;
+    return { manual:"✏️ Manual", sale:"🛒 Venda", bill:"📄 Conta" }[source] || source;
   }
   function sourceBadgeStyle(source) {
-    const map = {
-      manual: { bg:"rgba(148,163,184,0.15)", color:"#94a3b8" },
-      sale:   { bg:"rgba(34,197,94,0.15)",   color:"#22c55e" },
-      bill:   { bg:"rgba(59,130,246,0.15)",   color:"#3b82f6" },
-    };
-    return map[source] || map.manual;
+    return { manual:{ bg:"rgba(148,163,184,0.15)", color:"#94a3b8" }, sale:{ bg:"rgba(34,197,94,0.15)", color:"#22c55e" }, bill:{ bg:"rgba(59,130,246,0.15)", color:"#3b82f6" } }[source] || { bg:"rgba(148,163,184,0.15)", color:"#94a3b8" };
   }
 
   const inputStyle = {
-    background: theme.bgInput, color: theme.textPrimary,
-    border: `1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderInput}`,
+    background:theme.bgInput, color:theme.textPrimary,
+    border:`1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderInput}`,
     padding:"10px 14px", borderRadius:"8px", fontSize:"14px", outline:"none", colorScheme,
     ...(isGlass && { backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)" }),
   };
   const modalInput = {
-    background: isGlass?"rgba(255,255,255,0.3)":theme.bgCard,
-    border: `1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderInput}`,
+    background:isGlass?"rgba(255,255,255,0.3)":theme.bgCard,
+    border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderInput}`,
     borderRadius:"8px", padding:"10px 14px", color:theme.textPrimary,
     fontSize:"14px", outline:"none", width:"100%", boxSizing:"border-box", colorScheme,
     ...(isGlass && { backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)" }),
   };
-  const saveBtn    = { background:theme.primaryGrad, border:"none", color:"white", padding:"10px 24px", borderRadius:"8px", cursor:"pointer", fontSize:"14px", fontWeight:"600" };
+  const saveBtn = { background:theme.primaryGrad, border:"none", color:"white", padding:"10px 24px", borderRadius:"8px", cursor:"pointer", fontSize:"14px", fontWeight:"600" };
   const glassModal = isGlass
     ? { backdropFilter:"blur(18px) saturate(180%)", WebkitBackdropFilter:"blur(18px) saturate(180%)", background:"rgba(255,255,255,0.55)", border:"1px solid rgba(255,255,255,0.6)" }
     : { background:theme.bgModal, border:`1px solid ${theme.borderCard}` };
@@ -226,9 +274,8 @@ export default function Transactions() {
     ...(isGlass && { backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)" }),
   });
 
-  // categorias do formulário baseadas no tipo selecionado
-  const formCats     = CATEGORIES[newForm.type]     || [];
-  const editFormCats = CATEGORIES[editForm.type]    || [];
+  const formCats     = CATEGORIES[newForm.type]  || [];
+  const editFormCats = CATEGORIES[editForm.type] || [];
 
   return (
     <PageLayout>
@@ -248,7 +295,7 @@ export default function Transactions() {
 
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
-      <div style={{ flex:1, padding: isMobile?"72px 16px 40px":"40px", overflow:"auto", position:"relative", zIndex:1 }}>
+      <div style={{ flex:1, padding:isMobile?"72px 16px 40px":"40px", overflow:"auto", position:"relative", zIndex:1 }}>
 
         {/* HEADER */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28, flexWrap:"wrap", gap:12 }}>
@@ -264,12 +311,12 @@ export default function Transactions() {
           </button>
         </div>
 
-        {/* FORMULÁRIO NOVO */}
+        {/* ✅ FORMULÁRIO COM RECORRÊNCIA */}
         {showForm && (
           <div className="form3d">
             <h3 style={{ fontSize:"16px", fontWeight:"600", margin:"0 0 20px 0", color:theme.textPrimary }}>➕ Nova Transação</h3>
 
-            {/* ✅ seletor de tipo visual para PF */}
+            {/* seletor visual tipo PF */}
             {isPersonal && (
               <div style={{ display:"flex", gap:10, marginBottom:20 }}>
                 {[{ v:"expense", label:"💸 Saída", color:theme.expense }, { v:"income", label:"💚 Entrada", color:theme.income }].map(opt => (
@@ -281,18 +328,16 @@ export default function Transactions() {
               </div>
             )}
 
-            <form onSubmit={handleNewSubmit} style={isMobile ? { display:"flex", flexDirection:"column", gap:14 } : { display:"grid", gridTemplateColumns: isPersonal?"1fr 1fr 1fr 1fr auto":"2fr 1fr 1fr 1fr 1fr auto", gap:"16px", alignItems:"start" }}>
+            {/* campos principais */}
+            <div style={isMobile ? { display:"flex", flexDirection:"column", gap:14 } : { display:"grid", gridTemplateColumns:isPersonal?"1fr 1fr 1fr 1fr":"2fr 1fr 1fr 1fr 1fr", gap:"16px", alignItems:"start" }}>
               <div style={fieldGroup}>
                 <label style={{ ...modalLabel, color:theme.textSecondary }}>Descrição</label>
                 <input type="text" placeholder={isPersonal?"Ex: Mercado, Salário...":"Ex: Salário, Aluguel..."} value={newForm.description} onChange={e=>setNewForm({...newForm,description:e.target.value})} style={modalInput} required />
               </div>
-
               <div style={fieldGroup}>
                 <label style={{ ...modalLabel, color:theme.textSecondary }}>Valor (R$)</label>
                 <input type="number" step="0.01" placeholder="0,00" value={newForm.amount} onChange={e=>setNewForm({...newForm,amount:e.target.value})} style={modalInput} required />
               </div>
-
-              {/* tipo só aparece para business (PF usa os botões acima) */}
               {!isPersonal && (
                 <div style={fieldGroup}>
                   <label style={{ ...modalLabel, color:theme.textSecondary }}>Tipo</label>
@@ -302,8 +347,6 @@ export default function Transactions() {
                   </select>
                 </div>
               )}
-
-              {/* ✅ categoria como select com opções pré-definidas */}
               <div style={fieldGroup}>
                 <label style={{ ...modalLabel, color:theme.textSecondary }}>Categoria</label>
                 <select value={newForm.category} onChange={e=>setNewForm({...newForm,category:e.target.value})} style={modalInput}>
@@ -311,16 +354,77 @@ export default function Transactions() {
                   {formCats.map(c => <option key={c} value={c.replace(/^.* /,"")}>{c}</option>)}
                 </select>
               </div>
-
               <div style={fieldGroup}>
                 <label style={{ ...modalLabel, color:theme.textSecondary }}>Data</label>
                 <input type="date" value={newForm.date} onChange={e=>setNewForm({...newForm,date:e.target.value})} style={modalInput} required />
               </div>
+            </div>
 
-              <div style={{ display:"flex", alignItems:isMobile?"stretch":"flex-end" }}>
-                <button type="submit" style={{ ...saveBtn, width:isMobile?"100%":"auto" }}>Salvar</button>
+            {/* ✅ BLOCO RECORRÊNCIA */}
+            <div style={{ marginTop:20, padding:"16px 20px", background:isGlass?"rgba(255,255,255,0.15)":theme.bgPrimary, borderRadius:12, border:`1px solid ${recurring?`${theme.primary}44`:isGlass?"rgba(255,255,255,0.3)":theme.border}`, transition:"border-color 0.2s" }}>
+              {/* toggle */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", cursor:"pointer" }} onClick={() => setRecurring(!recurring)}>
+                <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontSize:"1.1rem" }}>🔁</span>
+                  <div>
+                    <div style={{ fontWeight:600, fontSize:14, color:recurring?theme.primary:theme.textPrimary }}>Transação Recorrente</div>
+                    <div style={{ fontSize:12, color:theme.textMuted }}>Repete automaticamente nas próximas datas</div>
+                  </div>
+                </div>
+                <div style={{ width:44, height:24, borderRadius:12, background:recurring?theme.primary:"rgba(100,116,139,0.3)", position:"relative", transition:"background 0.2s", flexShrink:0 }}>
+                  <div style={{ position:"absolute", top:3, left:recurring?22:3, width:18, height:18, borderRadius:"50%", background:"white", transition:"left 0.2s", boxShadow:"0 1px 4px rgba(0,0,0,0.3)" }} />
+                </div>
               </div>
-            </form>
+
+              {/* opções */}
+              {recurring && (
+                <div style={{ marginTop:16, display:"flex", gap:12, flexWrap:"wrap", alignItems:"flex-end" }}>
+                  <div style={fieldGroup}>
+                    <label style={{ ...modalLabel, color:theme.textSecondary }}>Frequência</label>
+                    <select value={recurringFreq} onChange={e=>setRecurringFreq(e.target.value)} style={{ ...modalInput, width:"auto" }}>
+                      <option value="weekly">📅 Semanal</option>
+                      <option value="monthly">📆 Mensal</option>
+                      <option value="yearly">🗓️ Anual</option>
+                    </select>
+                  </div>
+                  <div style={fieldGroup}>
+                    <label style={{ ...modalLabel, color:theme.textSecondary }}>Repetições</label>
+                    <select value={recurringQty} onChange={e=>setRecurringQty(e.target.value)} style={{ ...modalInput, width:"auto" }}>
+                      {recurringFreq === "weekly"  && [2,3,4,6,8,12,16,24,52].map(n => <option key={n} value={n}>{n}x ({n} semanas)</option>)}
+                      {recurringFreq === "monthly" && [2,3,6,9,12,18,24].map(n => <option key={n} value={n}>{n}x ({n} meses)</option>)}
+                      {recurringFreq === "yearly"  && [2,3,4,5].map(n => <option key={n} value={n}>{n}x ({n} anos)</option>)}
+                    </select>
+                  </div>
+                  {/* preview datas */}
+                  {newForm.date && (
+                    <div style={{ padding:"10px 14px", background:isGlass?"rgba(255,255,255,0.2)":`${theme.primary}11`, borderRadius:10, border:`1px solid ${theme.primary}33`, fontSize:12, color:theme.textMuted, flex:1, minWidth:180 }}>
+                      <div style={{ fontWeight:600, color:theme.primary, marginBottom:6 }}>📋 Preview das datas:</div>
+                      {Array.from({ length: Math.min(parseInt(recurringQty)||2, 4) }).map((_, i) => {
+                        let dt = newForm.date;
+                        if (recurringFreq === "monthly") dt = addMonths(newForm.date, i);
+                        if (recurringFreq === "weekly")  dt = addWeeks(newForm.date, i);
+                        if (recurringFreq === "yearly")  dt = addYears(newForm.date, i);
+                        const [y,m,d] = dt.split("-");
+                        return <div key={i} style={{ marginBottom:2 }}>• {d}/{m}/{y}</div>;
+                      })}
+                      {parseInt(recurringQty) > 4 && <div style={{ color:theme.textMuted }}>+ {parseInt(recurringQty)-4} mais...</div>}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* botões */}
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:12, marginTop:16, flexDirection:isMobile?"column":"row" }}>
+              <button type="button" onClick={() => { setShowForm(false); setRecurring(false); }}
+                style={{ background:isGlass?"rgba(255,255,255,0.3)":theme.bgCard, color:theme.textSecondary, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderCard}`, borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", width:isMobile?"100%":"auto" }}>
+                Cancelar
+              </button>
+              <button type="button" onClick={handleNewSubmit} disabled={savingRecurring}
+                style={{ ...saveBtn, opacity:savingRecurring?0.6:1, cursor:savingRecurring?"not-allowed":"pointer", width:isMobile?"100%":"auto", borderRadius:10, padding:"10px 24px" }}>
+                {savingRecurring ? "Criando..." : recurring ? `🔁 Criar ${recurringQty}x ${{ weekly:"Semanal", monthly:"Mensal", yearly:"Anual" }[recurringFreq]}` : "💾 Salvar"}
+              </button>
+            </div>
           </div>
         )}
 
@@ -379,36 +483,28 @@ export default function Transactions() {
 
         {/* FILTROS */}
         <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
-          <input type="text" placeholder="🔍 Buscar..." value={searchText} onChange={e=>setSearchText(e.target.value)}
-            style={{ ...inputStyle, width:isMobile?"100%":"200px" }} />
-
+          <input type="text" placeholder="🔍 Buscar..." value={searchText} onChange={e=>setSearchText(e.target.value)} style={{ ...inputStyle, width:isMobile?"100%":"200px" }} />
           <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{ ...inputStyle, width:isMobile?"100%":"auto" }}>
             <option value="">Tipo: Todos</option>
             <option value="income">Entradas</option>
             <option value="expense">Saídas</option>
           </select>
-
-          {/* ✅ filtro por categoria */}
           <select value={filterCategory} onChange={e=>setFilterCategory(e.target.value)} style={{ ...inputStyle, width:isMobile?"100%":"auto" }}>
             <option value="">Categoria: Todas</option>
             {allCategories.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
-
-          {/* ✅ filtro por ano */}
           {years.length > 1 && (
             <select value={filterYear} onChange={e=>setFilterYear(e.target.value)} style={{ ...inputStyle, width:isMobile?"100%":"auto" }}>
               <option value="">Todos os anos</option>
               {years.map(y => <option key={y} value={y}>{y}</option>)}
             </select>
           )}
-
           <select value={filterMonth} onChange={e=>setFilterMonth(e.target.value)} style={{ ...inputStyle, width:isMobile?"100%":"auto" }}>
             <option value="">Mês: Todos</option>
             {["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"].map((m,i) => (
               <option key={i} value={String(i+1).padStart(2,"0")}>{m}</option>
             ))}
           </select>
-
           {(searchText||filterType||filterMonth||filterYear||filterCategory||filterSource!=="all") && (
             <button onClick={() => { setSearchText(""); setFilterType(""); setFilterMonth(""); setFilterYear(""); setFilterCategory(""); setFilterSource("all"); }}
               style={{ background:"rgba(239,68,68,0.15)", color:"#ef4444", border:"1px solid rgba(239,68,68,0.3)", padding:"10px 16px", borderRadius:"8px", cursor:"pointer", fontSize:"13px", width:isMobile?"100%":"auto" }}>
@@ -436,7 +532,6 @@ export default function Transactions() {
                       </th>
                     );
                   })}
-                  {/* coluna origem só para business */}
                   {!isPersonal && !isMobile && (
                     <th style={{ padding:"14px 16px", fontSize:"12px", fontWeight:"600", color:theme.textMuted, textTransform:"uppercase", letterSpacing:"0.5px", borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, background:"transparent" }}>Origem</th>
                   )}
@@ -473,7 +568,6 @@ export default function Transactions() {
                         <div style={{ display:"flex", gap:6, justifyContent:"center" }}>
                           <button onClick={() => openEdit(t)} title="Editar"
                             style={{ background:isGlass?"rgba(255,255,255,0.25)":`${theme.primary}22`, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":`${theme.primary}44`}`, borderRadius:"6px", padding:"6px 10px", cursor:isManual?"pointer":"not-allowed", fontSize:"14px", opacity:isManual?1:0.4 }}>✏️</button>
-                          {/* ✅ botão duplicar */}
                           <button onClick={() => duplicateTransaction(t)} title="Duplicar"
                             style={{ background:isGlass?"rgba(255,255,255,0.25)":`${theme.accent}22`, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":`${theme.accent}44`}`, borderRadius:"6px", padding:"6px 10px", cursor:"pointer", fontSize:"14px" }}>📋</button>
                           <button onClick={() => isManual && deleteTransaction(t.id)} title={isManual?"Excluir":"Não excluível"}
@@ -497,8 +591,6 @@ export default function Transactions() {
               <h3 style={{ fontSize:"18px", fontWeight:"700", margin:0, color:theme.textPrimary }}>✏️ Editar Transação</h3>
               <button onClick={closeEdit} style={{ background:isGlass?"rgba(255,255,255,0.4)":theme.bgCard, border:"none", color:theme.textPrimary, width:"32px", height:"32px", borderRadius:"8px", cursor:"pointer", fontSize:"14px" }}>✕</button>
             </div>
-
-            {/* seletor visual de tipo para PF no edit */}
             {isPersonal && (
               <div style={{ display:"flex", gap:10, marginBottom:20 }}>
                 {[{ v:"expense", label:"💸 Saída", color:theme.expense }, { v:"income", label:"💚 Entrada", color:theme.income }].map(opt => (
@@ -509,7 +601,6 @@ export default function Transactions() {
                 ))}
               </div>
             )}
-
             <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
               <div style={fieldGroup}><label style={{ ...modalLabel, color:theme.textSecondary }}>Descrição</label><input type="text" value={editForm.description} onChange={e=>setEditForm({...editForm,description:e.target.value})} style={modalInput} /></div>
               <div style={{ display:"flex", gap:16, flexDirection:isMobile?"column":"row" }}>
@@ -519,7 +610,6 @@ export default function Transactions() {
                 )}
               </div>
               <div style={{ display:"flex", gap:16, flexDirection:isMobile?"column":"row" }}>
-                {/* ✅ categoria como select no edit também */}
                 <div style={fieldGroup}>
                   <label style={{ ...modalLabel, color:theme.textSecondary }}>Categoria</label>
                   <select value={editForm.category} onChange={e=>setEditForm({...editForm,category:e.target.value})} style={modalInput}>
