@@ -141,7 +141,7 @@ export default function Login() {
         {/* BRANDING */}
         <div style={branding}>
           <img src={logoImg} alt="Finance Control" style={logoStyle} />
-          <h1 style={brandTitle}>FINANCE CONTROL</h1>
+          <h1 style={brandTitle}>SV FINANCE</h1>
           <p style={brandSubtitle}>Gerencie suas finanças com inteligência e clareza.</p>
         </div>
 
