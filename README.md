@@ -1,122 +1,156 @@
-# 💻 SV Finance Control — Web
+# SV Finance Control — Frontend
 
-Interface web do sistema de gestão financeira empresarial desenvolvido em React + Vite.
+![SV Finance](public/logo.gif)
 
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react)
-![JavaScript](https://img.shields.io/badge/JavaScript-ES6+-F7DF1E?logo=javascript)
-![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?logo=vite)
-![JWT](https://img.shields.io/badge/Auth-JWT-orange)
-
-> 🔗 Backend: [controle_financeiro](https://github.com/Salvatini95/controle_financeiro)
+> Sistema SaaS de controle financeiro para pessoas físicas e empresas.  
+> Desenvolvido com React + Vite, hospedado na Vercel.
 
 ---
 
-## ✨ Funcionalidades
+## 🚀 Stack
 
-- 🔐 Login e cadastro de empresa com animação de números financeiros
-- 🏢 Multi-tenant — cada empresa tem seus próprios dados isolados
-- 👥 Gestão de equipe com roles (Admin, Financeiro, Vendedor, Estoque, Visualizador)
-- 🔒 Sidebar e rotas protegidas por role de usuário
-- 📊 Dashboard financeiro com gráficos de saldo, entradas e saídas
-- 📋 Transações com filtros por origem, tipo e mês
-- 📄 Contas a pagar e receber
-- 📈 Analytics avançado
-- 🧾 Orçamentos com impressão em PDF (tema escuro e claro)
-- 🛒 Fluxo completo: Orçamento → Aprovação → Venda → Conclusão
-- 📦 Produtos e serviços com controle de estoque e estoque inicial
-- 👤 Clientes com histórico de pedidos
-- 🎨 4 temas visuais: Azul/Roxo, Glass e Gelo, Aurora Glass, Cinza/Prata
-- 📱 Responsivo — mobile e desktop
+- **React 18** + Vite
+- **React Router DOM** — navegação SPA
+- **Recharts** — gráficos e analytics
+- **Context API** — tema e autenticação
+- **CSS-in-JS** (inline styles) — sem dependência de UI libs
+- **Vercel** — deploy automático via GitHub
 
 ---
 
-## 🛠️ Stack
+## 🌐 URLs
 
-| Tecnologia | Uso |
-|---|---|
-| React 18 | Interface |
-| React Router DOM | Navegação e rotas protegidas |
-| Vite | Bundler e servidor de desenvolvimento |
-| Recharts | Gráficos interativos |
-| Context API | Gerenciamento de temas |
-| JWT (localStorage) | Autenticação |
+| Ambiente   | URL                                                      |
+|------------|----------------------------------------------------------|
+| Produção   | https://finance-control-web-five.vercel.app              |
+| Domínio    | https://svfinance.com.br *(em configuração)*             |
+| API        | https://finance-control-api-production.up.railway.app/api|
 
 ---
 
-## 📁 Estrutura
+## 📁 Estrutura do Projeto
 ```
-src/
-├── assets/
-├── components/
-│   ├── layout/
-│   │   ├── PageLayout.jsx
-│   │   └── Sidebar.jsx
-│   └── ProtectedRoute.jsx
-├── contexts/
-│   └── ThemeContext.jsx
-├── themes/
-│   └── themes.js
-├── pages/
-│   ├── Login.jsx
-│   ├── Dashboard.jsx
-│   ├── Transactions.jsx
-│   ├── Bills.jsx
-│   ├── Analytics.jsx
-│   ├── Products.jsx
-│   ├── Quotes.jsx
-│   ├── Sales.jsx
-│   ├── Clients.jsx
-│   ├── Team.jsx
-│   └── Settings.jsx
-└── services/
-    └── api.js
+finance-control-web/
+├── public/
+│   └── logo.gif                  # Favicon e ícone mobile
+├── src/
+│   ├── assets/                   # Imagens, GIFs, SVGs
+│   ├── components/
+│   │   ├── layout/
+│   │   │   ├── PageLayout.jsx    # Layout base + sino de notificações
+│   │   │   └── Sidebar.jsx       # Menu lateral (PF e PJ)
+│   │   └── ProtectedRoute.jsx    # Proteção de rotas por role
+│   ├── contexts/
+│   │   └── ThemeContext.jsx      # Tema global (4 opções)
+│   ├── pages/
+│   │   ├── Login.jsx             # Auth: login, cadastro, verificação, reset
+│   │   ├── Dashboard.jsx         # Dashboard PF e PJ
+│   │   ├── Transactions.jsx      # Transações (PF e PJ)
+│   │   ├── Bills.jsx             # Contas a pagar/receber
+│   │   ├── Goals.jsx             # Metas financeiras (PF)
+│   │   ├── Analytics.jsx         # Gráficos e relatórios
+│   │   ├── Products.jsx          # Produtos e serviços (PJ)
+│   │   ├── Clients.jsx           # Clientes (PJ)
+│   │   ├── Quotes.jsx            # Orçamentos com PDF (PJ)
+│   │   ├── Sales.jsx             # Vendas / Pedidos / OS (PJ)
+│   │   ├── Team.jsx              # Equipe e roles (PJ admin)
+│   │   └── Settings.jsx          # Temas visuais
+│   ├── services/
+│   │   └── api.js                # Funções de comunicação com a API
+│   ├── themes/
+│   │   └── themes.js             # 4 temas: blue, glass, aurora, gray
+│   ├── App.jsx                   # Rotas principais
+│   └── main.jsx                  # Entry point
+├── index.html
+├── vite.config.js
+└── package.json
 ```
 ---
 
-## 🚀 Como rodar localmente
+## 🎨 Temas Disponíveis
 
-### Pré-requisitos
-- Node.js 18+
-- Backend rodando
+| Tema    | Descrição                        |
+|---------|----------------------------------|
+| Blue    | Escuro com tons de azul (padrão) |
+| Glass   | Claro com glassmorphism          |
+| Aurora  | Escuro com gradientes vibrantes  |
+| Gray    | Escuro neutro cinza/prata        |
 
-### Instalação
-git clone https://github.com/Salvatini95/finance-control-web.git
-cd finance-control-web
+---
+
+## 👥 Tipos de Conta
+
+### Pessoa Física (PF)
+Dashboard · Transações · Contas · Analytics · Metas 🎯 · Temas
+
+### Empresa (PJ)
+Dashboard · Clientes · Transações · Contas · Analytics · Produtos · Orçamentos · Vendas · Equipe · Temas
+
+### Roles (PJ)
+| Role      | Permissões                                      |
+|-----------|-------------------------------------------------|
+| admin     | Acesso total                                    |
+| financial | Transações, Contas, Analytics                   |
+| stock     | Produtos e Estoque                              |
+| seller    | Vendas e Orçamentos (próprias vendas)           |
+| viewer    | Somente leitura                                 |
+
+---
+
+## ⚙️ Variáveis de Ambiente
+
+Cria um arquivo `.env` na raiz:
+
+```env
+VITE_API_URL=https://finance-control-api-production.up.railway.app/api
+```
+
+---
+
+## 🛠️ Rodando Localmente
+
+```bash
+# Instalar dependências
 npm install
+
+# Rodar em desenvolvimento
 npm run dev
 
-Acesse em: http://localhost:5173
+# Build para produção
+npm run build
+```
+
+Acesse: `http://localhost:5173`
 
 ---
 
-## 🔒 Autenticação e Permissões
+## 🚀 Deploy
 
-- Login com JWT — token salvo no localStorage com expiração de 8h
-- Rotas protegidas por ProtectedRoute com suporte a roles
-- Sidebar filtra itens visíveis conforme o role do usuário
-
-| Role | Acesso |
-|---|---|
-| Admin | Tudo |
-| Financeiro | Transações, Contas, Analytics |
-| Vendedor | Clientes, Orçamentos, Vendas, Produtos |
-| Estoque | Produtos e movimentações |
-| Visualizador | Leitura geral |
+O deploy é automático via **GitHub + Vercel**.  
+Qualquer push na branch `main` dispara um novo deploy.
 
 ---
 
-## 🗺️ Próximos passos
+## 📦 Funcionalidades Principais
 
-- [ ] Dashboard personalizado por role
-- [ ] Analytics por vendedor
-- [ ] Relatórios em PDF
-- [ ] Deploy em produção (Vercel)
+- ✅ Autenticação com verificação de email (Resend)
+- ✅ Recuperação de senha por email
+- ✅ Multi-tenant (empresas isoladas)
+- ✅ Dashboard financeiro com comparativos
+- ✅ Transações e contas recorrentes
+- ✅ Metas financeiras com progresso visual
+- ✅ Orçamentos com geração de PDF (2 temas)
+- ✅ Vendas com Pedido (PED) e Ordem de Serviço (OS)
+- ✅ Controle de estoque com movimentações
+- ✅ SKU de produtos
+- ✅ Analytics com 7 tipos de gráficos
+- ✅ Sistema de notificações globais 🔔
+- ✅ 4 temas visuais personalizáveis
+- ✅ Responsivo (mobile e desktop)
 
 ---
 
-## 👨‍💻 Autor
+## 👨‍💻 Desenvolvido por
 
-Desenvolvido por **Guilherme Salvatini**
-
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-blue?logo=linkedin)](https://www.linkedin.com/in/guilherme-salvatini-623326361/)
-[![GitHub](https://img.shields.io/badge/GitHub-black?logo=github)](https://github.com/Salvatini95)  
+**Guilherme Salvatini**  
+[github.com/Salvatini95](https://github.com/Salvatini95)
