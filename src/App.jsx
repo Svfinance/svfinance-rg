@@ -14,6 +14,7 @@ import Team         from "./pages/Team";
 import Goals        from "./pages/Goals";
 import ImportExport from "./pages/ImportExport";
 import DRE          from "./pages/DRE";
+import CashFlow     from "./pages/CashFlow";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
