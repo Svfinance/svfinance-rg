@@ -3,6 +3,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
+import { getSidebarStyle, setSidebarStyleLS } from "../components/layout/Sidebar";
 
 const API   = "https://finance-control-api-production.up.railway.app/api";
 const token = () => localStorage.getItem("token");
@@ -28,6 +29,7 @@ export default function Settings() {
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("empresa");
+  const [sidebarStyle, setSidebarStyleState] = useState(getSidebarStyle());
   const [toast, setToast] = useState(null);
 
   // ── empresa ──
@@ -57,6 +59,13 @@ export default function Settings() {
         .then(r => r.json()).then(d => { if (d.id) setCompany(d); }).catch(() => {});
     }
   }, []);
+
+  function handleSidebarStyle(s) {
+    setSidebarStyleLS(s);
+    setSidebarStyleState(s);
+    window.dispatchEvent(new Event("sv_sidebar_style_changed"));
+    showToast("Estilo de sidebar aplicado!");
+  }
 
   function showToast(msg, type = "success") {
     setToast({ msg, type });
@@ -368,8 +377,94 @@ export default function Settings() {
 
         {/* ══ SEÇÃO TEMAS ══ */}
         {activeSection === "temas" && (
-          <div style={card}>
-            <h2 style={{ fontSize:"1rem", fontWeight:700, margin:"0 0 6px", color:theme.textPrimary }}>🎨 Tema do Sistema</h2>
+          <>
+            {/* Seletor de estilo do sidebar */}
+            <div style={card}>
+              <h2 style={{ fontSize:"1rem", fontWeight:700, margin:"0 0 6px", color:theme.textPrimary }}>🗂️ Estilo do Sidebar</h2>
+              <p style={{ color:theme.textMuted, fontSize:"0.82rem", margin:"0 0 24px" }}>Escolha como o menu de navegação é exibido. A preferência é salva automaticamente.</p>
+
+              <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"repeat(3,1fr)", gap:16 }}>
+                {[
+                  {
+                    id:"vertical",
+                    icon:"▐",
+                    name:"Vertical",
+                    desc:"Sidebar lateral retrátil que expande ao passar o mouse",
+                    preview:(
+                      <div style={{ display:"flex", gap:6, height:60, alignItems:"stretch" }}>
+                        <div style={{ width:10, background:theme.primary, borderRadius:4, opacity:0.8 }}/>
+                        <div style={{ flex:1, display:"flex", flexDirection:"column", gap:4, justifyContent:"center" }}>
+                          {[1,2,3].map(i=><div key={i} style={{ height:6, background:isGlass?"rgba(255,255,255,0.3)":"rgba(255,255,255,0.08)", borderRadius:3 }}/>)}
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    id:"horizontal",
+                    icon:"▬",
+                    name:"Horizontal",
+                    desc:"Barra de navegação fixada no topo da página",
+                    preview:(
+                      <div style={{ display:"flex", flexDirection:"column", gap:6, height:60 }}>
+                        <div style={{ height:10, background:theme.primary, borderRadius:4, opacity:0.8, width:"100%" }}/>
+                        <div style={{ flex:1, display:"flex", gap:4, alignItems:"center" }}>
+                          {[1,2,3,4].map(i=><div key={i} style={{ height:6, flex:1, background:isGlass?"rgba(255,255,255,0.3)":"rgba(255,255,255,0.08)", borderRadius:3 }}/>)}
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    id:"dock",
+                    icon:"⬤",
+                    name:"Dock",
+                    desc:"Bolinhas flutuantes na lateral — hover revela o nome",
+                    preview:(
+                      <div style={{ display:"flex", gap:8, height:60, alignItems:"center" }}>
+                        <div style={{ display:"flex", flexDirection:"column", gap:5, alignItems:"center" }}>
+                          {[1,2,3,4].map(i=>(
+                            <div key={i} style={{ width:i===2?18:14, height:i===2?18:14, borderRadius:"50%",
+                              background:i===2?theme.primary:isGlass?"rgba(255,255,255,0.3)":"rgba(255,255,255,0.1)",
+                              border:`1px solid ${i===2?theme.primary:"rgba(255,255,255,0.15)"}` }}/>
+                          ))}
+                        </div>
+                        <div style={{ flex:1, display:"flex", flexDirection:"column", gap:6 }}>
+                          {[1,2].map(i=><div key={i} style={{ height:6, background:isGlass?"rgba(255,255,255,0.2)":"rgba(255,255,255,0.06)", borderRadius:3 }}/>)}
+                        </div>
+                      </div>
+                    ),
+                  },
+                ].map(s => {
+                  const isActive = sidebarStyle === s.id;
+                  return (
+                    <div key={s.id} onClick={() => handleSidebarStyle(s.id)}
+                      style={{ borderRadius:16, padding:20, cursor:"pointer", transition:"all 0.2s",
+                        background:isActive?(isGlass?"rgba(255,255,255,0.3)":`${theme.primary}18`):(isGlass?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.03)"),
+                        border:`2px solid ${isActive?theme.primary:isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`,
+                        boxShadow:isActive?`0 0 20px ${theme.primary}33`:"none",
+                        position:"relative" }}>
+                      {isActive && (
+                        <div style={{ position:"absolute", top:10, right:10, background:theme.primaryGrad,
+                          color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>ATIVO</div>
+                      )}
+                      {/* Preview visual */}
+                      <div style={{ background:isGlass?"rgba(255,255,255,0.15)":"rgba(0,0,0,0.2)",
+                        borderRadius:10, padding:12, marginBottom:14, border:`1px solid ${isGlass?"rgba(255,255,255,0.2)":theme.border}` }}>
+                        {s.preview}
+                      </div>
+                      <div style={{ fontWeight:700, fontSize:"0.95rem", color:isActive?theme.primary:theme.textPrimary, marginBottom:4 }}>{s.name}</div>
+                      <div style={{ fontSize:"0.75rem", color:theme.textMuted, lineHeight:1.4 }}>{s.desc}</div>
+                      <button onClick={e=>{e.stopPropagation();handleSidebarStyle(s.id);}}
+                        style={{ marginTop:14, width:"100%", padding:"8px", borderRadius:10, border:"none",
+                          cursor:"pointer", fontWeight:600, fontSize:"0.82rem",
+                          background:isActive?theme.primaryGrad:`${theme.primary}22`,
+                          color:isActive?"#fff":theme.primary, transition:"all 0.2s" }}>
+                        {isActive?"✓ Ativo":"Aplicar"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
             <p style={{ color:theme.textMuted, fontSize:"0.82rem", margin:"0 0 28px" }}>Salvo automaticamente e aplicado em todas as páginas.</p>
 
             <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16 }}>
@@ -414,6 +509,7 @@ export default function Settings() {
               </div>
             )}
           </div>
+          </>
         )}
       </div>
 
