@@ -406,11 +406,10 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
 
   return (
     <>
-      {/* Overlay para fechar ao clicar fora */}
-      {open && (
-        <div style={{ position:"fixed", inset:0, zIndex:198 }}
-          onClick={() => setOpen(false)}/>
-      )}
+      {/* Overlay para fechar ao clicar fora — só ativo quando aberto */}
+      <div style={{ position:"fixed", inset:0, zIndex:198,
+        pointerEvents: open ? "all" : "none" }}
+        onClick={() => setOpen(false)}/>
 
       {/* Botão hamburguer */}
       <div
@@ -469,7 +468,7 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
         right: convex ? "auto" : 0,
         top:0, bottom:0,
         zIndex:200,
-        width: 52 + R*2 + 60,
+        width: open ? (52 + R*2 + 60) : 0,
         pointerEvents:"none",
         overflow:"visible",
       }}>
