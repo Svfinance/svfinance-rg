@@ -403,27 +403,58 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
           transition:"all 0.3s ease" }}/>
       </div>
 
-      {/* Bolinhas — aparecem em arco ao redor do hamburguer */}
+      {/* Bolinhas — adaptam direção e posição ao local do hamburguer */}
       {allItems.map((item, i) => {
-        // Posição vertical centrada no hamburguer
-        const hamCY  = hamPos.y + hamSize/2;
-        const cy     = hamCY - (totalH/2) + i*SPACING;
-        const xOff   = getXOffset(i);
+        const hamCX = hamPos.x + hamSize/2;
+        const hamCY = hamPos.y + hamSize/2;
 
-        // Lado: se hamburguer está na metade direita da tela, arco vai para a esquerda
-        const hamIsRight = hamPos.x > window.innerWidth / 2;
-        const effectiveConvex = hamIsRight ? false : convex;
-        const bubbleX = hamIsRight
+        // Quadrante da tela onde está o hamburguer
+        const isRight  = hamCX > window.innerWidth  * 0.5;
+        const isBottom = hamCY > window.innerHeight * 0.6;
+        const isTop    = hamCY < window.innerHeight * 0.4;
+        const isMid    = !isTop && !isBottom;
+
+        // Índice de abertura: se no topo abre para baixo, se na base abre para cima
+        const orderedI = isBottom ? (n - 1 - i) : i;
+
+        // Posição Y: adapta ponto de ancoragem
+        let cy;
+        if (isTop) {
+          // Ancora no topo do hamburguer, abre para baixo
+          cy = hamPos.y + hamSize + 8 + i * SPACING;
+        } else if (isBottom) {
+          // Ancora na base do hamburguer, abre para cima
+          cy = hamPos.y - 8 - (i + 1) * SPACING;
+        } else {
+          // Meio da tela: centraliza verticalmente no hamburguer
+          cy = hamCY - (totalH / 2) + i * SPACING;
+        }
+
+        // Curvatura X: se no meio aplica parábola, senão fica mais reto
+        const t     = n === 1 ? 0 : (i / (n-1)) * 2 - 1;
+        const curve = isMid ? (1 - t*t) : (isTop ? (i/(n-1)) * 0.6 : ((n-1-i)/(n-1)) * 0.6);
+        const xOff  = 6 + curve * 48;
+
+        // Posição X: esquerda ou direita do hamburguer
+        const bubbleX = isRight
           ? hamPos.x - xOff - R*2
           : hamPos.x + hamSize + xOff - R;
+
+        // Slide de entrada: sai da direção do hamburguer
+        const slideX = isRight
+          ? (open ? 0 :  (xOff + R*2 + 20))
+          : (open ? 0 : -(xOff + R*2 + 20));
+
+        // Tooltip: aparece no lado oposto ao arco
+        const tipLeft  = isRight ? "auto" : R*2 + 10;
+        const tipRight = isRight ? R*2 + 10 : "auto";
+        // Push de hover: empurra no sentido do arco
+        const pushX = hovered === i ? (isRight ? -8 : 8) : 0;
 
         const active = item.to !== "__logout__" && isActive(item.to);
         const isLog  = item.to === "__logout__";
         const hov    = hovered === i;
-        const delay  = open ? `${i*40}ms` : `${(n-1-i)*25}ms`;
-        const slideX = effectiveConvex
-          ? (open ? 0 : -(xOff + R*2 + 20))
-          : (open ? 0 :  (xOff + R*2 + 20));
+        const delay  = open ? `${orderedI*40}ms` : `${(n-1-orderedI)*25}ms`;
 
         return (
           <div key={item.to} style={{
@@ -453,7 +484,7 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
               border:`2.5px solid ${active?theme.primary:isLog&&hov?"rgba(239,68,68,0.7)":isGlass?"rgba(255,255,255,0.45)":"rgba(255,255,255,0.18)"}`,
               display:"flex", alignItems:"center", justifyContent:"center",
               fontSize:17, cursor:"pointer",
-              transform:`scale(${hov?1.28:active?1.1:1}) translateX(${hov?(convex?6:-6):0}px)`,
+              transform:`scale(${hov?1.28:active?1.1:1}) translateX(${pushX}px)`,
               transition:"transform 0.28s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.2s",
               boxShadow: active
                 ? `0 0 0 5px ${theme.primary}35, 0 6px 24px ${theme.primary}55`
@@ -475,8 +506,8 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
             {hov && (
               <div style={{
                 position:"absolute",
-                left:  convex ? R*2+10 : "auto",
-                right: convex ? "auto" : R*2+10,
+                left:  tipLeft,
+                right: tipRight,
                 top:"50%", transform:"translateY(-50%)",
                 background:"rgba(10,15,30,0.95)",
                 color:isLog?"#f87171":"rgba(255,255,255,0.92)",
@@ -497,55 +528,140 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
 }
 
 // ═══════════════════════════════════════════════════════
-// MOBILE
+// MOBILE — com seletor de estilo
 // ═══════════════════════════════════════════════════════
+const MOBILE_STYLES = [
+  { id:"slide_left",  label:"◀ Lateral Esquerda", desc:"Desliza da esquerda" },
+  { id:"slide_right", label:"Lateral Direita ▶",  desc:"Desliza da direita" },
+  { id:"slide_bottom",label:"▲ Bottom Sheet",      desc:"Sobe da base" },
+  { id:"slide_top",   label:"▼ Top Sheet",         desc:"Desce do topo" },
+];
+
 function SidebarMobile({ menuItems, theme, isGlass }) {
   const location = useLocation();
   const isActive = p => location.pathname === p;
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const backdrop= isGlass?"blur(24px)":"blur(18px)";
-  const border  = isGlass?"rgba(255,255,255,0.4)":theme.borderCard;
+  const [open,       setOpen]       = useState(false);
+  const [showStyles, setShowStyles] = useState(false);
+  const [mobileStyle, setMobileStyleState] = useState(
+    localStorage.getItem("sv_mobile_style") || "slide_left"
+  );
+
+  const setMobileStyle = (s) => {
+    setMobileStyleState(s);
+    localStorage.setItem("sv_mobile_style", s);
+    setShowStyles(false);
+  };
+
+  const backdrop = isGlass?"blur(24px)":"blur(18px)";
+  const border   = isGlass?"rgba(255,255,255,0.4)":theme.borderCard;
+
+  // Dimensões e transform por estilo
+  const panelStyle = () => {
+    const base = {
+      position:"fixed", zIndex:160,
+      background:isGlass?"rgba(255,255,255,0.22)":theme.bgSecondary,
+      backdropFilter:backdrop, WebkitBackdropFilter:backdrop,
+      display:"flex", flexDirection:"column",
+      transition:"transform 0.32s cubic-bezier(0.4,0,0.2,1)",
+      boxShadow:"0 8px 40px rgba(0,0,0,0.5)",
+    };
+    switch(mobileStyle) {
+      case "slide_right":
+        return { ...base, top:0, right:0, bottom:0, width:280,
+          borderLeft:`1px solid ${border}`,
+          transform:open?"translateX(0)":"translateX(100%)" };
+      case "slide_bottom":
+        return { ...base, left:0, right:0, bottom:0, height:"75vh",
+          borderTop:`1px solid ${border}`, borderRadius:"20px 20px 0 0",
+          transform:open?"translateY(0)":"translateY(100%)" };
+      case "slide_top":
+        return { ...base, left:0, right:0, top:0, height:"75vh",
+          borderBottom:`1px solid ${border}`, borderRadius:"0 0 20px 20px",
+          transform:open?"translateY(0)":"translateY(-100%)" };
+      default: // slide_left
+        return { ...base, top:0, left:0, bottom:0, width:280,
+          borderRight:`1px solid ${border}`,
+          transform:open?"translateX(0)":"translateX(-100%)" };
+    }
+  };
+
+  // Posição do botão hamburguer por estilo
+  const hamBtnStyle = () => {
+    const base = { position:"fixed", zIndex:300,
+      background:isGlass?"rgba(255,255,255,0.35)":theme.bgSecondary,
+      backdropFilter:backdrop, WebkitBackdropFilter:backdrop,
+      border:`1px solid ${border}`, borderRadius:12,
+      color:theme.textPrimary, fontSize:22, width:46, height:46,
+      cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+      boxShadow:"0 4px 16px rgba(0,0,0,0.4)" };
+    switch(mobileStyle) {
+      case "slide_right":  return { ...base, top:16, right:16 };
+      case "slide_bottom": return { ...base, bottom:20, left:"50%", transform:"translateX(-50%)", borderRadius:"50%" };
+      case "slide_top":    return { ...base, top:16, left:"50%", transform:"translateX(-50%)", borderRadius:"50%" };
+      default:             return { ...base, top:16, left:16 };
+    }
+  };
 
   return (
     <>
-      <button onClick={() => setOpen(!open)}
-        style={{ position:"fixed", top:16, left:16, zIndex:300,
-          background:isGlass?"rgba(255,255,255,0.35)":theme.bgSecondary,
-          backdropFilter:backdrop, WebkitBackdropFilter:backdrop,
-          border:`1px solid ${border}`, borderRadius:10,
-          color:theme.textPrimary, fontSize:20, width:44, height:44,
-          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-        {open?"✕":"☰"}
+      {/* Botão hamburguer */}
+      <button onClick={() => setOpen(!open)} style={hamBtnStyle()}>
+        {open ? "✕" : "☰"}
       </button>
 
+      {/* Overlay */}
       {open && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)",
           zIndex:150, backdropFilter:"blur(2px)" }}
           onClick={() => setOpen(false)}/>
       )}
 
-      <div style={{ position:"fixed", top:0, left:0, bottom:0, width:260,
-        background:isGlass?"rgba(255,255,255,0.22)":theme.bgSecondary,
-        backdropFilter:backdrop, WebkitBackdropFilter:backdrop,
-        borderRight:`1px solid ${border}`, zIndex:160,
-        display:"flex", flexDirection:"column",
-        transition:"transform 0.3s ease",
-        transform:open?"translateX(0)":"translateX(-100%)",
-        boxShadow:"8px 0 32px rgba(0,0,0,0.5)" }}>
-
+      {/* Painel */}
+      <div style={panelStyle()}>
+        {/* Header */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-          padding:"20px 20px 16px", borderBottom:`1px solid ${border}`, flexShrink:0 }}>
-          <span style={{ fontSize:18, fontWeight:700, color:theme.textPrimary, letterSpacing:1 }}>SV Finance</span>
-          <button onClick={() => setOpen(false)}
-            style={{ background:`${theme.primary}22`, border:"none", color:theme.textPrimary,
-              borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:14 }}>✕</button>
+          padding:"20px 20px 14px", borderBottom:`1px solid ${border}`, flexShrink:0 }}>
+          <span style={{ fontSize:17, fontWeight:700, color:theme.textPrimary, letterSpacing:1 }}>SV Finance</span>
+          <div style={{ display:"flex", gap:8 }}>
+            {/* Botão mudar estilo */}
+            <button onClick={() => setShowStyles(s=>!s)}
+              title="Mudar estilo do menu"
+              style={{ background:showStyles?`${theme.primary}22`:"transparent",
+                border:`1px solid ${showStyles?theme.primary:border}`,
+                color:showStyles?theme.primary:theme.textMuted,
+                borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:13 }}>⚙</button>
+            <button onClick={() => setOpen(false)}
+              style={{ background:`${theme.primary}22`, border:"none", color:theme.textPrimary,
+                borderRadius:8, width:32, height:32, cursor:"pointer", fontSize:14 }}>✕</button>
+          </div>
         </div>
 
-        <div style={{ flex:1, padding:"16px 12px", display:"flex", flexDirection:"column", gap:6, overflowY:"auto" }}>
+        {/* Seletor de estilos */}
+        {showStyles && (
+          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${border}`, flexShrink:0 }}>
+            <div style={{ fontSize:11, color:theme.textMuted, fontWeight:700, textTransform:"uppercase",
+              letterSpacing:"0.5px", marginBottom:8 }}>Estilo do menu mobile</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+              {MOBILE_STYLES.map(s => (
+                <div key={s.id} onClick={() => setMobileStyle(s.id)}
+                  style={{ padding:"8px 10px", borderRadius:8, cursor:"pointer", transition:"all 0.15s",
+                    background:mobileStyle===s.id?`${theme.primary}22`:"transparent",
+                    border:`1px solid ${mobileStyle===s.id?theme.primary:border}`,
+                    color:mobileStyle===s.id?theme.primary:theme.textMuted,
+                    fontSize:12, fontWeight:mobileStyle===s.id?700:400, textAlign:"center" }}>
+                  {s.label}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Items */}
+        <div style={{ flex:1, padding:"12px 12px", display:"flex", flexDirection:"column", gap:4, overflowY:"auto" }}>
           {menuItems.map(item => (
             <Link key={item.to} to={item.to} onClick={() => setOpen(false)}
-              style={{ display:"flex", alignItems:"center", gap:14, padding:"14px 16px",
+              style={{ display:"flex", alignItems:"center", gap:14, padding:"13px 16px",
                 borderRadius:12, textDecoration:"none", color:theme.textPrimary,
                 fontSize:15, fontWeight:isActive(item.to)?600:400, transition:"all 0.2s",
                 background:isActive(item.to)?(isGlass?"rgba(255,255,255,0.35)":theme.sidebarActive):"transparent",
@@ -556,9 +672,10 @@ function SidebarMobile({ menuItems, theme, isGlass }) {
           ))}
         </div>
 
+        {/* Logout */}
         <div style={{ padding:12, flexShrink:0 }}>
           <button onClick={() => { logoutUser(); navigate("/"); }}
-            style={{ width:"100%", padding:"14px 16px",
+            style={{ width:"100%", padding:"13px 16px",
               background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.25)",
               borderRadius:12, color:"#ef4444", fontSize:15, fontWeight:600,
               cursor:"pointer", textAlign:"left" }}>
