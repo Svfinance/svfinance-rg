@@ -122,11 +122,10 @@ const AUTO_ALIASES = {
 
 const SYSTEMS = [
   { key: 'generico',   label: 'CSV Genérico',  icon: '📋', color: '#6366f1' },
-  { key: 'excel',      label: 'Excel (.xlsx)', icon: '📊', color: '#16a34a' },
   { key: 'conta_azul', label: 'Conta Azul',    icon: '🔵', color: '#2563eb' },
+  { key: 'omie',       label: 'Omie',          icon: '🟠', color: '#ea580c' },
   { key: 'nibo',       label: 'Nibo',          icon: '🟢', color: '#15803d' },
-  { key: 'app_barber', label: 'App Barber',    icon: '✂️', color: '#9333ea' },
-  { key: 'omni',       label: 'ERPs Genéricos',icon: '⚙️', color: '#ea580c' },
+  { key: 'linx',       label: 'Linx',          icon: '🔶', color: '#f59e0b' },
 ];
 
 function buildAutoMapping(columns, module) {
@@ -660,7 +659,8 @@ export default function ImportExport() {
                         <div style={{ color:'#4ade80', fontWeight:700, fontSize:14 }}>
                           Sistema detectado automaticamente: <strong>
                             {detectedSystem.sistema === 'conta_azul' ? 'Conta Azul' :
-                             detectedSystem.sistema === 'omie' ? 'Omie' : 'Nibo'}
+                             detectedSystem.sistema === 'omie' ? 'Omie' :
+                             detectedSystem.sistema === 'linx' ? 'Linx' : 'Nibo'}
                           </strong>
                         </div>
                         <div style={{ color:textSub, fontSize:12, marginTop:2 }}>
@@ -696,7 +696,7 @@ export default function ImportExport() {
                   <h3 style={{ color:textMain, margin:'0 0 8px', fontSize:15, fontWeight:600 }}>🗂️ Mapeamento de Colunas</h3>
                   <p style={{ color:textSub, fontSize:13, margin:'0 0 20px' }}>
                     {selectedSystem !== 'generico'
-                      ? `Mapeamento automático do ${selectedSystem === 'conta_azul' ? 'Conta Azul' : selectedSystem === 'omie' ? 'Omie' : 'Nibo'} aplicado. Confira e ajuste se necessário.`
+                      ? `Mapeamento automático do ${selectedSystem === 'conta_azul' ? 'Conta Azul' : selectedSystem === 'omie' ? 'Omie' : selectedSystem === 'linx' ? 'Linx' : 'Nibo'} aplicado. Confira e ajuste se necessário.`
                       : 'Campos com ✅ foram mapeados automaticamente. Ajuste os que ficaram em branco.'}
                   </p>
 
