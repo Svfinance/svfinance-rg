@@ -280,17 +280,100 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
   };
 
   const hamSize = 42;
+  const HAM_KEY = `sv_dock_ham_${convex?"conv":"conc"}`;
+
+  // Posição do hamburguer — começa no centro vertical
+  const getInitialPos = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(HAM_KEY));
+      if (saved) return saved;
+    } catch {}
+    return {
+      x: convex ? 14 : window.innerWidth - 14 - hamSize,
+      y: Math.round(window.innerHeight / 2 - hamSize / 2),
+    };
+  };
+
+  const [hamPos, setHamPos] = useState(getInitialPos);
+  const dragging  = useRef(false);
+  const dragStart = useRef({ mx:0, my:0, bx:0, by:0 });
+  const hamRef    = useRef(null);
+  const didDrag   = useRef(false);
+
+  const onMouseDown = (e) => {
+    e.preventDefault();
+    dragging.current  = true;
+    didDrag.current   = false;
+    dragStart.current = { mx: e.clientX, my: e.clientY, bx: hamPos.x, by: hamPos.y };
+
+    const onMove = (e) => {
+      if (!dragging.current) return;
+      const dx = e.clientX - dragStart.current.mx;
+      const dy = e.clientY - dragStart.current.my;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag.current = true;
+      const newX = Math.max(0, Math.min(window.innerWidth  - hamSize, dragStart.current.bx + dx));
+      const newY = Math.max(0, Math.min(window.innerHeight - hamSize, dragStart.current.by + dy));
+      setHamPos({ x: newX, y: newY });
+    };
+
+    const onUp = () => {
+      dragging.current = false;
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup",   onUp);
+      // Salvar posição
+      setHamPos(p => {
+        localStorage.setItem(HAM_KEY, JSON.stringify(p));
+        return p;
+      });
+    };
+
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup",   onUp);
+  };
+
+  // Touch support
+  const onTouchStart = (e) => {
+    const t = e.touches[0];
+    dragging.current  = true;
+    didDrag.current   = false;
+    dragStart.current = { mx: t.clientX, my: t.clientY, bx: hamPos.x, by: hamPos.y };
+
+    const onMove = (e) => {
+      const t = e.touches[0];
+      const dx = t.clientX - dragStart.current.mx;
+      const dy = t.clientY - dragStart.current.my;
+      if (Math.abs(dx) > 3 || Math.abs(dy) > 3) didDrag.current = true;
+      const newX = Math.max(0, Math.min(window.innerWidth  - hamSize, dragStart.current.bx + dx));
+      const newY = Math.max(0, Math.min(window.innerHeight - hamSize, dragStart.current.by + dy));
+      setHamPos({ x: newX, y: newY });
+    };
+
+    const onUp = () => {
+      dragging.current = false;
+      document.removeEventListener("touchmove", onMove);
+      document.removeEventListener("touchend",  onUp);
+      setHamPos(p => {
+        localStorage.setItem(HAM_KEY, JSON.stringify(p));
+        return p;
+      });
+    };
+
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend",  onUp);
+  };
 
   return (
     <>
-      {/* Hamburguer — único elemento sempre clicável */}
+      {/* Hamburguer arrastável */}
       <div
-        onClick={() => setOpen(o => !o)}
+        ref={hamRef}
+        onMouseDown={onMouseDown}
+        onTouchStart={onTouchStart}
+        onClick={() => { if (!didDrag.current) setOpen(o => !o); }}
         style={{
           position:"fixed",
-          left:  convex ? 14 : "auto",
-          right: convex ? "auto" : 14,
-          bottom: 20,
+          left: hamPos.x,
+          top:  hamPos.y,
           zIndex:300,
           width:hamSize, height:hamSize, borderRadius:"50%",
           background: open ? theme.primary : isGlass?"rgba(255,255,255,0.18)":"rgba(30,35,55,0.92)",
@@ -299,11 +382,12 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
           boxShadow: open
             ? `0 0 0 5px ${theme.primary}30, 0 8px 28px ${theme.primary}55`
             : "0 4px 20px rgba(0,0,0,0.5)",
-          cursor:"pointer",
+          cursor: dragging.current ? "grabbing" : "grab",
           display:"flex", flexDirection:"column",
           alignItems:"center", justifyContent:"center", gap:0,
-          transition:"all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+          transition: dragging.current ? "none" : "background 0.3s, border 0.3s, box-shadow 0.3s",
           pointerEvents:"all",
+          userSelect:"none",
         }}>
         <span style={{ display:"block", width:18, height:2, borderRadius:2, marginBottom: open?0:5,
           background:"rgba(255,255,255,0.85)",
@@ -319,24 +403,33 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
           transition:"all 0.3s ease" }}/>
       </div>
 
-      {/* Bolinhas — pointerEvents só quando open */}
+      {/* Bolinhas — aparecem em arco ao redor do hamburguer */}
       {allItems.map((item, i) => {
-        const cy     = startY + i*SPACING + R;
+        // Posição vertical centrada no hamburguer
+        const hamCY  = hamPos.y + hamSize/2;
+        const cy     = hamCY - (totalH/2) + i*SPACING;
         const xOff   = getXOffset(i);
+
+        // Lado: se hamburguer está na metade direita da tela, arco vai para a esquerda
+        const hamIsRight = hamPos.x > window.innerWidth / 2;
+        const effectiveConvex = hamIsRight ? false : convex;
+        const bubbleX = hamIsRight
+          ? hamPos.x - xOff - R*2
+          : hamPos.x + hamSize + xOff - R;
+
         const active = item.to !== "__logout__" && isActive(item.to);
         const isLog  = item.to === "__logout__";
         const hov    = hovered === i;
         const delay  = open ? `${i*40}ms` : `${(n-1-i)*25}ms`;
-        const slideX = convex
+        const slideX = effectiveConvex
           ? (open ? 0 : -(xOff + R*2 + 20))
           : (open ? 0 :  (xOff + R*2 + 20));
 
         return (
           <div key={item.to} style={{
             position:"fixed",
-            left:  convex ? xOff : "auto",
-            right: convex ? "auto" : xOff,
-            top:   cy - R,
+            left:  bubbleX,
+            top:   cy,
             width: R*2, height: R*2,
             zIndex: 200,
             pointerEvents: open ? "all" : "none",
