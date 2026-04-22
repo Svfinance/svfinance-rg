@@ -100,6 +100,74 @@ function SidebarVertical({ menuItems, theme, isGlass, sidebarOpen, setSidebarOpe
   );
 }
 
+
+// ─── DropdownPortal — renderiza o dropdown em fixed direto na tela ────────────
+function DropdownPortal({ items, anchorIdx, theme, isGlass, border, isActive, onSelect }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState(null);
+
+  useEffect(() => {
+    // Pega a posição do item pai no DOM pelo data-idx
+    const anchor = document.querySelector(`[data-navitem="${anchorIdx}"]`);
+    if (anchor) {
+      const rect = anchor.getBoundingClientRect();
+      setPos({ top: rect.bottom + 6, left: rect.left });
+    }
+  }, [anchorIdx]);
+
+  if (!pos) return null;
+
+  return (
+    <div ref={ref} style={{
+      position:"fixed",
+      top: pos.top, left: pos.left,
+      zIndex:9999,
+      background: isGlass
+        ? "rgba(20,25,40,0.82)"
+        : "rgba(15,20,35,0.90)",
+      backdropFilter:"blur(28px) saturate(180%)",
+      WebkitBackdropFilter:"blur(28px) saturate(180%)",
+      border:`1px solid ${isGlass?"rgba(255,255,255,0.15)":"rgba(255,255,255,0.1)"}`,
+      borderRadius:14,
+      boxShadow:"0 16px 48px rgba(0,0,0,0.55), 0 2px 0 rgba(255,255,255,0.06) inset",
+      overflow:"hidden",
+      minWidth:220,
+      animation:"dropIn 0.2s cubic-bezier(0.34,1.56,0.64,1)",
+    }}>
+      {items.map((child, ci) => {
+        const active = isActive(child.to);
+        return (
+          <div key={child.to}
+            onClick={() => onSelect(child.to)}
+            style={{
+              padding:"12px 20px", fontSize:13.5, cursor:"pointer",
+              color: active ? theme.primary : "rgba(255,255,255,0.85)",
+              background: active ? `${theme.primary}18` : "transparent",
+              fontWeight: active ? 600 : 400,
+              borderBottom: ci < items.length-1
+                ? "1px solid rgba(255,255,255,0.07)" : "none",
+              transition:"all 0.15s",
+              display:"flex", alignItems:"center", gap:8,
+            }}
+            onMouseEnter={e=>{
+              e.currentTarget.style.background=`${theme.primary}20`;
+              e.currentTarget.style.paddingLeft="28px";
+              e.currentTarget.style.color=theme.primary;
+            }}
+            onMouseLeave={e=>{
+              e.currentTarget.style.background=active?`${theme.primary}18`:"transparent";
+              e.currentTarget.style.paddingLeft="20px";
+              e.currentTarget.style.color=active?theme.primary:"rgba(255,255,255,0.85)";
+            }}>
+            <span style={{ opacity:0.5, fontSize:11 }}>▸</span>
+            {child.label}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ESTILO 2 — HORIZONTAL com auto-hide + dropdown
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -181,6 +249,7 @@ function SidebarHorizontal({ menuItems, theme, isGlass }) {
                     if (hasChild) { setOpenMenu(isOpen ? null : idx); }
                     else { navigate(item.to); setOpenMenu(null); }
                   }}
+                  data-navitem={idx}
                   style={{ display:"flex", alignItems:"center", gap:7, padding:"7px 12px",
                     borderRadius:10, cursor:"pointer", whiteSpace:"nowrap", userSelect:"none",
                     color:active?theme.textPrimary:theme.textMuted,
@@ -196,32 +265,15 @@ function SidebarHorizontal({ menuItems, theme, isGlass }) {
                   )}
                 </div>
 
-                {/* Dropdown */}
+                {/* Dropdown — fixed abaixo do item, transparente */}
                 {hasChild && isOpen && (
-                  <div style={{
-                    position:"absolute", top:"100%", left:0, marginTop:6, zIndex:300,
-                    background:isGlass?"rgba(255,255,255,0.95)":theme.bgSecondary || "#0f172a",
-                    backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)",
-                    border:`1px solid ${border}`, borderRadius:12,
-                    boxShadow:"0 12px 40px rgba(0,0,0,0.4)",
-                    overflow:"hidden", minWidth:200,
-                    animation:"dropIn 0.18s cubic-bezier(0.34,1.56,0.64,1)",
-                  }}>
-                    {item.children.map((child, ci) => (
-                      <div key={child.to}
-                        onClick={() => { navigate(child.to); setOpenMenu(null); }}
-                        style={{ padding:"11px 18px", fontSize:13, cursor:"pointer",
-                          color:isActive(child.to)?theme.primary:theme.textPrimary,
-                          background:isActive(child.to)?(isGlass?`${theme.primary}18`:`${theme.primary}18`):"transparent",
-                          fontWeight:isActive(child.to)?600:400,
-                          borderBottom: ci < item.children.length-1 ? `1px solid ${border}` : "none",
-                          transition:"all 0.15s" }}
-                        onMouseEnter={e=>{ e.currentTarget.style.background=`${theme.primary}12`; e.currentTarget.style.paddingLeft="24px"; }}
-                        onMouseLeave={e=>{ e.currentTarget.style.background=isActive(child.to)?`${theme.primary}18`:"transparent"; e.currentTarget.style.paddingLeft="18px"; }}>
-                        {child.label}
-                      </div>
-                    ))}
-                  </div>
+                  <DropdownPortal
+                    items={item.children}
+                    anchorIdx={idx}
+                    theme={theme} isGlass={isGlass} border={border}
+                    isActive={isActive}
+                    onSelect={(to) => { navigate(to); setOpenMenu(null); }}
+                  />
                 )}
               </div>
             );
@@ -382,15 +434,16 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
   const H = (maxY - minY) + R*2 + GAP*(n-1) + 20;
 
   // redistribuir Y com espaçamento mínimo garantido
-  const minSpacing = R*2 + GAP;
+  const minSpacing  = R*2 + GAP;
   const totalNeeded = minSpacing * (n-1);
+  const PAD_V       = R + 16;  // padding vertical extra para não cortar topo/base
   const spreadPositions = pos.map((p, i) => ({
-    x: p.x - minX + R + (convex ? 0 : 0),
-    y: (i / (n-1)) * totalNeeded + R + 8,
+    x: p.x - minX + R + 8,
+    y: (i / (n-1)) * totalNeeded + PAD_V,
   }));
 
-  const containerH = totalNeeded + R*2 + 16;
-  const containerW = maxX - minX + R*2 + 50;
+  const containerH = totalNeeded + PAD_V * 2;
+  const containerW = maxX - minX + R*2 + 60;
 
   return (
     <div style={{
@@ -402,6 +455,7 @@ function SidebarDock({ menuItems, theme, isGlass, convex = true }) {
       width:containerW,
       height:containerH,
       pointerEvents:"none",
+      overflow:"visible",
     }}>
       {allItems.map((item, i) => {
         const { x, y } = spreadPositions[i];
