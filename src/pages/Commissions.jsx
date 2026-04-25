@@ -3,7 +3,7 @@ import PageLayout from '../components/layout/PageLayout';
 import Sidebar from '../components/layout/Sidebar';
 import { useTheme } from '../contexts/ThemeContext';
 
-const BASE_URL = 'https://finance-control-api-production.up.railway.app/api';
+const BASE_URL = 'https://api.svfinance.com.br/api';
 
 const TYPE_LABELS = {
   percent_total:  { label: '% do Total',  icon: '📊', desc: 'Percentual sobre valor total da venda' },
