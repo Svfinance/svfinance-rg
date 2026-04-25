@@ -6,7 +6,7 @@ import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
 import { PRINT_THEMES, buildPrintCSS } from "../utils/printThemes";
 
-const API   = "https://finance-control-api-production.up.railway.app/api";
+const API   = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
 
 const MESES = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
