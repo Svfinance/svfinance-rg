@@ -10,7 +10,7 @@ const BG_IMAGES = {
   gray:  fundoCinzaPrata,
 };
 
-const API = "https://finance-control-api-production.up.railway.app/api";
+const API = "https://api.svfinance.com.br/api";
 
 function useAlerts() {
   const [alerts, setAlerts] = useState([]);
