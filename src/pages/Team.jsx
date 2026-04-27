@@ -5,7 +5,7 @@ import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
 
-const API   = "https://finance-control-api-production.up.railway.app/api";
+const API   = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
 
 const ROLES = [
