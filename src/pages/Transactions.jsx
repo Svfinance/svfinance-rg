@@ -5,7 +5,7 @@ import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
 
-const API_URL = "https://finance-control-api-production.up.railway.app/api";
+const API_URL = "https://api.svfinance.com.br/api";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
