@@ -15,16 +15,17 @@ export async function loginUser(email, password) {
     localStorage.setItem("account_type", data.account_type || "business");
     localStorage.setItem("company_id",   String(data.company_id || ""));
     localStorage.setItem("company_name", data.company_name || "");
-    localStorage.setItem("plan",         data.plan         || "free");
+    localStorage.setItem("sv_plan",      data.plan         || "free");
+    localStorage.setItem("sv_nicho",     data.nicho        || "generic");
   }
   return { ok: response.ok, data };
 }
 
-export async function registerUser(email, password, name, company_name) {
+export async function registerUser(email, password, name, company_name, nicho = "generic") {
   const response = await fetch(`${API_URL}/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, name, company_name }),
+    body: JSON.stringify({ email, password, name, company_name, nicho }),
   });
   return response;
 }
@@ -33,7 +34,7 @@ export async function registerPersonalUser(email, password, name) {
   const response = await fetch(`${API_URL}/register/personal`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password, name }),
+    body: JSON.stringify({ email, password, name, nicho: "generic" }),
   });
   return response;
 }
@@ -46,7 +47,8 @@ export function logoutUser() {
   localStorage.removeItem("account_type");
   localStorage.removeItem("company_id");
   localStorage.removeItem("company_name");
-  localStorage.removeItem("plan");
+  localStorage.removeItem("sv_plan");
+  localStorage.removeItem("sv_nicho");
 }
 
 export function getAuthHeaders() {

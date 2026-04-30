@@ -1,13 +1,15 @@
+// src/pages/Login.jsx
 import { useState, useEffect, useRef } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { loginUser, registerUser, registerPersonalUser } from "../services/api"
+import { useNicho, NICHOS } from "../contexts/NichoContext"
 import logoImg from "../assets/logo.gif"
 
 const API = "https://finance-control-api-production.up.railway.app/api"
 
-// =========================
+// ─────────────────────────────────────────────────────────────
 // CANVAS — NÚMEROS FLUTUANDO
-// =========================
+// ─────────────────────────────────────────────────────────────
 function FloatingNumbers() {
   const canvasRef = useRef(null)
   useEffect(() => {
@@ -23,10 +25,10 @@ function FloatingNumbers() {
       { count:5,  speedMin:1.6, speedMax:2.4, sizeMin:16, sizeMax:24, opacityMax:0.30 },
     ]
     const particles = []
-    layers.forEach((layer, layerIndex) => {
+    layers.forEach((layer, li) => {
       for (let i = 0; i < layer.count; i++) {
         const sym = symbols[Math.floor(Math.random() * symbols.length)]
-        particles.push({ x:Math.random()*canvas.width, y:canvas.height+Math.random()*300, speed:layer.speedMin+Math.random()*(layer.speedMax-layer.speedMin), opacity:0, maxOpacity:0.04+Math.random()*layer.opacityMax, size:layer.sizeMin+Math.random()*(layer.sizeMax-layer.sizeMin), symbol:sym, drift:(Math.random()-0.5)*0.2, layer:layerIndex, positive:/[+▲↑↗]/.test(sym) })
+        particles.push({ x:Math.random()*canvas.width, y:canvas.height+Math.random()*300, speed:layer.speedMin+Math.random()*(layer.speedMax-layer.speedMin), opacity:0, maxOpacity:0.04+Math.random()*layer.opacityMax, size:layer.sizeMin+Math.random()*(layer.sizeMax-layer.sizeMin), symbol:sym, drift:(Math.random()-0.5)*0.2, layer:li, positive:/[+▲↑↗]/.test(sym) })
       }
     })
     let animId, lastTime = 0
@@ -58,16 +60,72 @@ function FloatingNumbers() {
   return <canvas ref={canvasRef} style={{ position:"fixed", inset:0, width:"100%", height:"100%", pointerEvents:"none", zIndex:1 }} />
 }
 
-// =========================
+// ─────────────────────────────────────────────────────────────
+// COMPONENTE: Seletor de Nicho
+// ─────────────────────────────────────────────────────────────
+function NichoSelector({ selected, onSelect }) {
+  const nichos = Object.values(NICHOS)
+
+  return (
+    <div>
+      <label style={fieldLabel}>Tipo de negócio</label>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginTop:8 }}>
+        {nichos.map(n => {
+          const isSelected = selected === n.key
+          return (
+            <button
+              key={n.key}
+              type="button"
+              onClick={() => onSelect(n.key)}
+              style={{
+                padding:"12px 10px",
+                borderRadius:12,
+                cursor:"pointer",
+                border: isSelected ? `1.5px solid ${n.color}` : "1px solid rgba(255,255,255,0.1)",
+                background: isSelected
+                  ? `linear-gradient(135deg, ${n.color}22, ${n.color}11)`
+                  : "rgba(255,255,255,0.04)",
+                backdropFilter:"blur(8px)",
+                textAlign:"center",
+                transition:"all 0.2s",
+                display:"flex",
+                flexDirection:"column",
+                alignItems:"center",
+                gap:4,
+              }}
+            >
+              <span style={{ fontSize:"1.4rem" }}>{n.icon}</span>
+              <span style={{
+                fontSize:"11px", fontWeight:600,
+                color: isSelected ? n.color : "rgba(255,255,255,0.6)",
+                lineHeight:1.3
+              }}>{n.label}</span>
+            </button>
+          )
+        })}
+      </div>
+      {selected && (
+        <div style={{
+          marginTop:10, padding:"10px 14px", borderRadius:10,
+          background:`rgba(255,255,255,0.04)`,
+          border:"1px solid rgba(255,255,255,0.08)",
+          fontSize:12, color:"rgba(255,255,255,0.45)", textAlign:"center"
+        }}>
+          {NICHOS[selected]?.icon} {NICHOS[selected]?.desc}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
 // LOGIN PRINCIPAL
-// =========================
+// ─────────────────────────────────────────────────────────────
 export default function Login() {
   const navigate          = useNavigate()
   const [searchParams]    = useSearchParams()
+  const { updateNicho }   = useNicho()
 
-  // "choose" | "login" | "register-business" | "register-personal"
-  // "verify-pending" | "verify-success" | "verify-error"
-  // "forgot-password" | "reset-password" | "reset-success"
   const [screen, setScreen]               = useState("choose")
   const [name, setName]                   = useState("")
   const [companyName, setCompanyName]     = useState("")
@@ -75,19 +133,17 @@ export default function Login() {
   const [password, setPassword]           = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
   const [unverifiedEmail, setUnverifiedEmail] = useState("")
+  const [selectedNicho, setSelectedNicho] = useState("generic") // ← NOVO
   const [loading, setLoading]             = useState(false)
   const [error, setError]                 = useState("")
   const [success, setSuccess]             = useState("")
 
-  // ✅ detecta token na URL para verificação e reset
   useEffect(() => {
     if (localStorage.getItem("token")) { navigate("/dashboard"); return }
-
     const verifyToken = searchParams.get("token")
     const resetToken  = searchParams.get("reset")
-
     if (verifyToken) handleVerifyEmail(verifyToken)
-    if (resetToken)  { setScreen("reset-password"); }
+    if (resetToken)  setScreen("reset-password")
   }, [])
 
   async function handleVerifyEmail(token) {
@@ -103,6 +159,7 @@ export default function Login() {
     setName(""); setCompanyName(""); setEmail("")
     setPassword(""); setConfirmPassword("")
     setError(""); setSuccess("")
+    setSelectedNicho("generic")
   }
 
   function goTo(s) { resetForm(); setScreen(s) }
@@ -114,6 +171,8 @@ export default function Login() {
     try {
       const { ok, data } = await loginUser(email, password)
       if (ok) {
+        // Restaura nicho salvo no perfil (se vier do backend, use data.nicho)
+        if (data?.nicho) updateNicho(data.nicho)
         navigate("/dashboard")
       } else if (data.email_unverified) {
         setUnverifiedEmail(data.email || email)
@@ -134,10 +193,16 @@ export default function Login() {
     if (password.length < 6) { setError("Senha mínimo 6 caracteres"); return }
     setLoading(true); setError("")
     try {
-      const res  = await registerUser(email, password, name, companyName)
+      // Passa o nicho para o backend junto com o cadastro
+      const res  = await registerUser(email, password, name, companyName, selectedNicho)
       const data = await res.json()
-      if (res.ok) { setUnverifiedEmail(email); setScreen("verify-pending") }
-      else setError(data.msg || "Erro ao criar conta")
+      if (res.ok) {
+        updateNicho(selectedNicho) // salva no contexto e localStorage
+        setUnverifiedEmail(email)
+        setScreen("verify-pending")
+      } else {
+        setError(data.msg || "Erro ao criar conta")
+      }
     } catch { setError("Erro ao conectar com o servidor") }
     finally { setLoading(false) }
   }
@@ -152,8 +217,13 @@ export default function Login() {
     try {
       const res  = await registerPersonalUser(email, password, name)
       const data = await res.json()
-      if (res.ok) { setUnverifiedEmail(email); setScreen("verify-pending") }
-      else setError(data.msg || "Erro ao criar conta")
+      if (res.ok) {
+        updateNicho("generic")
+        setUnverifiedEmail(email)
+        setScreen("verify-pending")
+      } else {
+        setError(data.msg || "Erro ao criar conta")
+      }
     } catch { setError("Erro ao conectar com o servidor") }
     finally { setLoading(false) }
   }
@@ -162,10 +232,7 @@ export default function Login() {
   async function handleResendVerification() {
     setLoading(true)
     try {
-      const res = await fetch(`${API}/resend-verification`, {
-        method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ email: unverifiedEmail }),
-      })
+      const res  = await fetch(`${API}/resend-verification`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ email: unverifiedEmail }) })
       const data = await res.json()
       setSuccess(data.msg || "Email reenviado!")
     } catch { setError("Erro ao reenviar email") }
@@ -177,10 +244,7 @@ export default function Login() {
     e.preventDefault()
     setLoading(true); setError(""); setSuccess("")
     try {
-      const res  = await fetch(`${API}/forgot-password`, {
-        method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ email }),
-      })
+      const res  = await fetch(`${API}/forgot-password`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ email }) })
       const data = await res.json()
       setSuccess(data.msg)
     } catch { setError("Erro ao conectar com o servidor") }
@@ -195,10 +259,7 @@ export default function Login() {
     setLoading(true); setError("")
     const resetToken = searchParams.get("reset")
     try {
-      const res  = await fetch(`${API}/reset-password`, {
-        method:"POST", headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({ token:resetToken, password }),
-      })
+      const res  = await fetch(`${API}/reset-password`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ token:resetToken, password }) })
       const data = await res.json()
       if (res.ok) setScreen("reset-success")
       else setError(data.msg || "Erro ao redefinir senha")
@@ -282,7 +343,6 @@ export default function Login() {
                 <label style={fieldLabel}>Senha</label>
                 <input type="password" placeholder="••••••••" value={password} onChange={e=>setPassword(e.target.value)} style={inputStyle} onFocus={focus} onBlur={blur} required />
               </div>
-              {/* ✅ link esqueceu senha */}
               <div style={{ textAlign:"right", marginTop:-8 }}>
                 <button type="button" onClick={() => goTo("forgot-password")} style={{ background:"none", border:"none", color:"rgba(129,140,248,0.7)", fontSize:"12px", cursor:"pointer", padding:0 }}>
                   Esqueceu a senha?
@@ -312,7 +372,7 @@ export default function Login() {
                   <span style={{ fontSize:"1.3rem" }}>👤</span>
                   <h2 style={{ ...cardTitle, margin:0, fontSize:"1.3rem" }}>Conta Pessoal</h2>
                 </div>
-                <p style={{ ...cardSub, margin:0 }}>Controle financeiro pessoal</p>
+                <p style={{ ...cardSub, margin:0 }}>Controle financeiro pessoal · Sempre gratuito</p>
               </div>
             </div>
             <div style={{ ...divider, background:"linear-gradient(90deg,transparent,rgba(34,197,94,0.4),transparent)" }} />
@@ -350,7 +410,7 @@ export default function Login() {
           </div>
         )}
 
-        {/* ══ CADASTRO PJ ══ */}
+        {/* ══ CADASTRO PJ — COM SELEÇÃO DE NICHO ══ */}
         {screen === "register-business" && (
           <div style={card}>
             <Corners color="#6366f1" />
@@ -388,6 +448,10 @@ export default function Login() {
                 <label style={fieldLabel}>Confirmar senha</label>
                 <input type="password" placeholder="••••••••" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} style={inputStyle} onFocus={focus} onBlur={blur} required />
               </div>
+
+              {/* ── SELETOR DE NICHO ── */}
+              <NichoSelector selected={selectedNicho} onSelect={setSelectedNicho} />
+
               <div style={{ background:"rgba(99,102,241,0.06)", border:"1px solid rgba(99,102,241,0.15)", borderRadius:10, padding:"12px 16px", fontSize:"0.8rem", color:"rgba(255,255,255,0.5)" }}>
                 ✅ Inclui: Vendas · Estoque · Equipe · Orçamentos · Clientes · Financeiro
               </div>
@@ -433,7 +497,7 @@ export default function Login() {
           </div>
         )}
 
-        {/* ══ VERIFICANDO... ══ */}
+        {/* ══ VERIFICANDO ══ */}
         {screen === "verifying" && (
           <div style={card}>
             <Corners color="#6366f1" />
@@ -455,8 +519,7 @@ export default function Login() {
               <p style={{ color:"rgba(255,255,255,0.5)", fontSize:"0.88rem", lineHeight:1.6, marginBottom:28 }}>
                 Sua conta foi ativada com sucesso.<br/>Agora você pode fazer login.
               </p>
-              <button onClick={() => goTo("login")}
-                style={{ ...submitBtn, background:"linear-gradient(135deg,#22c55e,#16a34a)" }}>
+              <button onClick={() => goTo("login")} style={{ ...submitBtn, background:"linear-gradient(135deg,#22c55e,#16a34a)" }}>
                 <span style={{ color:"#fff", fontWeight:"700", fontSize:"15px", letterSpacing:"1px" }}>FAZER LOGIN</span>
               </button>
             </div>
@@ -473,8 +536,7 @@ export default function Login() {
               <p style={{ color:"rgba(255,255,255,0.5)", fontSize:"0.88rem", lineHeight:1.6, marginBottom:28 }}>
                 Este link já foi usado ou expirou.<br/>Solicite um novo link de verificação.
               </p>
-              <button onClick={() => goTo("login")}
-                style={{ ...submitBtn, background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)" }}>
+              <button onClick={() => goTo("login")} style={{ ...submitBtn, background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)" }}>
                 <span style={{ color:"#fff", fontWeight:"700", fontSize:"15px" }}>← Voltar ao login</span>
               </button>
             </div>
@@ -501,8 +563,7 @@ export default function Login() {
                   <label style={fieldLabel}>Email da conta</label>
                   <input type="email" placeholder="seu@email.com" value={email} onChange={e=>setEmail(e.target.value)} style={inputStyle} onFocus={focus} onBlur={blur} required />
                 </div>
-                <button type="submit" disabled={loading}
-                  style={{ ...submitBtn, background:"linear-gradient(135deg,#6366f1,#4f46e5)", opacity:loading?0.6:1, cursor:loading?"not-allowed":"pointer" }}>
+                <button type="submit" disabled={loading} style={{ ...submitBtn, background:"linear-gradient(135deg,#6366f1,#4f46e5)", opacity:loading?0.6:1, cursor:loading?"not-allowed":"pointer" }}>
                   <span style={{ color:"#fff", fontWeight:"700", fontSize:"15px", letterSpacing:"1px" }}>
                     {loading ? "Enviando..." : "ENVIAR LINK"}
                   </span>
@@ -537,8 +598,7 @@ export default function Login() {
                 <label style={fieldLabel}>Confirmar nova senha</label>
                 <input type="password" placeholder="••••••••" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} style={inputStyle} onFocus={focus} onBlur={blur} required />
               </div>
-              <button type="submit" disabled={loading}
-                style={{ ...submitBtn, background:"linear-gradient(135deg,#f59e0b,#d97706)", opacity:loading?0.6:1, cursor:loading?"not-allowed":"pointer" }}>
+              <button type="submit" disabled={loading} style={{ ...submitBtn, background:"linear-gradient(135deg,#f59e0b,#d97706)", opacity:loading?0.6:1, cursor:loading?"not-allowed":"pointer" }}>
                 <span style={{ color:"#fff", fontWeight:"700", fontSize:"15px", letterSpacing:"1px" }}>
                   {loading ? "Salvando..." : "REDEFINIR SENHA"}
                 </span>
@@ -569,7 +629,7 @@ export default function Login() {
   )
 }
 
-// ── helpers ──
+// ── Helpers ──
 function Corners({ color = "rgba(99,102,241,0.7)" }) {
   const base = { position:"absolute", width:"20px", height:"20px" }
   return (
@@ -585,7 +645,7 @@ function choiceBtn(color) {
   return { width:"100%", padding:"20px", borderRadius:14, cursor:"pointer", border:`1px solid ${color}33`, background:`linear-gradient(135deg, ${color}11, ${color}08)`, backdropFilter:"blur(8px)", textAlign:"center", transition:"all 0.2s" }
 }
 
-// ── ESTILOS ──
+// ── Estilos ──
 const wrapper      = { position:"relative", minHeight:"100vh", overflow:"hidden", fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", alignItems:"center", justifyContent:"center" }
 const cityBg       = { position:"fixed", inset:0, backgroundImage:`url("https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1920&q=80")`, backgroundSize:"cover", backgroundPosition:"center", filter:"blur(3px) brightness(0.5)", transform:"scale(1.05)", zIndex:0 }
 const overlay      = { position:"fixed", inset:0, background:`linear-gradient(180deg,rgba(2,6,23,0.7) 0%,rgba(2,6,23,0.4) 50%,rgba(2,6,23,0.8) 100%),radial-gradient(ellipse at 50% 50%,rgba(99,102,241,0.12) 0%,transparent 70%)`, zIndex:1 }

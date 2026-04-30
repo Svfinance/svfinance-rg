@@ -1,23 +1,24 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
+import { useNicho } from "../../contexts/NichoContext";
 import { logoutUser } from "../../services/api";
 
 // ─── Storage helpers ──────────────────────────────────────────────────────────
 const STYLE_KEY    = "sv_sidebar_style";
 const AUTOHIDE_KEY = "sv_sidebar_autohide";
-const BELL_KEY     = "sv_bell_pos";
 
 export function getSidebarStyle()    { return localStorage.getItem(STYLE_KEY) || "vertical"; }
 export function setSidebarStyleLS(s) { localStorage.setItem(STYLE_KEY, s); }
 export function getAutoHide()        { return localStorage.getItem(AUTOHIDE_KEY) === "true"; }
 export function setAutoHideLS(v)     { localStorage.setItem(AUTOHIDE_KEY, String(v)); }
 
-// ─── Menu items ───────────────────────────────────────────────────────────────
+// ─── Menu items — com labels dinâmicos por nicho ──────────────────────────────
 function useMenuItems() {
   const role        = localStorage.getItem("role")         || "viewer";
   const accountType = localStorage.getItem("account_type") || "business";
   const isPersonal  = accountType === "personal";
+  const { label, hasModule } = useNicho();
 
   const all = isPersonal ? [
     { to:"/dashboard",    icon:"🏠", label:"Dashboard"     },
@@ -27,23 +28,31 @@ function useMenuItems() {
     { to:"/goals",        icon:"🎯", label:"Metas"         },
     { to:"/settings",     icon:"⚙️", label:"Configurações" },
   ] : [
-    { to:"/dashboard",    icon:"🏠", label:"Dashboard",        roles:null },
-    { to:"/clients",      icon:"👥", label:"Clientes",          roles:null },
-    { to:"/transactions", icon:"💰", label:"Transações",        roles:["admin","financial"], children:[
+    { to:"/dashboard",     icon:"🏠", label:"Dashboard",                        roles:null,                               module:"dashboard"    },
+    { to:"/clients",       icon:"👥", label:label("clients"),                   roles:null,                               module:"clients"      },
+    { to:"/transactions",  icon:"💰", label:"Transações",                        roles:["admin","financial"],              module:"transactions", children:[
       { to:"/transactions", label:"Todas as transações" },
       { to:"/bills",        label:"Contas a pagar/receber" },
     ]},
-    { to:"/analytics",   icon:"📊", label:"Analytics",         roles:["admin","financial"] },
-    { to:"/reports",      icon:"📈", label:"Relatórios",        roles:["admin","financial"] },
-    { to:"/products",     icon:"📦", label:"Produtos",          roles:["admin","financial","stock","seller"] },
-    { to:"/quotes",       icon:"🧾", label:"Orçamentos",        roles:null },
-    { to:"/sales",        icon:"🛒", label:"Vendas",            roles:null },
-    { to:"/team",         icon:"👤", label:"Equipe",            roles:["admin"] },
-    { to:"/import-export",icon:"📂", label:"Importar/Exportar", roles:["admin","financial"] },
-    { to:"/commissions",  icon:"💰", label:"Comissões",         roles:["admin","financial","seller"] },
-    { to:"/settings",     icon:"⚙️", label:"Configurações",     roles:null },
+    { to:"/analytics",    icon:"📊", label:"Analytics",                         roles:["admin","financial"],              module:"analytics"    },
+    { to:"/reports",       icon:"📈", label:"Relatórios",                        roles:["admin","financial"],              module:"reports"      },
+    { to:"/products",      icon:"📦", label:label("products"),                   roles:["admin","financial","stock","seller"], module:"products" },
+    { to:"/quotes",        icon:"🧾", label:"Orçamentos",                        roles:null,                               module:"quotes"       },
+    { to:"/sales",         icon:"🛒", label:label("sales"),                      roles:null,                               module:"orders"       },
+    { to:"/team",          icon:"👤", label:"Equipe",                            roles:["admin"],                          module:"team"         },
+    { to:"/commissions",   icon:"💸", label:"Comissões",                         roles:["admin","financial","seller"],     module:"commissions"  },
+    { to:"/import-export", icon:"📂", label:"Importar/Exportar",                 roles:["admin","financial"],              module:"import"       },
+    { to:"/goals",         icon:"🎯", label:"Metas",                             roles:null,                               module:"goals"        },
+    { to:"/settings",      icon:"⚙️", label:"Configurações",                     roles:null,                               module:"settings"     },
   ];
-  return all.filter(i => !i.roles || i.roles.includes(role));
+
+  return all.filter(i => {
+    // Filtra por role
+    if (i.roles && !i.roles.includes(role)) return false;
+    // Filtra por módulo do nicho (se definido)
+    if (i.module && !hasModule(i.module)) return false;
+    return true;
+  });
 }
 
 // ─── Dropdown Portal (fixed, sem overflow) ────────────────────────────────────
@@ -165,8 +174,8 @@ function SidebarHorizontal({ menuItems, theme, isGlass }) {
   const [visible,  setVisible]       = useState(!getAutoHide());
   const [canL, setCanL] = useState(false);
   const [canR, setCanR] = useState(false);
-  const [openIdx,  setOpenIdx]  = useState(null);   // índice do item com dropdown aberto
-  const [anchorEl, setAnchorEl] = useState(null);   // elemento âncora para o portal
+  const [openIdx,  setOpenIdx]  = useState(null);
+  const [anchorEl, setAnchorEl] = useState(null);
   const scrollRef = useRef(null);
   const hideTimer = useRef(null);
   const barH = 54;
@@ -180,7 +189,6 @@ function SidebarHorizontal({ menuItems, theme, isGlass }) {
 
   useEffect(() => { setTimeout(checkScroll, 100); }, [menuItems]);
 
-  // Fechar dropdown ao clicar fora
   useEffect(() => {
     if (openIdx === null) return;
     const fn = (e) => {
@@ -398,7 +406,6 @@ function SidebarDock({ menuItems, theme, isGlass, convex=true }) {
 
   return (
     <>
-      {/* Hamburguer arrastável */}
       <div onMouseDown={onMouseDown} onTouchStart={onTouchStart}
         onClick={()=>{ if(!didDrag.current) setOpen(o=>!o); }}
         style={{ position:"fixed", left:hamPos.x, top:hamPos.y, zIndex:300,
@@ -419,22 +426,18 @@ function SidebarDock({ menuItems, theme, isGlass, convex=true }) {
           transform:open?"rotate(-45deg) translate(0,-2px)":"none",transition:"all 0.3s ease" }}/>
       </div>
 
-      {/* Bolinhas */}
       {allItems.map((item,i)=>{
-        // Y: adapta ao quadrante
         let cy;
         const orderedI = isBottomZ ? n-1-i : i;
-        if(isTopZ)    cy = hamPos.y+hamSize+8+i*SPACING;
+        if(isTopZ)         cy = hamPos.y+hamSize+8+i*SPACING;
         else if(isBottomZ) cy = hamPos.y-8-(i+1)*SPACING;
-        else          cy = hamCY-(totalH/2)+i*SPACING;
+        else               cy = hamCY-(totalH/2)+i*SPACING;
 
-        // X curvatura
         const t     = n===1?0:(i/(n-1))*2-1;
         const curve = isMidZ?(1-t*t):(isTopZ?(i/(n-1))*0.6:((n-1-i)/(n-1))*0.6);
         const xOff  = 6+curve*48;
         const bubbleX= isRight ? hamPos.x-xOff-R*2 : hamPos.x+hamSize+xOff-R;
 
-        // Slide
         const slideX = isRight?(open?0:xOff+R*2+20):(open?0:-(xOff+R*2+20));
         const delay  = open?`${orderedI*40}ms`:`${(n-1-orderedI)*25}ms`;
 
@@ -489,7 +492,7 @@ function SidebarDock({ menuItems, theme, isGlass, convex=true }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// MOBILE — mesmos estilos do web adaptados
+// MOBILE
 // ═══════════════════════════════════════════════════════════════════════════════
 const MOBILE_WEB_STYLES = [
   { id:"vertical",     icon:"▐", label:"Lateral",     desc:"Desliza da esquerda" },
@@ -513,12 +516,10 @@ function SidebarMobile({ menuItems, theme, isGlass }) {
   const border  = isGlass?"rgba(255,255,255,0.4)":theme.borderCard;
   const bg      = isGlass?"rgba(255,255,255,0.22)":theme.bgSecondary;
 
-  // Se dock no mobile, usar o componente de dock
   if (mStyle==="dock") {
     return (
       <>
         <SidebarDock menuItems={menuItems} theme={theme} isGlass={isGlass} convex={true}/>
-        {/* Botão de troca de estilo fixo no topo direito */}
         <button onClick={()=>setShowStyles(s=>!s)}
           style={{ position:"fixed",top:14,left:14,zIndex:400,
             background:isGlass?"rgba(255,255,255,0.35)":bg,
@@ -531,7 +532,6 @@ function SidebarMobile({ menuItems, theme, isGlass }) {
     );
   }
 
-  // Top bar mobile
   if (mStyle==="horizontal") {
     return (
       <>
@@ -560,7 +560,6 @@ function SidebarMobile({ menuItems, theme, isGlass }) {
     );
   }
 
-  // Slide panels (vertical, right, bottom)
   const panelS = () => {
     const base={ position:"fixed",zIndex:160,background:bg,
       backdropFilter:backdrop,WebkitBackdropFilter:backdrop,
@@ -637,7 +636,7 @@ function SidebarMobile({ menuItems, theme, isGlass }) {
   );
 }
 
-// ─── Picker de estilos (usado no mobile) ──────────────────────────────────────
+// ─── Style Picker ─────────────────────────────────────────────────────────────
 function StylePicker({ styles, current, onSelect, theme, isGlass, border, inline }) {
   if (inline) {
     return (
