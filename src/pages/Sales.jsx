@@ -33,6 +33,13 @@ const STATUS_MAP = {
   cancelled:   { label: "Cancelada",    color: "#ef4444", bg: "rgba(239,68,68,0.12)"   },
 };
 
+const NFE_STATUS_MAP = {
+  processando: { label: "Processando", color: "#f59e0b", icon: "⏳" },
+  autorizado:  { label: "Autorizada",  color: "#22c55e", icon: "✅" },
+  rejeitado:   { label: "Rejeitada",   color: "#ef4444", icon: "❌" },
+  cancelado:   { label: "Cancelada",   color: "#6b7280", icon: "🚫" },
+};
+
 const EMPTY_FORM = {
   client_id: "", status: "open", notes: "", payment_terms: "", discount: 0,
 };
@@ -65,8 +72,11 @@ export default function Sales() {
   const [search, setSearch]                   = useState("");
   const [completing, setCompleting]           = useState(false);
   const [teamUsers, setTeamUsers]             = useState([]);
-  // ✅ novo estado para o modal de arquivo
   const [fileModal, setFileModal]             = useState(null);
+
+  // ── NF-e states ──
+  const [nfeLoading, setNfeLoading]           = useState(false);
+  const [nfeModal, setNfeModal]               = useState(null); // { status, chave, numero, tipo, msg, erros }
 
   async function fetchAll() {
     setLoading(true);
@@ -181,6 +191,67 @@ export default function Sales() {
     } catch { showToast("Erro de conexão.", "error"); }
   }
 
+  // ── NF-e: Emitir ──
+  async function handleEmitirNfe(order) {
+    setNfeLoading(true);
+    try {
+      const res  = await fetch(`${API}/nfe/emitir/${order.id}`, {
+        method: "POST",
+        headers: { "Content-Type":"application/json", Authorization:`Bearer ${token()}` },
+      });
+      const data = await res.json();
+      if (res.ok || res.status === 202) {
+        setNfeModal({
+          sucesso: true,
+          status:  data.status,
+          chave:   data.chave,
+          numero:  data.numero,
+          tipo:    data.tipo,
+          msg:     data.msg,
+        });
+        fetchAll(); // atualiza nfe_status na lista
+      } else {
+        setNfeModal({
+          sucesso: false,
+          msg:     data.msg || "Erro ao emitir nota fiscal.",
+          erros:   data.erros,
+        });
+      }
+    } catch (e) {
+      setNfeModal({ sucesso: false, msg: "Erro de conexão com o servidor." });
+    } finally {
+      setNfeLoading(false);
+    }
+  }
+
+  // ── NF-e: Consultar status ──
+  async function handleConsultarNfe(order) {
+    setNfeLoading(true);
+    try {
+      const res  = await fetch(`${API}/nfe/status/${order.id}`, {
+        headers: { Authorization:`Bearer ${token()}` },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setNfeModal({
+          sucesso: true,
+          status:  data.nfe_status,
+          chave:   data.nfe_chave,
+          numero:  data.nfe_numero,
+          tipo:    data.tipo,
+          msg:     `Status atualizado: ${data.nfe_status}`,
+        });
+        fetchAll();
+      } else {
+        setNfeModal({ sucesso: false, msg: data.msg });
+      }
+    } catch {
+      setNfeModal({ sucesso: false, msg: "Erro de conexão." });
+    } finally {
+      setNfeLoading(false);
+    }
+  }
+
   const filtered = orders.filter(o => {
     const statusOk = filterStatus==="all" || o.status===filterStatus;
     const userOk   = filterUser==="all" || String(o.user_id)===String(filterUser);
@@ -206,13 +277,8 @@ export default function Sales() {
   const th           = { textAlign:"left", padding:"12px 16px", color:theme.textMuted, fontWeight:600, fontSize:"0.75rem", textTransform:"uppercase", letterSpacing:"0.05em", background:isGlass?"rgba(255,255,255,0.1)":theme.bgCard, borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, whiteSpace:"nowrap" };
   const td           = { padding:"12px 16px", verticalAlign:"middle" };
 
-  // ✅ helper — tipo do documento baseado no número
-  function docType(number) {
-    return number?.startsWith("OS-") ? "Ordem de Serviço" : "Pedido";
-  }
-  function docIcon(number) {
-    return number?.startsWith("OS-") ? "⚙️" : "📦";
-  }
+  function docType(number) { return number?.startsWith("OS-") ? "Ordem de Serviço" : "Pedido"; }
+  function docIcon(number) { return number?.startsWith("OS-") ? "⚙️" : "📦"; }
 
   // ══════════════════════
   // VIEW: FORMULÁRIO
@@ -343,6 +409,9 @@ export default function Sales() {
         .sv-row:hover { background:${isGlass?"rgba(255,255,255,0.15)":`${theme.primary}0d`} !important; }
         .btn-complete { background:linear-gradient(135deg,#22c55e,#16a34a); color:#fff; border:none; border-radius:8px; padding:6px 12px; cursor:pointer; font-size:0.82rem; font-weight:700; white-space:nowrap; box-shadow:0 4px 12px rgba(34,197,94,0.4); transition:transform 0.15s, box-shadow 0.15s; }
         .btn-complete:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(34,197,94,0.5); }
+        .btn-nfe { background:linear-gradient(135deg,#7c3aed,#6d28d9); color:#fff; border:none; border-radius:8px; padding:6px 12px; cursor:pointer; font-size:0.82rem; font-weight:700; white-space:nowrap; box-shadow:0 4px 12px rgba(124,58,237,0.4); transition:transform 0.15s, box-shadow 0.15s; }
+        .btn-nfe:hover { transform:translateY(-2px); box-shadow:0 6px 16px rgba(124,58,237,0.5); }
+        .btn-nfe:disabled { opacity:0.6; cursor:not-allowed; transform:none; }
         .number-link { cursor:pointer; text-decoration:underline; text-underline-offset:3px; text-decoration-style:dotted; transition:color 0.15s; }
         .number-link:hover { opacity:0.75; }
         @media (max-width:768px) { .card3d-sv { transform:none !important; } .card3d-sv:hover { transform:translateY(-6px) !important; } }
@@ -433,21 +502,14 @@ export default function Sales() {
 
                   return (
                     <tr key={o.id} className="sv-row" style={{ borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.15)":theme.border}` }}>
-                      {/* ✅ número clicável abre o arquivo */}
                       <td style={td}>
-                        <div
-                          className="number-link"
-                          style={{ fontWeight:700, color:theme.primary, display:"flex", alignItems:"center", gap:6 }}
-                          onClick={() => setFileModal(o)}
-                        >
+                        <div className="number-link" style={{ fontWeight:700, color:theme.primary, display:"flex", alignItems:"center", gap:6 }} onClick={() => setFileModal(o)}>
                           <span style={{ fontSize:"0.8rem" }}>{docIcon(o.number)}</span>
                           {o.number}
                         </div>
                         <div style={{ fontSize:"0.7rem", color:theme.textMuted, marginTop:2 }}>{docType(o.number)}</div>
                       </td>
-                      <td style={td}>
-                        <div style={{ fontWeight:600, color:theme.textPrimary }}>{o.client_name}</div>
-                      </td>
+                      <td style={td}><div style={{ fontWeight:600, color:theme.textPrimary }}>{o.client_name}</div></td>
                       {!isMobile&&<td style={td}><span style={{ color:theme.textMuted, fontSize:"0.82rem" }}>{sellerName}</span></td>}
                       {!isMobile&&(
                         <td style={td}>
@@ -494,12 +556,14 @@ export default function Sales() {
         </div>
       </div>
 
-      {/* ✅ MODAL ARQUIVO DA VENDA */}
+      {/* ══════════════════════════════════════
+          MODAL ARQUIVO DA VENDA
+      ══════════════════════════════════════ */}
       {fileModal && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={()=>setFileModal(null)}>
           <div style={{ ...modalBg, borderRadius:18, width:isMobile?"96%":"100%", maxWidth:620, maxHeight:"90vh", overflowY:"auto", boxShadow:isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
 
-            {/* cabeçalho do arquivo */}
+            {/* cabeçalho */}
             <div style={{ padding:"24px 28px 20px", borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}` }}>
               <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
                 <div>
@@ -510,7 +574,6 @@ export default function Sales() {
                       <div style={{ fontSize:"1.4rem", fontWeight:800, color:theme.primary, letterSpacing:"0.5px" }}>{fileModal.number}</div>
                     </div>
                   </div>
-                  {/* status badge */}
                   {(() => { const st = STATUS_MAP[fileModal.status]||STATUS_MAP.open; return (
                     <span style={{ display:"inline-block", padding:"4px 14px", borderRadius:20, fontSize:"0.78rem", fontWeight:700, background:st.bg, color:st.color, border:`1px solid ${st.color}44` }}>{st.label}</span>
                   ); })()}
@@ -524,10 +587,10 @@ export default function Sales() {
               {/* info geral */}
               <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr", gap:12, marginBottom:20 }}>
                 {[
-                  { label:"Cliente",         value:fileModal.client_name },
-                  { label:"Origem",          value:fileModal.origin==="quote"?"🧾 Orçamento":"✏️ Venda Direta" },
-                  { label:"Criado em",       value:fmtDate(fileModal.created_at) },
-                  { label:"Concluído em",    value:fileModal.finished_at ? fmtDate(fileModal.finished_at) : "—" },
+                  { label:"Cliente",      value:fileModal.client_name },
+                  { label:"Origem",       value:fileModal.origin==="quote"?"🧾 Orçamento":"✏️ Venda Direta" },
+                  { label:"Criado em",    value:fmtDate(fileModal.created_at) },
+                  { label:"Concluído em", value:fileModal.finished_at ? fmtDate(fileModal.finished_at) : "—" },
                   ...(fileModal.payment_terms ? [{ label:"Pagamento", value:fileModal.payment_terms }] : []),
                   ...(!isSeller ? [{ label:"Vendedor", value:teamUsers.find(u=>u.id===fileModal.user_id)?.name||"—" }] : []),
                 ].map((f,i)=>(
@@ -542,7 +605,6 @@ export default function Sales() {
               <div style={{ marginBottom:20 }}>
                 <div style={{ fontSize:"0.78rem", fontWeight:700, color:theme.textMuted, textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:10 }}>Itens</div>
                 <div style={{ border:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, borderRadius:12, overflow:"hidden" }}>
-                  {/* header */}
                   <div style={{ display:"grid", gridTemplateColumns:"3fr 1fr 1fr 1.5fr", gap:8, padding:"10px 14px", background:isGlass?"rgba(255,255,255,0.15)":theme.bgCard, borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.2)":theme.borderCard}`, fontSize:"0.72rem", fontWeight:700, color:theme.textMuted, textTransform:"uppercase" }}>
                     <span>Item</span><span>Qtd.</span><span>Preço</span><span style={{ textAlign:"right" }}>Total</span>
                   </div>
@@ -590,6 +652,80 @@ export default function Sales() {
                 </div>
               )}
 
+              {/* ── BLOCO NF-e ── só aparece para pedidos concluídos */}
+              {fileModal.status === "done" && (
+                <div style={{ padding:"16px 18px", background:isGlass?"rgba(124,58,237,0.08)":"rgba(124,58,237,0.08)", borderRadius:12, border:"1px solid rgba(124,58,237,0.25)", marginBottom:20 }}>
+                  <div style={{ fontSize:"0.78rem", fontWeight:700, color:"#7c3aed", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:12 }}>
+                    🧾 Nota Fiscal Eletrônica
+                  </div>
+
+                  {/* status atual da NF-e */}
+                  {fileModal.nfe_status ? (
+                    <div style={{ marginBottom:12 }}>
+                      {(() => {
+                        const nfeSt = NFE_STATUS_MAP[fileModal.nfe_status] || { label: fileModal.nfe_status, color:"#6b7280", icon:"📋" };
+                        return (
+                          <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                            <span style={{ display:"inline-flex", alignItems:"center", gap:6, padding:"5px 14px", borderRadius:20, fontSize:"0.8rem", fontWeight:700, background:`${nfeSt.color}22`, color:nfeSt.color, border:`1px solid ${nfeSt.color}44` }}>
+                              {nfeSt.icon} {nfeSt.label}
+                            </span>
+                            {fileModal.nfe_numero && (
+                              <span style={{ fontSize:"0.8rem", color:theme.textMuted }}>Nº {fileModal.nfe_numero}</span>
+                            )}
+                            {fileModal.nfe_chave && (
+                              <span style={{ fontSize:"0.7rem", color:theme.textMuted, wordBreak:"break-all" }}>
+                                Chave: {fileModal.nfe_chave}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize:"0.85rem", color:theme.textMuted, marginBottom:12 }}>
+                      Nenhuma nota fiscal emitida para este pedido.
+                    </div>
+                  )}
+
+                  {/* botões NF-e */}
+                  <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                    {/* Emitir — só se ainda não emitida ou foi rejeitada */}
+                    {(!fileModal.nfe_status || fileModal.nfe_status === "rejeitado") && (
+                      <button
+                        className="btn-nfe"
+                        disabled={nfeLoading}
+                        onClick={() => handleEmitirNfe(fileModal)}
+                      >
+                        {nfeLoading ? "⏳ Enviando..." : `🧾 Emitir ${fileModal.number?.startsWith("OS-") ? "NFS-e" : "NF-e"}`}
+                      </button>
+                    )}
+
+                    {/* Consultar status — se já enviada */}
+                    {fileModal.nfe_status && fileModal.nfe_status !== "autorizado" && (
+                      <button
+                        style={{ background:"rgba(124,58,237,0.12)", border:"1px solid rgba(124,58,237,0.3)", borderRadius:8, padding:"6px 12px", cursor:nfeLoading?"not-allowed":"pointer", fontSize:"0.82rem", fontWeight:600, color:"#7c3aed", opacity:nfeLoading?0.6:1 }}
+                        disabled={nfeLoading}
+                        onClick={() => handleConsultarNfe(fileModal)}
+                      >
+                        🔄 Consultar Status
+                      </button>
+                    )}
+
+                    {/* DANFE — só se autorizada */}
+                    {fileModal.nfe_status === "autorizado" && fileModal.nfe_chave && (
+                      <a
+                        href={`${API}/nfe/danfe/${fileModal.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{ display:"inline-flex", alignItems:"center", gap:6, background:"rgba(34,197,94,0.12)", border:"1px solid rgba(34,197,94,0.3)", borderRadius:8, padding:"6px 12px", fontSize:"0.82rem", fontWeight:600, color:"#22c55e", textDecoration:"none" }}
+                      >
+                        📄 Baixar DANFE
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* ações rápidas */}
               <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
                 {fileModal.status!=="done" && fileModal.status!=="cancelled" && (!isSeller||fileModal.user_id===myUserId) && (
@@ -609,6 +745,61 @@ export default function Sales() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          MODAL RESULTADO NF-e
+      ══════════════════════════════════════ */}
+      {nfeModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1100, backdropFilter:"blur(4px)" }} onClick={()=>setNfeModal(null)}>
+          <div style={{ ...modalBg, borderRadius:18, width:isMobile?"92%":"100%", maxWidth:460, padding:isMobile?"24px 20px":36, boxShadow:"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ textAlign:"center", marginBottom:24 }}>
+              <div style={{ fontSize:"3rem", marginBottom:12 }}>{nfeModal.sucesso ? "🧾" : "⚠️"}</div>
+              <h2 style={{ margin:"0 0 8px", fontSize:"1.2rem", fontWeight:700, color:nfeModal.sucesso?"#7c3aed":"#ef4444" }}>
+                {nfeModal.sucesso ? "Nota Fiscal Enviada" : "Erro na Emissão"}
+              </h2>
+              <p style={{ color:theme.textMuted, margin:0, fontSize:"0.88rem" }}>{nfeModal.msg}</p>
+            </div>
+
+            {nfeModal.sucesso && (
+              <div style={{ background:"rgba(124,58,237,0.08)", border:"1px solid rgba(124,58,237,0.2)", borderRadius:12, padding:"16px 18px", marginBottom:20 }}>
+                {nfeModal.tipo && (
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8, fontSize:"0.88rem" }}>
+                    <span style={{ color:theme.textMuted }}>Tipo</span>
+                    <span style={{ color:"#7c3aed", fontWeight:600 }}>{nfeModal.tipo}</span>
+                  </div>
+                )}
+                {nfeModal.status && (
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8, fontSize:"0.88rem" }}>
+                    <span style={{ color:theme.textMuted }}>Status</span>
+                    <span style={{ color:theme.textPrimary, fontWeight:600 }}>
+                      {(NFE_STATUS_MAP[nfeModal.status]||{icon:"📋",label:nfeModal.status}).icon} {(NFE_STATUS_MAP[nfeModal.status]||{label:nfeModal.status}).label}
+                    </span>
+                  </div>
+                )}
+                {nfeModal.numero && (
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8, fontSize:"0.88rem" }}>
+                    <span style={{ color:theme.textMuted }}>Número</span>
+                    <span style={{ color:theme.textPrimary, fontWeight:600 }}>{nfeModal.numero}</span>
+                  </div>
+                )}
+                {nfeModal.chave && (
+                  <div style={{ fontSize:"0.75rem", color:theme.textMuted, marginTop:8, wordBreak:"break-all" }}>
+                    <span style={{ fontWeight:600 }}>Chave: </span>{nfeModal.chave}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {!nfeModal.sucesso && nfeModal.erros && (
+              <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:12, padding:"14px 16px", marginBottom:20, fontSize:"0.82rem", color:"#f87171" }}>
+                {typeof nfeModal.erros === "string" ? nfeModal.erros : JSON.stringify(nfeModal.erros, null, 2)}
+              </div>
+            )}
+
+            <button style={{ ...btnSecondary, width:"100%" }} onClick={()=>setNfeModal(null)}>Fechar</button>
           </div>
         </div>
       )}
