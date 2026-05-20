@@ -65,7 +65,6 @@ function FloatingNumbers() {
 // ─────────────────────────────────────────────────────────────
 function NichoSelector({ selected, onSelect }) {
   const nichos = Object.values(NICHOS)
-
   return (
     <div>
       <label style={fieldLabel}>Tipo de negócio</label>
@@ -73,44 +72,21 @@ function NichoSelector({ selected, onSelect }) {
         {nichos.map(n => {
           const isSelected = selected === n.key
           return (
-            <button
-              key={n.key}
-              type="button"
-              onClick={() => onSelect(n.key)}
-              style={{
-                padding:"12px 10px",
-                borderRadius:12,
-                cursor:"pointer",
-                border: isSelected ? `1.5px solid ${n.color}` : "1px solid rgba(255,255,255,0.1)",
-                background: isSelected
-                  ? `linear-gradient(135deg, ${n.color}22, ${n.color}11)`
-                  : "rgba(255,255,255,0.04)",
-                backdropFilter:"blur(8px)",
-                textAlign:"center",
-                transition:"all 0.2s",
-                display:"flex",
-                flexDirection:"column",
-                alignItems:"center",
-                gap:4,
-              }}
-            >
+            <button key={n.key} type="button" onClick={() => onSelect(n.key)} style={{
+              padding:"12px 10px", borderRadius:12, cursor:"pointer",
+              border: isSelected ? `1.5px solid ${n.color}` : "1px solid rgba(255,255,255,0.1)",
+              background: isSelected ? `linear-gradient(135deg, ${n.color}22, ${n.color}11)` : "rgba(255,255,255,0.04)",
+              backdropFilter:"blur(8px)", textAlign:"center", transition:"all 0.2s",
+              display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+            }}>
               <span style={{ fontSize:"1.4rem" }}>{n.icon}</span>
-              <span style={{
-                fontSize:"11px", fontWeight:600,
-                color: isSelected ? n.color : "rgba(255,255,255,0.6)",
-                lineHeight:1.3
-              }}>{n.label}</span>
+              <span style={{ fontSize:"11px", fontWeight:600, color: isSelected ? n.color : "rgba(255,255,255,0.6)", lineHeight:1.3 }}>{n.label}</span>
             </button>
           )
         })}
       </div>
       {selected && (
-        <div style={{
-          marginTop:10, padding:"10px 14px", borderRadius:10,
-          background:`rgba(255,255,255,0.04)`,
-          border:"1px solid rgba(255,255,255,0.08)",
-          fontSize:12, color:"rgba(255,255,255,0.45)", textAlign:"center"
-        }}>
+        <div style={{ marginTop:10, padding:"10px 14px", borderRadius:10, background:`rgba(255,255,255,0.04)`, border:"1px solid rgba(255,255,255,0.08)", fontSize:12, color:"rgba(255,255,255,0.45)", textAlign:"center" }}>
           {NICHOS[selected]?.icon} {NICHOS[selected]?.desc}
         </div>
       )}
@@ -122,37 +98,53 @@ function NichoSelector({ selected, onSelect }) {
 // LOGIN PRINCIPAL
 // ─────────────────────────────────────────────────────────────
 export default function Login() {
-  const navigate          = useNavigate()
-  const [searchParams]    = useSearchParams()
-  const { updateNicho }   = useNicho()
+  const navigate        = useNavigate()
+  const [searchParams]  = useSearchParams()
+  const { updateNicho } = useNicho()
 
-  const [screen, setScreen]               = useState("choose")
-  const [name, setName]                   = useState("")
-  const [companyName, setCompanyName]     = useState("")
-  const [email, setEmail]                 = useState("")
-  const [password, setPassword]           = useState("")
-  const [confirmPassword, setConfirmPassword] = useState("")
-  const [unverifiedEmail, setUnverifiedEmail] = useState("")
-  const [selectedNicho, setSelectedNicho] = useState("generic") // ← NOVO
-  const [loading, setLoading]             = useState(false)
-  const [error, setError]                 = useState("")
-  const [success, setSuccess]             = useState("")
+  const [screen, setScreen]                     = useState("choose")
+  const [name, setName]                         = useState("")
+  const [companyName, setCompanyName]           = useState("")
+  const [email, setEmail]                       = useState("")
+  const [password, setPassword]                 = useState("")
+  const [confirmPassword, setConfirmPassword]   = useState("")
+  const [unverifiedEmail, setUnverifiedEmail]   = useState("")
+  const [selectedNicho, setSelectedNicho]       = useState("generic")
+  const [loading, setLoading]                   = useState(false)
+  const [error, setError]                       = useState("")
+  const [success, setSuccess]                   = useState("")
 
   useEffect(() => {
     if (localStorage.getItem("token")) { navigate("/dashboard"); return }
-    const verifyToken = searchParams.get("token")
-    const resetToken  = searchParams.get("reset")
-    if (verifyToken) handleVerifyEmail(verifyToken)
-    if (resetToken)  setScreen("reset-password")
+
+    // ─────────────────────────────────────────────────────────
+    // CORREÇÃO 1: O email_service.py gera links assim:
+    //   verify: APP_URL + /verify-email?token=TOKEN
+    //   reset:  APP_URL + /reset-password?token=TOKEN
+    //
+    // Ambos usam o parâmetro "token" — não "reset".
+    // Diferenciamos pelo pathname atual.
+    // ─────────────────────────────────────────────────────────
+    const token    = searchParams.get("token")
+    const pathname = window.location.pathname
+
+    if (token && pathname.includes("verify-email")) {
+      handleVerifyEmail(token)
+    } else if (token && pathname.includes("reset-password")) {
+      // Token de reset válido — vai para a tela de redefinição
+      setScreen("reset-password")
+    }
   }, [])
 
   async function handleVerifyEmail(token) {
     setScreen("verifying")
     try {
-      const res = await fetch(`${API}/verify-email?token=${token}`)
+      const res = await fetch(`${API}/verify-email?token=${encodeURIComponent(token)}`)
       if (res.ok) setScreen("verify-success")
       else        setScreen("verify-error")
-    } catch { setScreen("verify-error") }
+    } catch {
+      setScreen("verify-error")
+    }
   }
 
   function resetForm() {
@@ -171,7 +163,6 @@ export default function Login() {
     try {
       const { ok, data } = await loginUser(email, password)
       if (ok) {
-        // Restaura nicho salvo no perfil (se vier do backend, use data.nicho)
         if (data?.nicho) updateNicho(data.nicho)
         navigate("/dashboard")
       } else if (data.email_unverified) {
@@ -181,7 +172,7 @@ export default function Login() {
         setError(data.msg || "Email ou senha inválidos")
       }
     } catch { setError("Erro ao conectar com o servidor") }
-    finally { setLoading(false) }
+    finally  { setLoading(false) }
   }
 
   // ── CADASTRO PJ ──
@@ -193,24 +184,23 @@ export default function Login() {
     if (password.length < 6) { setError("Senha mínimo 6 caracteres"); return }
     setLoading(true); setError("")
     try {
-      // Passa o nicho para o backend junto com o cadastro
       const res  = await registerUser(email, password, name, companyName, selectedNicho)
       const data = await res.json()
       if (res.ok) {
-        updateNicho(selectedNicho) // salva no contexto e localStorage
+        updateNicho(selectedNicho)
         setUnverifiedEmail(email)
         setScreen("verify-pending")
       } else {
         setError(data.msg || "Erro ao criar conta")
       }
     } catch { setError("Erro ao conectar com o servidor") }
-    finally { setLoading(false) }
+    finally  { setLoading(false) }
   }
 
   // ── CADASTRO PF ──
   const handleRegisterPersonal = async (e) => {
     e.preventDefault()
-    if (!name.trim())  { setError("Nome é obrigatório"); return }
+    if (!name.trim()) { setError("Nome é obrigatório"); return }
     if (password !== confirmPassword) { setError("As senhas não coincidem"); return }
     if (password.length < 6) { setError("Senha mínimo 6 caracteres"); return }
     setLoading(true); setError("")
@@ -225,18 +215,23 @@ export default function Login() {
         setError(data.msg || "Erro ao criar conta")
       }
     } catch { setError("Erro ao conectar com o servidor") }
-    finally { setLoading(false) }
+    finally  { setLoading(false) }
   }
 
   // ── REENVIAR VERIFICAÇÃO ──
   async function handleResendVerification() {
-    setLoading(true)
+    setLoading(true); setError(""); setSuccess("")
     try {
-      const res  = await fetch(`${API}/resend-verification`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ email: unverifiedEmail }) })
+      const res  = await fetch(`${API}/resend-verification`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ email: unverifiedEmail }),
+      })
       const data = await res.json()
-      setSuccess(data.msg || "Email reenviado!")
-    } catch { setError("Erro ao reenviar email") }
-    finally { setLoading(false) }
+      if (res.ok) setSuccess(data.msg || "Email reenviado!")
+      else        setError(data.msg   || "Erro ao reenviar")
+    } catch { setError("Erro ao conectar com o servidor") }
+    finally  { setLoading(false) }
   }
 
   // ── ESQUECEU SENHA ──
@@ -244,27 +239,46 @@ export default function Login() {
     e.preventDefault()
     setLoading(true); setError(""); setSuccess("")
     try {
-      const res  = await fetch(`${API}/forgot-password`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ email }) })
+      const res  = await fetch(`${API}/forgot-password`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ email }),
+      })
       const data = await res.json()
-      setSuccess(data.msg)
+      if (res.ok) setSuccess(data.msg)
+      else        setError(data.msg || "Erro ao enviar email")
     } catch { setError("Erro ao conectar com o servidor") }
-    finally { setLoading(false) }
+    finally  { setLoading(false) }
   }
 
   // ── REDEFINIR SENHA ──
+  // CORREÇÃO 2: O parâmetro na URL é "token", não "reset"
   async function handleResetPassword(e) {
     e.preventDefault()
     if (password !== confirmPassword) { setError("As senhas não coincidem"); return }
     if (password.length < 6) { setError("Senha mínimo 6 caracteres"); return }
     setLoading(true); setError("")
-    const resetToken = searchParams.get("reset")
+
+    // ← CORRIGIDO: era searchParams.get("reset"), agora é "token"
+    const resetToken = searchParams.get("token")
+
+    if (!resetToken) {
+      setError("Token inválido. Solicite um novo link de recuperação.")
+      setLoading(false)
+      return
+    }
+
     try {
-      const res  = await fetch(`${API}/reset-password`, { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ token:resetToken, password }) })
+      const res  = await fetch(`${API}/reset-password`, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ token: resetToken, password }),
+      })
       const data = await res.json()
       if (res.ok) setScreen("reset-success")
-      else setError(data.msg || "Erro ao redefinir senha")
+      else        setError(data.msg || "Token inválido ou expirado")
     } catch { setError("Erro ao conectar com o servidor") }
-    finally { setLoading(false) }
+    finally  { setLoading(false) }
   }
 
   const focus = (e) => { e.target.style.borderColor="rgba(99,102,241,0.6)"; e.target.style.background="rgba(255,255,255,0.1)" }
@@ -410,7 +424,7 @@ export default function Login() {
           </div>
         )}
 
-        {/* ══ CADASTRO PJ — COM SELEÇÃO DE NICHO ══ */}
+        {/* ══ CADASTRO PJ ══ */}
         {screen === "register-business" && (
           <div style={card}>
             <Corners color="#6366f1" />
@@ -448,10 +462,7 @@ export default function Login() {
                 <label style={fieldLabel}>Confirmar senha</label>
                 <input type="password" placeholder="••••••••" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} style={inputStyle} onFocus={focus} onBlur={blur} required />
               </div>
-
-              {/* ── SELETOR DE NICHO ── */}
               <NichoSelector selected={selectedNicho} onSelect={setSelectedNicho} />
-
               <div style={{ background:"rgba(99,102,241,0.06)", border:"1px solid rgba(99,102,241,0.15)", borderRadius:10, padding:"12px 16px", fontSize:"0.8rem", color:"rgba(255,255,255,0.5)" }}>
                 ✅ Inclui: Vendas · Estoque · Equipe · Orçamentos · Clientes · Financeiro
               </div>
@@ -483,7 +494,7 @@ export default function Login() {
                 📌 Clique no link do email para ativar sua conta.<br/>
                 Verifique também a pasta de <strong style={{ color:"rgba(255,255,255,0.6)" }}>spam</strong>.
               </div>
-              {error   && <div style={{ ...alertError, marginBottom:12 }}>⚠️ {error}</div>}
+              {error   && <div style={{ ...alertError,   marginBottom:12 }}>⚠️ {error}</div>}
               {success && <div style={{ ...alertSuccess, marginBottom:12 }}>✅ {success}</div>}
               <button onClick={handleResendVerification} disabled={loading}
                 style={{ width:"100%", padding:"12px", borderRadius:50, border:"1px solid rgba(245,158,11,0.3)", background:"rgba(245,158,11,0.08)", color:"#f59e0b", fontWeight:600, cursor:loading?"not-allowed":"pointer", fontSize:"0.9rem", marginBottom:12, opacity:loading?0.6:1 }}>
@@ -634,8 +645,8 @@ function Corners({ color = "rgba(99,102,241,0.7)" }) {
   const base = { position:"absolute", width:"20px", height:"20px" }
   return (
     <>
-      <div style={{ ...base, top:0, left:0,  borderTop:`2px solid ${color}`, borderLeft:`2px solid ${color}` }} />
-      <div style={{ ...base, top:0, right:0, borderTop:`2px solid ${color}`, borderRight:`2px solid ${color}` }} />
+      <div style={{ ...base, top:0,    left:0,  borderTop:`2px solid ${color}`,    borderLeft:`2px solid ${color}` }} />
+      <div style={{ ...base, top:0,    right:0, borderTop:`2px solid ${color}`,    borderRight:`2px solid ${color}` }} />
       <div style={{ ...base, bottom:0, left:0,  borderBottom:`2px solid ${color}`, borderLeft:`2px solid ${color}` }} />
       <div style={{ ...base, bottom:0, right:0, borderBottom:`2px solid ${color}`, borderRight:`2px solid ${color}` }} />
     </>
@@ -646,27 +657,27 @@ function choiceBtn(color) {
 }
 
 // ── Estilos ──
-const wrapper      = { position:"relative", minHeight:"100vh", overflow:"hidden", fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", alignItems:"center", justifyContent:"center" }
-const cityBg       = { position:"fixed", inset:0, backgroundImage:`url("https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1920&q=80")`, backgroundSize:"cover", backgroundPosition:"center", filter:"blur(3px) brightness(0.5)", transform:"scale(1.05)", zIndex:0 }
-const overlay      = { position:"fixed", inset:0, background:`linear-gradient(180deg,rgba(2,6,23,0.7) 0%,rgba(2,6,23,0.4) 50%,rgba(2,6,23,0.8) 100%),radial-gradient(ellipse at 50% 50%,rgba(99,102,241,0.12) 0%,transparent 70%)`, zIndex:1 }
-const centerLayout = { position:"relative", zIndex:2, display:"flex", flexDirection:"column", alignItems:"center", gap:"28px", width:"100%", maxWidth:"520px", padding:"40px 20px" }
-const branding     = { textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center" }
-const logoStyle    = { width:"300px", height:"300px", objectFit:"contain" }
-const brandTitle   = { fontSize:"32px", fontWeight:"400", color:"white", margin:"0 0 8px 0", letterSpacing:"8px", fontFamily:"'Bodoni Moda','Bodoni MT',Georgia,serif" }
-const brandSubtitle= { fontSize:"13px", color:"rgba(255,255,255,0.45)", margin:0, letterSpacing:"1px", fontFamily:"'Times New Roman',Times,serif" }
-const card         = { width:"100%", position:"relative", background:"rgba(15,20,40,0.0)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.08)", borderTop:"1px solid rgba(210,210,255,0.55)", borderLeft:"1px solid rgba(180,180,240,0.35)", padding:"40px", clipPath:"polygon(24px 0%,100% 0%,100% calc(100% - 24px),calc(100% - 24px) 100%,0% 100%,0% 24px)", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.15),inset 1px 0 0 rgba(255,255,255,0.08),0 20px 60px rgba(0,0,0,0.5)" }
-const cardHeader   = { marginBottom:"20px", textAlign:"center" }
-const cardTitle    = { fontSize:"26px", fontWeight:"700", color:"white", margin:"0 0 6px 0", letterSpacing:"-0.5px" }
-const cardSub      = { fontSize:"13px", color:"rgba(255,255,255,0.4)", margin:0 }
-const divider      = { height:"1px", background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)", marginBottom:"28px" }
-const alertError   = { background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", color:"#f87171", padding:"11px 14px", borderRadius:"8px", fontSize:"13px", marginBottom:"18px" }
-const alertSuccess = { background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.2)", color:"#34d399", padding:"11px 14px", borderRadius:"8px", fontSize:"13px", marginBottom:"18px" }
-const formBody     = { display:"flex", flexDirection:"column", gap:"16px" }
-const fieldGroup   = { display:"flex", flexDirection:"column", gap:"7px" }
-const fieldLabel   = { fontSize:"12px", fontWeight:"500", color:"rgba(255,255,255,0.6)", letterSpacing:"0.5px" }
-const inputStyle   = { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:"50px", padding:"13px 20px", color:"white", fontSize:"14px", outline:"none", transition:"all 0.2s", width:"100%", boxSizing:"border-box", colorScheme:"dark" }
-const submitBtn    = { width:"100%", padding:"14px", borderRadius:"50px", border:"none", background:"white", marginTop:"8px", transition:"all 0.2s", boxShadow:"0 4px 20px rgba(255,255,255,0.15)", cursor:"pointer" }
-const toggleRow    = { display:"flex", justifyContent:"center", alignItems:"center", gap:"8px", marginTop:"20px" }
-const toggleText   = { fontSize:"13px", color:"rgba(255,255,255,0.4)" }
-const toggleBtn    = { background:"none", border:"none", fontSize:"13px", fontWeight:"600", cursor:"pointer", padding:0 }
-const backBtn      = { background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"rgba(255,255,255,0.6)", padding:"6px 12px", cursor:"pointer", fontSize:13, flexShrink:0 }
+const wrapper       = { position:"relative", minHeight:"100vh", overflow:"hidden", fontFamily:"'Inter','Segoe UI',sans-serif", display:"flex", alignItems:"center", justifyContent:"center" }
+const cityBg        = { position:"fixed", inset:0, backgroundImage:`url("https://images.unsplash.com/photo-1477959858617-67f85cf4f1df?w=1920&q=80")`, backgroundSize:"cover", backgroundPosition:"center", filter:"blur(3px) brightness(0.5)", transform:"scale(1.05)", zIndex:0 }
+const overlay       = { position:"fixed", inset:0, background:`linear-gradient(180deg,rgba(2,6,23,0.7) 0%,rgba(2,6,23,0.4) 50%,rgba(2,6,23,0.8) 100%),radial-gradient(ellipse at 50% 50%,rgba(99,102,241,0.12) 0%,transparent 70%)`, zIndex:1 }
+const centerLayout  = { position:"relative", zIndex:2, display:"flex", flexDirection:"column", alignItems:"center", gap:"28px", width:"100%", maxWidth:"520px", padding:"40px 20px" }
+const branding      = { textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center" }
+const logoStyle     = { width:"300px", height:"300px", objectFit:"contain" }
+const brandTitle    = { fontSize:"32px", fontWeight:"400", color:"white", margin:"0 0 8px 0", letterSpacing:"8px", fontFamily:"'Bodoni Moda','Bodoni MT',Georgia,serif" }
+const brandSubtitle = { fontSize:"13px", color:"rgba(255,255,255,0.45)", margin:0, letterSpacing:"1px", fontFamily:"'Times New Roman',Times,serif" }
+const card          = { width:"100%", position:"relative", background:"rgba(15,20,40,0.0)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.08)", borderTop:"1px solid rgba(210,210,255,0.55)", borderLeft:"1px solid rgba(180,180,240,0.35)", padding:"40px", clipPath:"polygon(24px 0%,100% 0%,100% calc(100% - 24px),calc(100% - 24px) 100%,0% 100%,0% 24px)", boxShadow:"inset 0 1px 0 rgba(255,255,255,0.15),inset 1px 0 0 rgba(255,255,255,0.08),0 20px 60px rgba(0,0,0,0.5)" }
+const cardHeader    = { marginBottom:"20px", textAlign:"center" }
+const cardTitle     = { fontSize:"26px", fontWeight:"700", color:"white", margin:"0 0 6px 0", letterSpacing:"-0.5px" }
+const cardSub       = { fontSize:"13px", color:"rgba(255,255,255,0.4)", margin:0 }
+const divider       = { height:"1px", background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.15),transparent)", marginBottom:"28px" }
+const alertError    = { background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", color:"#f87171", padding:"11px 14px", borderRadius:"8px", fontSize:"13px", marginBottom:"18px" }
+const alertSuccess  = { background:"rgba(16,185,129,0.1)", border:"1px solid rgba(16,185,129,0.2)", color:"#34d399", padding:"11px 14px", borderRadius:"8px", fontSize:"13px", marginBottom:"18px" }
+const formBody      = { display:"flex", flexDirection:"column", gap:"16px" }
+const fieldGroup    = { display:"flex", flexDirection:"column", gap:"7px" }
+const fieldLabel    = { fontSize:"12px", fontWeight:"500", color:"rgba(255,255,255,0.6)", letterSpacing:"0.5px" }
+const inputStyle    = { background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:"50px", padding:"13px 20px", color:"white", fontSize:"14px", outline:"none", transition:"all 0.2s", width:"100%", boxSizing:"border-box", colorScheme:"dark" }
+const submitBtn     = { width:"100%", padding:"14px", borderRadius:"50px", border:"none", background:"white", marginTop:"8px", transition:"all 0.2s", boxShadow:"0 4px 20px rgba(255,255,255,0.15)", cursor:"pointer" }
+const toggleRow     = { display:"flex", justifyContent:"center", alignItems:"center", gap:"8px", marginTop:"20px" }
+const toggleText    = { fontSize:"13px", color:"rgba(255,255,255,0.4)" }
+const toggleBtn     = { background:"none", border:"none", fontSize:"13px", fontWeight:"600", cursor:"pointer", padding:0 }
+const backBtn       = { background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:8, color:"rgba(255,255,255,0.6)", padding:"6px 12px", cursor:"pointer", fontSize:13, flexShrink:0 }
