@@ -10,6 +10,7 @@ import TransactionForm from "../components/transactions/TransactionForm";
 import TransactionList from "../components/transactions/TransactionList";
 import logoGif from "../assets/video.gif";
 import topoDashboard from "../assets/topodashboard.jpg";
+import fundoRestaura from "../assets/fundorestaura.jpg";
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   ResponsiveContainer, Tooltip, Legend
@@ -73,7 +74,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
   const expense = filtered.filter(t => t.type === "expense").reduce((a, b) => a + b.amount, 0);
   const balance = income - expense;
 
-  // mês anterior para comparação
   const prevFiltered = transactions.filter(t =>
     t.date?.startsWith(prevYear) && t.date?.substring(5, 7) === prevMonth
   );
@@ -82,7 +82,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
   const diffIncome  = prevIncome  > 0 ? ((income  - prevIncome)  / prevIncome  * 100).toFixed(1) : null;
   const diffExpense = prevExpense > 0 ? ((expense - prevExpense) / prevExpense * 100).toFixed(1) : null;
 
-  // contas próximas (próximos 7 dias)
   const today   = new Date(); today.setHours(0, 0, 0, 0);
   const in7days = new Date(today); in7days.setDate(today.getDate() + 7);
   const upcomingBills = bills.filter(b => {
@@ -96,7 +95,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
     return new Date(b.due_date + "T00:00:00") < today;
   });
 
-  // categorias de gasto do mês
   const catMap = {};
   filtered.filter(t => t.type === "expense").forEach(t => {
     const cat = t.category || "Outros";
@@ -104,7 +102,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
     catMap[cat] += t.amount;
   });
   const topCats = Object.entries(catMap).sort((a, b) => b[1] - a[1]).slice(0, 5);
-
   const years = [...new Set(transactions.map(t => t.date?.substring(0, 4)).filter(Boolean))].sort();
 
   if (loading) return <p style={{ color: theme.textMuted, padding: 20 }}>Carregando...</p>;
@@ -121,16 +118,12 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
 
   return (
     <div style={{ padding: isMobile ? "16px" : "32px 40px" }}>
-
-      {/* SAUDAÇÃO */}
       <div style={{ marginBottom: 24 }}>
         <h2 style={{ color: theme.textPrimary, margin: "0 0 4px", fontSize: isMobile ? 20 : 26, fontWeight: 700 }}>
           👋 Olá, {userName}!
         </h2>
         <p style={{ color: theme.textMuted, margin: 0, fontSize: 14 }}>Aqui está sua situação financeira</p>
       </div>
-
-      {/* FILTROS */}
       <div style={{ display: "flex", gap: 10, marginBottom: 24, flexWrap: "wrap" }}>
         <select value={filterYear} onChange={e => setFilterYear(e.target.value)} style={inputSt}>
           <option value="">Todos os anos</option>
@@ -146,8 +139,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
           <button onClick={() => { setFilterYear(""); setFilterMonth(""); }} style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444", border: "1px solid rgba(239,68,68,0.3)", padding: "8px 14px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>✕ Limpar</button>
         )}
       </div>
-
-      {/* ALERTAS */}
       {overdueBills.length > 0 && (
         <div style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 14, padding: "14px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
           <span style={{ fontSize: "1.3rem" }}>🔴</span>
@@ -157,8 +148,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
           </div>
         </div>
       )}
-
-      {/* CARDS PRINCIPAIS */}
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr", gap: 16, marginBottom: 28 }}>
         <div style={card(theme.income)}>
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.6px", color: theme.textMuted, fontWeight: 700 }}>💚 Receitas</div>
@@ -170,7 +159,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
           )}
           <div style={{ fontSize: 12, color: theme.textMuted }}>{filtered.filter(t => t.type === "income").length} entradas</div>
         </div>
-
         <div style={card(theme.expense)}>
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.6px", color: theme.textMuted, fontWeight: 700 }}>🔴 Gastos</div>
           <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: theme.expense, margin: "8px 0 4px" }}>- {fmt(expense)}</div>
@@ -181,7 +169,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
           )}
           <div style={{ fontSize: 12, color: theme.textMuted }}>{filtered.filter(t => t.type === "expense").length} saídas</div>
         </div>
-
         <div style={card(balance >= 0 ? theme.accent : theme.expense)}>
           <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.6px", color: theme.textMuted, fontWeight: 700 }}>💰 Saldo</div>
           <div style={{ fontSize: isMobile ? 22 : 28, fontWeight: 700, color: balance >= 0 ? theme.income : theme.expense, margin: "8px 0 4px" }}>{fmt(balance)}</div>
@@ -190,8 +177,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
           </div>
         </div>
       </div>
-
-      {/* CONTAS PRÓXIMAS */}
       {upcomingBills.length > 0 && (
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.textMuted, marginBottom: 14 }}>📅 Contas nos próximos 7 dias</div>
@@ -214,8 +199,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
           </div>
         </div>
       )}
-
-      {/* TOP CATEGORIAS DE GASTO */}
       {topCats.length > 0 && (
         <div style={{ marginBottom: 28 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.textMuted, marginBottom: 14 }}>🏷️ Maiores gastos por categoria</div>
@@ -235,8 +218,6 @@ function PersonalDashboard({ theme, isMobile, isGlass, token }) {
           </div>
         </div>
       )}
-
-      {/* ÚLTIMAS TRANSAÇÕES */}
       <div style={{ marginBottom: 28 }}>
         <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: theme.textMuted, marginBottom: 14 }}>🧾 Últimas transações</div>
         <div style={{ background: isGlass ? "rgba(255,255,255,0.18)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.35)" : theme.borderCard}`, borderRadius: 16, overflow: "hidden", backdropFilter: isGlass ? "blur(18px)" : "none" }}>
@@ -285,7 +266,6 @@ function SellerDashboard({ theme, isMobile, isGlass, token }) {
   const [quotes, setQuotes]   = useState([]);
   const [orders, setOrders]   = useState([]);
   const [loading, setLoading] = useState(true);
-  const userName = localStorage.getItem("name") || "Vendedor";
   const myUserId = parseInt(localStorage.getItem("user_id") || "0");
 
   useEffect(() => {
@@ -317,7 +297,7 @@ function SellerDashboard({ theme, isMobile, isGlass, token }) {
   const totalSold      = orders.filter(o => o.status === "done").reduce((s, o) => s + o.total, 0);
   const totalPending   = orders.filter(o => o.status !== "done" && o.status !== "cancelled").reduce((s, o) => s + o.total, 0);
 
-  const c = (color) => ({ background: isGlass ? "rgba(255,255,255,0.22)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.4)" : theme.borderCard}`, borderTop: `3px solid ${color}`, borderRadius: 16, padding: "20px 18px", backdropFilter: isGlass ? "blur(18px)" : "none" });
+  const c   = (color) => ({ background: isGlass ? "rgba(255,255,255,0.22)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.4)" : theme.borderCard}`, borderTop: `3px solid ${color}`, borderRadius: 16, padding: "20px 18px", backdropFilter: isGlass ? "blur(18px)" : "none" });
   const lbl = { fontSize: 11, textTransform: "uppercase", letterSpacing: "0.6px", fontWeight: 700, color: theme.textMuted };
   const val = (color) => ({ color, fontSize: isMobile ? 20 : 26, fontWeight: 700, margin: "8px 0 4px" });
   const sub = { fontSize: 12, color: theme.textMuted };
@@ -327,7 +307,7 @@ function SellerDashboard({ theme, isMobile, isGlass, token }) {
     <div style={{ padding: isMobile ? "16px" : "32px 40px" }}>
       <div style={{ marginBottom: 28 }}>
         <h2 style={{ color: theme.textPrimary, margin: "0 0 4px", fontSize: isMobile ? 20 : 26, fontWeight: 700 }}>👋 Olá, {localStorage.getItem("name") || "Vendedor"}!</h2>
-        <p style={{ color: theme.textMuted, margin: 0, fontSize: 14 }}>Aqui está o resumo das suas atividades de vendas</p>
+        <p style={{ color: theme.textMuted, margin: 0, fontSize: 14 }}>Resumo das suas atividades de vendas</p>
       </div>
       <p style={sec}>🧾 Orçamentos</p>
       <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(3,1fr)", gap: 16, marginBottom: 28 }}>
@@ -348,32 +328,6 @@ function SellerDashboard({ theme, isMobile, isGlass, token }) {
           <div style={{ color: "#3b82f6", fontWeight: 700, fontSize: isMobile ? 18 : 22 }}>{fmt(totalPending)}</div>
         </div>
       )}
-      <p style={sec}>📋 Últimas Vendas</p>
-      <div style={{ background: isGlass ? "rgba(255,255,255,0.18)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.35)" : theme.borderCard}`, borderRadius: 16, overflow: "hidden" }}>
-        {orders.length === 0 ? (
-          <div style={{ padding: 40, textAlign: "center", color: theme.textMuted }}><div style={{ fontSize: "2rem", marginBottom: 8 }}>📭</div><p>Nenhuma venda ainda</p></div>
-        ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
-              <thead><tr style={{ background: isGlass ? "rgba(255,255,255,0.1)" : theme.bgCard, borderBottom: `1px solid ${theme.borderCard}` }}>{["Número","Cliente","Status","Total"].map(h=><th key={h} style={{ textAlign:"left", padding:"12px 16px", color:theme.textMuted, fontWeight:600, fontSize:"0.75rem", textTransform:"uppercase", whiteSpace:"nowrap" }}>{h}</th>)}</tr></thead>
-              <tbody>
-                {orders.slice(0, 8).map(o => {
-                  const sc = { open:{color:"#3b82f6",label:"Aberta"}, in_progress:{color:"#f59e0b",label:"Em andamento"}, done:{color:"#22c55e",label:"Concluída"}, cancelled:{color:"#ef4444",label:"Cancelada"} };
-                  const st = sc[o.status] || sc.open;
-                  return (
-                    <tr key={o.id} style={{ borderBottom: `1px solid ${theme.borderCard}` }}>
-                      <td style={{ padding:"12px 16px", fontWeight:700, color:theme.primary }}>{o.number}</td>
-                      <td style={{ padding:"12px 16px", color:theme.textPrimary }}>{o.client_name}</td>
-                      <td style={{ padding:"12px 16px" }}><span style={{ background:`${st.color}22`, color:st.color, border:`1px solid ${st.color}44`, borderRadius:20, padding:"3px 10px", fontSize:"0.75rem", fontWeight:600 }}>{st.label}</span></td>
-                      <td style={{ padding:"12px 16px", fontWeight:700, color:"#22c55e" }}>{fmt(o.total)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -421,23 +375,6 @@ function StockDashboard({ theme, isMobile, isGlass, token }) {
         <div style={c("#22c55e")}><div style={lbl}>Ativos</div><div style={val("#22c55e")}>{products.filter(p=>p.active).length}</div><div style={sub}>disponíveis</div></div>
         <div style={{ ...c("#ef4444"), gridColumn: isMobile ? "1 / -1" : "auto" }}><div style={lbl}>⚠️ Alertas</div><div style={val("#ef4444")}>{alerts.length}</div><div style={sub}>estoque baixo</div></div>
       </div>
-      {alerts.length > 0 && (
-        <div style={{ background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 16, overflow: "hidden", marginBottom: 28 }}>
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem" }}>
-            <thead><tr style={{ borderBottom: "1px solid rgba(239,68,68,0.15)" }}>{["Produto","Estoque Atual","Mínimo","Situação"].map(h=><th key={h} style={{ textAlign:"left", padding:"12px 16px", color:theme.textMuted, fontWeight:600, fontSize:"0.75rem", textTransform:"uppercase" }}>{h}</th>)}</tr></thead>
-            <tbody>
-              {alerts.map(p=>(
-                <tr key={p.id} style={{ borderBottom:"1px solid rgba(239,68,68,0.1)" }}>
-                  <td style={{ padding:"12px 16px", color:theme.textPrimary, fontWeight:600 }}>{p.name}</td>
-                  <td style={{ padding:"12px 16px", color:"#ef4444", fontWeight:700 }}>{p.stock_qty} {p.unit}</td>
-                  <td style={{ padding:"12px 16px", color:theme.textMuted }}>{p.stock_min} {p.unit}</td>
-                  <td style={{ padding:"12px 16px" }}><span style={{ background:"rgba(239,68,68,0.15)", color:"#ef4444", border:"1px solid rgba(239,68,68,0.3)", borderRadius:20, padding:"3px 10px", fontSize:"0.75rem", fontWeight:600 }}>{p.stock_qty===0?"🚫 Sem estoque":"⚠️ Estoque baixo"}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </div>
   );
 }
@@ -450,6 +387,7 @@ function Dashboard() {
   const isMobile = useIsMobile();
   const isGlass  = themeId === "glass";
   const isGray   = themeId === "gray";
+  const isClean  = themeId === "clean"; // ← flag tema clean
 
   const role        = localStorage.getItem("role")         || "viewer";
   const accountType = localStorage.getItem("account_type") || "business";
@@ -543,23 +481,59 @@ function Dashboard() {
   const chartsColumns= isMobile ? "1fr" : "1fr 1fr";
   const formColumns  = isMobile ? "1fr" : "2fr 1fr 1fr 1fr 1fr auto";
   const rowColumns   = isMobile ? "1fr 1fr auto auto" : "2fr 1fr 1fr 1fr auto auto";
-  const colorScheme  = isGlass ? "light" : "dark";
+  const colorScheme  = (isGlass || isClean) ? "light" : "dark";
 
-  const inputStyle = { background: theme.bgInput, color: theme.textPrimary, border: `1px solid ${theme.borderInput}`, padding: "8px", borderRadius: "6px", colorScheme, ...(isGlass && { backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }) };
-  const editBtn    = { background: `${theme.primary}44`, border: "none", padding: "6px 10px", borderRadius: "6px", color: isGlass ? theme.textPrimary : "white", cursor: "pointer" };
+  const inputStyle = { background: theme.bgInput, color: theme.textPrimary, border: `1px solid ${theme.borderInput}`, padding: "8px", borderRadius: "6px", colorScheme, ...((isGlass || isClean) && { backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }) };
+  const editBtn    = { background: `${theme.primary}44`, border: "none", padding: "6px 10px", borderRadius: "6px", color: isClean ? theme.textPrimary : (isGlass ? theme.textPrimary : "white"), cursor: "pointer" };
   const deleteBtn  = { background: "#dc2626", border: "none", padding: "6px 10px", borderRadius: "6px", color: "white", cursor: "pointer" };
 
-  const Hero = () => (
-    (isGlass || isGray) ? (
-      <div style={{ position:"relative", height:heroHeight, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
-        <div style={{ position:"absolute", inset:0, backdropFilter:"blur(2px)", WebkitBackdropFilter:"blur(2px)" }} />
-        <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:10, paddingTop: isMobile?48:0 }}>
-          <img src={logoGif} alt="Finance Control" style={{ width:logoSize, height:logoSize, objectFit:"contain", filter:"drop-shadow(0 0 20px rgba(255,255,255,0.6))" }} />
-          <h1 style={{ fontSize:titleSize, fontWeight:700, margin:0, letterSpacing:"1.5px", color:theme.textPrimary, textAlign:"center" }}>Painel Financeiro</h1>
-          <p style={{ color:theme.textMuted, margin:0, fontSize:13 }}>{isPersonal ? "Suas finanças pessoais" : "Visão completa das suas finanças"}</p>
+  // ── HERO — limpo para tema clean (sem imagem hero, só padding)
+  // Para os outros temas mantém o comportamento original
+  const Hero = () => {
+    if (isClean) {
+      // Tema clean: sem hero image — só um header compacto com logo e título
+      return (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 18,
+          padding: isMobile ? "20px 16px 12px" : "32px 40px 20px",
+          borderBottom: `1px solid ${theme.borderCard}`,
+        }}>
+          <div style={{
+            width: isMobile ? 44 : 56, height: isMobile ? 44 : 56,
+            borderRadius: 14,
+            background: "rgba(22,163,74,0.12)",
+            border: "1.5px solid rgba(22,163,74,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            fontSize: isMobile ? 22 : 28,
+            backdropFilter: "blur(12px)",
+            flexShrink: 0,
+          }}>🧼</div>
+          <div>
+            <h1 style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, margin: 0, color: theme.textPrimary, letterSpacing: "0.3px" }}>
+              Painel Financeiro
+            </h1>
+            <p style={{ color: theme.textMuted, margin: "3px 0 0", fontSize: 13 }}>
+              {isPersonal ? "Suas finanças pessoais" : "Visão completa das suas finanças"}
+            </p>
+          </div>
         </div>
-      </div>
-    ) : (
+      );
+    }
+
+    if (isGlass || isGray) {
+      return (
+        <div style={{ position:"relative", height:heroHeight, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+          <div style={{ position:"absolute", inset:0, backdropFilter:"blur(2px)", WebkitBackdropFilter:"blur(2px)" }} />
+          <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:10, paddingTop: isMobile?48:0 }}>
+            <img src={logoGif} alt="Finance Control" style={{ width:logoSize, height:logoSize, objectFit:"contain", filter:"drop-shadow(0 0 20px rgba(255,255,255,0.6))" }} />
+            <h1 style={{ fontSize:titleSize, fontWeight:700, margin:0, letterSpacing:"1.5px", color:theme.textPrimary, textAlign:"center" }}>Painel Financeiro</h1>
+            <p style={{ color:theme.textMuted, margin:0, fontSize:13 }}>{isPersonal ? "Suas finanças pessoais" : "Visão completa das suas finanças"}</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
       <div style={{ position:"relative", height:heroHeight, backgroundImage:`url(${topoDashboard})`, backgroundSize:"cover", backgroundPosition:"center 39%", display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
         <div style={{ position:"absolute", inset:0, background:`linear-gradient(180deg, ${theme.bgPrimary}33 0%, ${theme.bgPrimary}88 60%, ${theme.bgPrimary} 100%)` }} />
         <div style={{ position:"relative", zIndex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:10, paddingTop: isMobile?48:0 }}>
@@ -568,21 +542,41 @@ function Dashboard() {
           <p style={{ color:"rgba(255,255,255,0.5)", margin:0, fontSize:13 }}>{isPersonal ? "Suas finanças pessoais" : "Visão completa das suas finanças"}</p>
         </div>
       </div>
-    )
-  );
+    );
+  };
+
+  // ── card3d styles — para clean usa shadow mais suave e bordas verdes
+  const card3dStyle = isClean
+    ? `
+      .card3d { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:22px 18px 16px; cursor:default; transition:transform 0.3s ease, box-shadow 0.3s ease; box-shadow:0 4px 24px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.9); backdrop-filter:blur(22px) saturate(180%); -webkit-backdrop-filter:blur(22px) saturate(180%); }
+      .card3d:hover { transform:translateY(-6px); box-shadow:0 12px 40px rgba(22,163,74,0.15), 0 4px 12px rgba(0,0,0,0.06); }
+      .card3d-income  { border-top:3px solid ${theme.income}; }
+      .card3d-expense { border-top:3px solid ${theme.expense}; }
+      .card3d-balance { border-top:3px solid ${theme.accent}; }
+      .chart3d { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:20px; transition:transform 0.3s ease, box-shadow 0.3s ease; box-shadow:0 4px 24px rgba(0,0,0,0.07); backdrop-filter:blur(22px) saturate(180%); -webkit-backdrop-filter:blur(22px) saturate(180%); }
+      .chart3d:hover { transform:translateY(-4px); box-shadow:0 12px 36px rgba(22,163,74,0.12); }
+      .section-card { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:20px; box-shadow:0 4px 20px rgba(0,0,0,0.06); backdrop-filter:blur(22px) saturate(180%); -webkit-backdrop-filter:blur(22px) saturate(180%); }
+      .section-label { font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:${theme.textMuted}; margin:0 0 14px 2px; display:flex; align-items:center; gap:8px; }
+      .section-label::after { content:""; flex:1; height:1px; background:${theme.border}; }
+    `
+    : `
+      .card3d { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:22px 18px 16px; cursor:default; transition:transform 0.3s ease, box-shadow 0.3s ease; transform:perspective(700px) rotateX(5deg) rotateY(-3deg); box-shadow:${isGlass?"0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)":"0 24px 48px rgba(0,0,0,0.55), 0 6px 12px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
+      .card3d:hover { transform:perspective(700px) rotateX(0deg) rotateY(0deg) translateY(-8px); box-shadow:${isGlass?"0 20px 48px rgba(0,0,0,0.12)":"0 36px 72px rgba(0,0,0,0.65), 0 12px 24px rgba(0,0,0,0.4)"}; }
+      .card3d-income  { border-top:2px solid ${theme.income}; }
+      .card3d-expense { border-top:2px solid ${theme.expense}; }
+      .card3d-balance { border-top:2px solid ${theme.accent}; }
+      .chart3d { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:20px; transition:transform 0.3s ease, box-shadow 0.3s ease; transform:perspective(900px) rotateX(3deg) rotateY(-1.5deg); box-shadow:${isGlass?"0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)":"0 16px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
+      .chart3d:hover { transform:perspective(900px) rotateX(0deg) rotateY(0deg) translateY(-5px); box-shadow:${isGlass?"0 20px 48px rgba(0,0,0,0.12)":"0 28px 56px rgba(0,0,0,0.55)"}; }
+      .section-card { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:20px; box-shadow:${isGlass?"0 4px 24px rgba(0,0,0,0.06)":"0 8px 32px rgba(0,0,0,0.3)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
+      .section-label { font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:${theme.textMuted}; margin:0 0 14px 2px; display:flex; align-items:center; gap:8px; }
+      .section-label::after { content:""; flex:1; height:1px; background:${theme.border}; }
+      @media (max-width:768px) { .card3d,.chart3d { transform:none !important; } .card3d:hover { transform:translateY(-4px) !important; } .chart3d:hover { transform:translateY(-3px) !important; } }
+    `;
 
   return (
     <PageLayout>
       <style>{`
-        .card3d { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:22px 18px 16px; cursor:default; transition:transform 0.3s ease, box-shadow 0.3s ease; transform:perspective(700px) rotateX(5deg) rotateY(-3deg); box-shadow:${isGlass?"0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)":"0 24px 48px rgba(0,0,0,0.55), 0 6px 12px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.07)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
-        .card3d:hover { transform:perspective(700px) rotateX(0deg) rotateY(0deg) translateY(-8px); box-shadow:${isGlass?"0 20px 48px rgba(0,0,0,0.12)":"0 36px 72px rgba(0,0,0,0.65), 0 12px 24px rgba(0,0,0,0.4)"}; }
-        .card3d-income { border-top:2px solid ${theme.income}; } .card3d-expense { border-top:2px solid ${theme.expense}; } .card3d-balance { border-top:2px solid ${theme.accent}; }
-        .chart3d { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:20px; transition:transform 0.3s ease, box-shadow 0.3s ease; transform:perspective(900px) rotateX(3deg) rotateY(-1.5deg); box-shadow:${isGlass?"0 8px 32px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.6)":"0 16px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
-        .chart3d:hover { transform:perspective(900px) rotateX(0deg) rotateY(0deg) translateY(-5px); box-shadow:${isGlass?"0 20px 48px rgba(0,0,0,0.12)":"0 28px 56px rgba(0,0,0,0.55)"}; }
-        .section-card { background:${theme.bgCard}; border:1px solid ${theme.borderCard}; border-radius:16px; padding:20px; box-shadow:${isGlass?"0 4px 24px rgba(0,0,0,0.06)":"0 8px 32px rgba(0,0,0,0.3)"}; ${isGlass?"backdrop-filter:blur(18px) saturate(180%); -webkit-backdrop-filter:blur(18px) saturate(180%);":""} }
-        .section-label { font-size:11px; font-weight:700; letter-spacing:0.12em; text-transform:uppercase; color:${theme.textMuted}; margin:0 0 14px 2px; display:flex; align-items:center; gap:8px; }
-        .section-label::after { content:""; flex:1; height:1px; background:${theme.border}; }
-        @media (max-width:768px) { .card3d,.chart3d { transform:none !important; } .card3d:hover { transform:translateY(-4px) !important; } .chart3d:hover { transform:translateY(-3px) !important; } }
+        ${card3dStyle}
         ::-webkit-scrollbar { width:5px; } ::-webkit-scrollbar-track { background:transparent; } ::-webkit-scrollbar-thumb { background:${theme.primary}44; border-radius:4px; }
       `}</style>
 
@@ -591,16 +585,10 @@ function Dashboard() {
       <div style={{ flex:1, overflowY:"auto", position:"relative", zIndex:1 }}>
         <Hero />
 
-        {/* ✅ PESSOAL */}
-        {isPersonal && <PersonalDashboard theme={theme} isMobile={isMobile} isGlass={isGlass} token={token} />}
+        {isPersonal && <PersonalDashboard theme={theme} isMobile={isMobile} isGlass={isGlass || isClean} token={token} />}
+        {!isPersonal && role === "seller" && <SellerDashboard theme={theme} isMobile={isMobile} isGlass={isGlass || isClean} token={token} />}
+        {!isPersonal && role === "stock"  && <StockDashboard  theme={theme} isMobile={isMobile} isGlass={isGlass || isClean} token={token} />}
 
-        {/* SELLER */}
-        {!isPersonal && role === "seller" && <SellerDashboard theme={theme} isMobile={isMobile} isGlass={isGlass} token={token} />}
-
-        {/* STOCK */}
-        {!isPersonal && role === "stock" && <StockDashboard theme={theme} isMobile={isMobile} isGlass={isGlass} token={token} />}
-
-        {/* ADMIN / FINANCIAL / VIEWER */}
         {!isPersonal && (role === "admin" || role === "financial" || role === "viewer") && (
           <div style={{ padding: isMobile?"16px 16px 0":"32px 40px 0" }}>
             {loading ? <p style={{ color:theme.textMuted }}>Carregando...</p> : (
@@ -612,19 +600,22 @@ function Dashboard() {
                   <p className="section-label">📊 Resumo Financeiro</p>
                   <div style={{ display:"grid", gridTemplateColumns:cardsColumns, gap:16 }}>
                     <div className="card3d card3d-income">
-                      <div style={cardIcon}>📈</div><div style={{ ...cardLabel, color:theme.textMuted }}>Entradas</div>
+                      <div style={cardIcon}>📈</div>
+                      <div style={{ ...cardLabel, color:theme.textMuted }}>Entradas</div>
                       <h2 style={{ color:theme.income, margin:"8px 0 4px", fontSize: isMobile?20:24, fontWeight:700 }}>{fmt(income)}</h2>
                       <div style={{ ...cardSub, color:theme.textMuted }}>{filtered.filter(t=>t.type==="income").length} transações</div>
                       <div style={{ height:4, borderRadius:4, overflow:"hidden", background:`${theme.income}22`, marginTop:8 }}><div style={{ height:"100%", borderRadius:4, width: income>0?"100%":"0%", background:theme.income, transition:"width 0.6s" }}/></div>
                     </div>
                     <div className="card3d card3d-expense">
-                      <div style={cardIcon}>📉</div><div style={{ ...cardLabel, color:theme.textMuted }}>Saídas</div>
+                      <div style={cardIcon}>📉</div>
+                      <div style={{ ...cardLabel, color:theme.textMuted }}>Saídas</div>
                       <h2 style={{ color:theme.expense, margin:"8px 0 4px", fontSize: isMobile?20:24, fontWeight:700 }}>- {fmt(expense)}</h2>
                       <div style={{ ...cardSub, color:theme.textMuted }}>{filtered.filter(t=>t.type==="expense").length} transações</div>
                       <div style={{ height:4, borderRadius:4, overflow:"hidden", background:`${theme.expense}22`, marginTop:8 }}><div style={{ height:"100%", borderRadius:4, width: income>0?`${Math.min((expense/income)*100,100)}%`:"0%", background:theme.expense, transition:"width 0.6s" }}/></div>
                     </div>
                     <div className="card3d card3d-balance">
-                      <div style={cardIcon}>💰</div><div style={{ ...cardLabel, color:theme.textMuted }}>Saldo Atual</div>
+                      <div style={cardIcon}>💰</div>
+                      <div style={{ ...cardLabel, color:theme.textMuted }}>Saldo Atual</div>
                       <h2 style={{ color: balance>=0?theme.income:theme.expense, margin:"8px 0 4px", fontSize: isMobile?20:24, fontWeight:700 }}>{fmt(balance)}</h2>
                       <div style={{ ...cardSub, color:theme.textMuted }}>{filtered.length} transações</div>
                       <div style={{ height:4, borderRadius:4, overflow:"hidden", background:`${theme.accent}22`, marginTop:8 }}><div style={{ height:"100%", borderRadius:4, width: income>0?`${Math.min((Math.max(balance,0)/income)*100,100)}%`:"0%", background:theme.accent, transition:"width 0.6s" }}/></div>
