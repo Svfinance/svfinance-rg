@@ -173,7 +173,7 @@ export default function Orders() {
     const statusOk = filterStatus === "all" || o.status === filterStatus;
     const searchOk = o.number.toLowerCase().includes(search.toLowerCase()) ||
                      o.client_name.toLowerCase().includes(search.toLowerCase());
-    return statusOk && searchOk;
+    return statusOk && searchOk;                                                                       
   });
 
   // ── estilos ──
