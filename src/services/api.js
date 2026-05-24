@@ -1,67 +1,14 @@
 // src/services/api.js
-// ─────────────────────────────────────────────────────────────────────────────
-// SISTEMA DE FALLBACK AUTOMÁTICO
-// Primary:  Railway  (api.svfinance.com.br)
-// Backup:   Render   (sv-finance-backup.onrender.com)
-//
-// Se o Railway não responder em 6 segundos → tenta o Render automaticamente.
-// O usuário não percebe a troca — tudo continua funcionando.
-// ─────────────────────────────────────────────────────────────────────────────
+// Render é o servidor principal agora — Railway foi removido.
 
-const PRIMARY_URL = "https://api.svfinance.com.br/api";
-const BACKUP_URL  = "https://sv-finance-backup.onrender.com/api";
-const TIMEOUT_MS  = 6000; // 6 segundos para considerar o Railway fora do ar
+const API_URL = "https://api.svfinance.com.br/api";
 
-// Controla qual servidor está sendo usado para evitar tentativas desnecessárias
-let _usingBackup    = false;
-let _backupUntil    = 0; // timestamp — após 5 min tenta o Railway de novo
-
-function getApiUrl() {
-  // Se está em modo backup e ainda não passou 5 minutos, continua no Render
-  if (_usingBackup && Date.now() < _backupUntil) return BACKUP_URL;
-  // Reseta o modo backup após 5 minutos (tenta Railway de novo)
-  _usingBackup = false;
-  return PRIMARY_URL;
-}
-
-function activateBackup() {
-  if (!_usingBackup) {
-    console.warn("⚠️ Railway indisponível — usando servidor backup (Render)");
-    _usingBackup = true;
-    _backupUntil = Date.now() + 5 * 60 * 1000; // 5 minutos
-  }
-}
-
-// Fetch com timeout — evita esperar para sempre se o servidor estiver fora
-function fetchWithTimeout(url, options, ms = TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timer      = setTimeout(() => controller.abort(), ms);
-  return fetch(url, { ...options, signal: controller.signal })
-    .finally(() => clearTimeout(timer));
-}
-
-// Fetch com fallback automático Railway → Render
-async function apiFetch(endpoint, options = {}) {
-  const primaryUrl = getApiUrl();
-
+export async function apiFetch(endpoint, options = {}) {
   try {
-    const res = await fetchWithTimeout(`${primaryUrl}${endpoint}`, options);
-    // Se chegou aqui, o servidor respondeu — desativa modo backup se estava ativo
-    if (_usingBackup && primaryUrl === PRIMARY_URL) _usingBackup = false;
+    const res = await fetch(`${API_URL}${endpoint}`, options);
     return res;
   } catch (err) {
-    // Railway não respondeu (timeout ou rede) — tenta o Render
-    if (primaryUrl === PRIMARY_URL) {
-      console.warn(`Railway falhou (${err.message}) — tentando Render...`);
-      activateBackup();
-      try {
-        return await fetchWithTimeout(`${BACKUP_URL}${endpoint}`, options, 10000);
-      } catch (backupErr) {
-        // Ambos falharam — lança erro claro
-        throw new Error("Serviço temporariamente indisponível. Tente novamente em instantes.");
-      }
-    }
-    throw err;
+    throw new Error("Serviço temporariamente indisponível. Tente novamente em instantes.");
   }
 }
 
