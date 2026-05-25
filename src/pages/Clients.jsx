@@ -4,7 +4,6 @@ import { useTheme } from "../contexts/ThemeContext";
 import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
-import QRCode from "qrcode";
 
 const API   = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
@@ -35,6 +34,9 @@ export default function Clients() {
   const isMobile   = useIsMobile();
   const navigate   = useNavigate();
   const qrCanvasRef = useRef(null);
+
+  // URL da imagem QR via quickchart.io (gratuito, sem instalação)
+  const QR_IMG_URL = `https://quickchart.io/qr?text=${encodeURIComponent(QR_UNIVERSAL_TOKEN)}&size=280&margin=2&ecLevel=H&dark=0a0f1e&light=ffffff`;
 
   const [sidebarOpen,    setSidebarOpen]    = useState(false);
   const [clients,        setClients]        = useState([]);
@@ -112,26 +114,9 @@ export default function Clients() {
 
   async function abrirQrModal() {
     setQrModal(true);
-    // Gera o canvas após o modal abrir
-    setTimeout(async () => {
-      if (qrCanvasRef.current) {
-        await QRCode.toCanvas(qrCanvasRef.current, QR_UNIVERSAL_TOKEN, {
-          width:            280,
-          margin:           2,
-          color: {
-            dark:  "#0a0f1e",
-            light: "#ffffff",
-          },
-          errorCorrectionLevel: "H",
-        });
-      }
-    }, 100);
   }
 
   function imprimirQr() {
-    const canvas = qrCanvasRef.current;
-    if (!canvas) return;
-    const img    = canvas.toDataURL("image/png");
     const janela = window.open("", "_blank");
     janela.document.write(`
       <html><head><title>QR Code SV Finance</title>
@@ -157,13 +142,15 @@ export default function Clients() {
           <div class="logo">SV Finance</div>
           <div class="titulo">Registro de Serviço</div>
           <div class="sub">Adesivo Universal — Não retirar</div>
-          <img src="${img}" alt="QR Code SV Finance"/>
+          <img src="${QR_IMG_URL}" alt="QR Code SV Finance" crossorigin="anonymous"/>
           <div class="instrucao">
             Escaneie este código para registrar<br/>
             a execução do serviço neste local.
           </div>
         </div>
-        <script>window.onload=()=>{window.print();}<\/script>
+        <script>
+          document.querySelector('img').onload = () => window.print();
+        <\/script>
       </body></html>
     `);
     janela.document.close();
@@ -474,9 +461,15 @@ export default function Clients() {
               1 adesivo para todos os clientes — identificação feita por GPS + O.S
             </div>
 
-            {/* Canvas do QR */}
+            {/* QR Code via quickchart.io */}
             <div style={{ background:"#fff", borderRadius:16, padding:16, display:"inline-block", marginBottom:16, boxShadow:"0 8px 30px rgba(0,0,0,0.3)" }}>
-              <canvas ref={qrCanvasRef} />
+              <img
+                src={QR_IMG_URL}
+                alt="QR Code Universal SV Finance"
+                width={280}
+                height={280}
+                style={{ display:"block", borderRadius:8 }}
+              />
             </div>
 
             <div style={{ background:"rgba(79,142,247,0.08)", border:"1px solid rgba(79,142,247,0.2)", borderRadius:12, padding:"12px 16px", marginBottom:20, fontSize:12, color:"#64748b", lineHeight:1.6, textAlign:"left" }}>
