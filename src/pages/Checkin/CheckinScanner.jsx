@@ -250,7 +250,6 @@ export default function CheckinScanner() {
 
   const videoRef    = useRef(null)
   const readerRef   = useRef(null)
-  const streamRef   = useRef(null)
   const fallbackTmr = useRef(null)
 
   const token = localStorage.getItem("token")
@@ -404,10 +403,6 @@ export default function CheckinScanner() {
       try { readerRef.current.reset() } catch {}
       readerRef.current = null
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
     setScannerStatus("idle")
   }, [])
 
@@ -427,29 +422,21 @@ export default function CheckinScanner() {
     }
 
     try {
-      // Solicita câmera traseira explicitamente
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "environment" },
-          width:  { ideal: 1280 },
-          height: { ideal: 720 },
-        },
-        audio: false,
-      })
-      streamRef.current = stream
-      videoRef.current.srcObject = stream
-      await videoRef.current.play()
-
       const reader = new BrowserMultiFormatReader()
       readerRef.current = reader
 
-      reader.decodeFromVideoElement(videoRef.current, (result, err) => {
-        if (result) {
-          stopCamera()
-          onQRDetected(result.getText())
+      // decodeFromConstraints é mais estável no mobile que decodeFromVideoElement
+      await reader.decodeFromConstraints(
+        { video: { facingMode: { ideal: "environment" } } },
+        videoRef.current,
+        (result, err) => {
+          if (result) {
+            stopCamera()
+            onQRDetected(result.getText())
+          }
+          // Erros de frame sem QR são normais — ignorar silenciosamente
         }
-        // Erros de frame sem QR são normais — ignorar silenciosamente
-      })
+      )
 
       setScannerStatus("active")
 
