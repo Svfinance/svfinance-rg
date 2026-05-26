@@ -418,38 +418,78 @@ export default function Orders() {
   const [checkinOrder, setCheckinOrder] = useState(null); // OS com modal checkin aberto
   const pollingRef = useRef(null);
 
-  // ── Polling tempo real ────────────────────────────────────────────────────
-  async function fetchOrders() {
+  // ── Cache helpers ─────────────────────────────────────────────────────────
+  const CACHE_TTL = 60000; // 60s de cache
+
+  function cacheGet(key) {
     try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const { data, ts } = JSON.parse(raw);
+      if (Date.now() - ts > CACHE_TTL) { sessionStorage.removeItem(key); return null; }
+      return data;
+    } catch { return null; }
+  }
+
+  function cacheSet(key, data) {
+    try { sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+  }
+
+  function cacheInvalidate(key) {
+    try { sessionStorage.removeItem(key); } catch {}
+  }
+
+  // ── Polling tempo real ────────────────────────────────────────────────────
+  async function fetchOrders(useCache = false) {
+    try {
+      if (useCache) {
+        const cached = cacheGet("sv_orders");
+        if (cached) { setOrders(cached); return; }
+      }
       const res  = await fetch(`${API}/orders`, { headers: { Authorization: `Bearer ${token()}` } });
       if (res.status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
       const data = await res.json();
-      setOrders(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      setOrders(list);
+      cacheSet("sv_orders", list);
     } catch {}
   }
 
   async function fetchAll() {
     setLoading(true);
+
+    // Carrega do cache imediatamente para feedback instantâneo
+    const cachedOrders   = cacheGet("sv_orders");
+    const cachedClients  = cacheGet("sv_clients");
+    const cachedProducts = cacheGet("sv_products");
+    if (cachedOrders)   { setOrders(cachedOrders);     }
+    if (cachedClients)  { setClients(cachedClients);   }
+    if (cachedProducts) { setProducts(cachedProducts); }
+    if (cachedOrders && cachedClients && cachedProducts) { setLoading(false); }
+
     try {
       const headers = { Authorization: `Bearer ${token()}` };
-
-      // OS sempre carrega — crítico
       const resO = await fetch(`${API}/orders`, { headers });
       if (resO.status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
       const dataO = await resO.json();
-      setOrders(Array.isArray(dataO) ? dataO : []);
+      const orders = Array.isArray(dataO) ? dataO : [];
+      setOrders(orders);
+      cacheSet("sv_orders", orders);
 
-      // Clientes e produtos — erros não bloqueiam a tela
       try {
         const resC  = await fetch(`${API}/clients`,  { headers });
         const dataC = await resC.json();
-        setClients(Array.isArray(dataC) ? dataC : []);
+        const clients = Array.isArray(dataC) ? dataC : [];
+        setClients(clients);
+        cacheSet("sv_clients", clients);
       } catch {}
 
       try {
         const resP  = await fetch(`${API}/products`, { headers });
         const dataP = await resP.json();
-        setProducts(Array.isArray(dataP) ? dataP : []);
+        const products = Array.isArray(dataP) ? dataP : [];
+        setProducts(products);
+        cacheSet("sv_products", products);
       } catch {}
 
     } catch { showToast("Erro ao carregar ordens.", "error"); }
@@ -508,8 +548,10 @@ export default function Orders() {
     const method = editing ? "PUT" : "POST";
     try {
       const res = await fetch(url, { method, headers: { "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body: JSON.stringify(payload) });
-      if (res.ok) { showToast(editing ? "O.S atualizada!" : "O.S criada!"); setView("list"); fetchAll(); }
-      else { const err = await res.json(); showToast(err.msg||"Erro.", "error"); }
+      if (res.ok) {
+        cacheInvalidate("sv_orders");
+        showToast(editing ? "O.S atualizada!" : "O.S criada!"); setView("list"); fetchAll();
+      } else { const err = await res.json(); showToast(err.msg||"Erro.", "error"); }
     } catch { showToast("Erro de conexão.", "error"); }
   }
 
@@ -527,7 +569,7 @@ export default function Orders() {
   async function handleDelete(id) {
     try {
       const res = await fetch(`${API}/orders/${id}`, { method:"DELETE", headers:{ Authorization:`Bearer ${token()}` } });
-      if (res.ok) { showToast("O.S removida."); setDeleteConfirm(null); fetchAll(); }
+      if (res.ok) { showToast("O.S removida."); setDeleteConfirm(null); cacheInvalidate("sv_orders"); fetchAll(); }
       else showToast("Erro ao remover.", "error");
     } catch { showToast("Erro de conexão.", "error"); }
   }
@@ -796,7 +838,11 @@ export default function Orders() {
           isMobile={isMobile}
           theme={theme}
           onClose={() => setCheckinOrder(null)}
-          onSuccess={() => { fetchOrders(); showToast("Registro salvo!"); }}
+          onSuccess={() => {
+            cacheInvalidate("sv_orders");
+            fetchOrders();
+            showToast("Registro salvo!");
+          }}
         />
       )}
 
