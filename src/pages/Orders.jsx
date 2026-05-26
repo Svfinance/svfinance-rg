@@ -393,17 +393,28 @@ export default function Orders() {
   async function fetchAll() {
     setLoading(true);
     try {
-      const [resO, resC, resP] = await Promise.all([
-        fetch(`${API}/orders`,   { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch(`${API}/clients`,  { headers: { Authorization: `Bearer ${token()}` } }),
-        fetch(`${API}/products`, { headers: { Authorization: `Bearer ${token()}` } }),
-      ]);
+      const headers = { Authorization: `Bearer ${token()}` };
+
+      // OS sempre carrega — crítico
+      const resO = await fetch(`${API}/orders`, { headers });
       if (resO.status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
-      const [dataO, dataC, dataP] = await Promise.all([resO.json(), resC.json(), resP.json()]);
+      const dataO = await resO.json();
       setOrders(Array.isArray(dataO) ? dataO : []);
-      setClients(Array.isArray(dataC) ? dataC : []);
-      setProducts(Array.isArray(dataP) ? dataP : []);
-    } catch { showToast("Erro ao carregar dados.", "error"); }
+
+      // Clientes e produtos — erros não bloqueiam a tela
+      try {
+        const resC  = await fetch(`${API}/clients`,  { headers });
+        const dataC = await resC.json();
+        setClients(Array.isArray(dataC) ? dataC : []);
+      } catch {}
+
+      try {
+        const resP  = await fetch(`${API}/products`, { headers });
+        const dataP = await resP.json();
+        setProducts(Array.isArray(dataP) ? dataP : []);
+      } catch {}
+
+    } catch { showToast("Erro ao carregar ordens.", "error"); }
     finally { setLoading(false); }
   }
 
