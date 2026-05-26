@@ -141,28 +141,36 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
   const horaFmt = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const dataFmt = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
 
-  // Busca GPS
+  // Busca GPS — watchPosition para ter sempre a posição mais recente
   useEffect(() => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        p => setLoc({ lat: p.coords.latitude, lon: p.coords.longitude }),
-        () => {},
-        { timeout: 10000, enableHighAccuracy: true }
-      );
-    }
+    if (!navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      p => setLoc({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      () => {},
+      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // Verifica check-in aberto para essa OS
+  // Verifica check-in aberto para essa OS — polling a cada 10s para tempo real
   useEffect(() => {
     async function checkOpen() {
       try {
         const res  = await fetch(`${API}/checkin/open`, { headers: { Authorization: `Bearer ${token()}` } });
         const data = await res.json();
-        if (data.open && data.order_id === order.id) setOpenChk(data);
+        // Compara como string para evitar bug number vs string
+        if (data.open && String(data.order_id) === String(order.id)) {
+          setOpenChk(data);
+        } else {
+          setOpenChk(null);
+        }
       } catch {}
       finally { setLO(false); }
     }
     checkOpen();
+    // Polling a cada 10s — tempo real entre colaborador e ADM
+    const interval = setInterval(checkOpen, 10000);
+    return () => clearInterval(interval);
   }, [order.id]);
 
   function onQRDetected(text) {
@@ -205,12 +213,22 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
         });
       }
       data = await res.json();
-      if (!res.ok) { setError(data.msg || "Erro ao registrar."); setSending(false); return; }
+      if (!res.ok) {
+        // Erro fixo — não some, fica visível até usuário fechar
+        setError(data.msg || "Erro ao registrar.");
+        setStep("confirming");
+        setSending(false);
+        return;
+      }
       setResult({ ...data, action });
       setStep("success");
       onSuccess();
-    } catch { setError("Erro de conexão."); }
-    finally { setSending(false); }
+    } catch {
+      setError("Erro de conexão. Verifique sua internet.");
+      setStep("confirming");
+    } finally {
+      setSending(false);
+    }
   }
 
   const S = {
