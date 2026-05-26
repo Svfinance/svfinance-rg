@@ -65,16 +65,40 @@ export default function Clients() {
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
 
+  const CACHE_KEY = "sv_clients";
+  const CACHE_TTL = 60000;
+
+  function cacheGet(key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const { data, ts } = JSON.parse(raw);
+      if (Date.now() - ts > CACHE_TTL) { sessionStorage.removeItem(key); return null; }
+      return data;
+    } catch { return null; }
+  }
+
+  function cacheSet(key, data) {
+    try { sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+  }
+
   async function fetchClients() {
     setLoading(true);
+
+    // Mostra cache imediatamente
+    const cached = cacheGet(CACHE_KEY);
+    if (cached) { setClients(cached); setLoading(false); }
+
     try {
       const res = await fetch(`${API}/clients`, {
         headers: { Authorization: `Bearer ${token()}` }
       });
       if (res.status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
       const data = await res.json();
-      setClients(Array.isArray(data) ? data : []);
-    } catch { showToast("Erro ao carregar clientes.", "error"); }
+      const list = Array.isArray(data) ? data : [];
+      setClients(list);
+      cacheSet(CACHE_KEY, list);
+    } catch { if (!cached) showToast("Erro ao carregar clientes.", "error"); }
     finally { setLoading(false); }
   }
 
@@ -231,9 +255,10 @@ export default function Clients() {
         body:    JSON.stringify(form),
       });
       if (res.ok) {
-        const data = await res.json();
         const geoMsg = data.geo_msg || "";
         showToast(`${editing ? "Cliente atualizado!" : "Cliente criado!"} ${geoMsg}`);
+        sessionStorage.removeItem("sv_clients");
+        sessionStorage.removeItem("sv_orders"); // OS tem nome do cliente
         closeModal();
         fetchClients();
       } else {
@@ -249,7 +274,12 @@ export default function Clients() {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token()}` }
       });
-      if (res.ok) { showToast("Cliente removido."); setDeleteConfirm(null); fetchClients(); }
+      if (res.ok) {
+        showToast("Cliente removido.");
+        sessionStorage.removeItem("sv_clients");
+        setDeleteConfirm(null);
+        fetchClients();
+      }
       else showToast("Erro ao remover.", "error");
     } catch { showToast("Erro de conexão.", "error"); }
   }
