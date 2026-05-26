@@ -255,10 +255,11 @@ export default function Clients() {
         body:    JSON.stringify(form),
       });
       if (res.ok) {
+        const data   = await res.json();
         const geoMsg = data.geo_msg || "";
         showToast(`${editing ? "Cliente atualizado!" : "Cliente criado!"} ${geoMsg}`);
         sessionStorage.removeItem("sv_clients");
-        sessionStorage.removeItem("sv_orders"); // OS tem nome do cliente
+        sessionStorage.removeItem("sv_orders");
         closeModal();
         fetchClients();
       } else {
