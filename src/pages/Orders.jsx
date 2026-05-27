@@ -39,11 +39,11 @@ const EMPTY_FORM = {
   client_id: "", status: "open", notes: "", payment_terms: "", discount: 0,
 };
 
-// ── Scanner inline ────────────────────────────────────────────────────────────
+// ── Scanner inline ─────────────────────────────────────────────────────────────
 function QRScanner({ onDetected, onCancel, action }) {
-  const videoRef   = useRef(null);
-  const readerRef  = useRef(null);
-  const tmrRef     = useRef(null);
+  const videoRef  = useRef(null);
+  const readerRef = useRef(null);
+  const tmrRef    = useRef(null);
   const [err, setErr]           = useState("");
   const [ready, setReady]       = useState(false);
   const [showManual, setManual] = useState(false);
@@ -67,9 +67,7 @@ function QRScanner({ onDetected, onCancel, action }) {
         await reader.decodeFromConstraints(
           { video: { facingMode: { ideal: "environment" } } },
           videoRef.current,
-          (result) => {
-            if (result) { stop(); onDetected(result.getText()); }
-          }
+          (result) => { if (result) { stop(); onDetected(result.getText()); } }
         );
         if (mounted) setReady(true);
         tmrRef.current = setTimeout(() => { if (mounted) setManual(true); }, 25000);
@@ -86,31 +84,31 @@ function QRScanner({ onDetected, onCancel, action }) {
 
   const S = {
     wrap:  { background: "#0a0f1e", borderRadius: 20, padding: "20px 16px", textAlign: "center" },
-    badge: { display: "inline-block", padding: "4px 14px", borderRadius: 20, fontSize: 10, fontWeight: 800, letterSpacing: "1.5px", textTransform: "uppercase", marginBottom: 10,
-             background: action === "start" ? "rgba(79,142,247,0.15)" : "rgba(34,197,94,0.15)",
-             color:      action === "start" ? "#4f8ef7"               : "#22c55e" },
-    sub:   { fontSize: 12, color: "#475569", marginBottom: 12 },
-    video: { width: "100%", maxHeight: 260, objectFit: "cover", borderRadius: 12, display: "block", background: "#000" },
-    btnY:  { width: "100%", padding: "11px 0", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 10, color: "#f59e0b", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 13, marginTop: 10 },
-    btnG:  { width: "100%", padding: "11px 0", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#64748b", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 13, marginTop: 8 },
-    err:   { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 10 },
+    badge: { display:"inline-block", padding:"4px 14px", borderRadius:20, fontSize:10, fontWeight:800, letterSpacing:"1.5px", textTransform:"uppercase", marginBottom:10,
+             background: action==="start" ? "rgba(79,142,247,0.15)" : "rgba(34,197,94,0.15)",
+             color:      action==="start" ? "#4f8ef7"               : "#22c55e" },
+    sub:   { fontSize:12, color:"#475569", marginBottom:12 },
+    video: { width:"100%", maxHeight:260, objectFit:"cover", borderRadius:12, display:"block", background:"#000" },
+    btnY:  { width:"100%", padding:"11px 0", background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, color:"#f59e0b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:10 },
+    btnG:  { width:"100%", padding:"11px 0", background:"transparent", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#64748b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
+    err:   { background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#f87171", padding:"8px 12px", borderRadius:8, fontSize:12, marginBottom:10 },
   };
 
   return (
     <div style={S.wrap}>
-      <div style={S.badge}>{action === "start" ? "📍 CHECK-IN · ENTRADA" : "✅ CHECK-OUT · SAÍDA"}</div>
+      <div style={S.badge}>{action==="start" ? "📍 CHECK-IN · ENTRADA" : "✅ CHECK-OUT · SAÍDA"}</div>
       <div style={S.sub}>Aponte para o adesivo QR Code SV Finance</div>
       {err && <div style={S.err}>{err}</div>}
-      <div style={{ position: "relative", marginBottom: 10 }}>
+      <div style={{ position:"relative", marginBottom:10 }}>
         <video ref={videoRef} muted playsInline style={{ ...S.video, opacity: ready ? 1 : 0.4 }} />
         {ready && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-            <div style={{ width: 180, height: 180, position: "relative" }}>
-              {[{ top:0,left:0,borderTop:"3px solid #4f8ef7",borderLeft:"3px solid #4f8ef7" },
-                { top:0,right:0,borderTop:"3px solid #4f8ef7",borderRight:"3px solid #4f8ef7" },
-                { bottom:0,left:0,borderBottom:"3px solid #4f8ef7",borderLeft:"3px solid #4f8ef7" },
-                { bottom:0,right:0,borderBottom:"3px solid #4f8ef7",borderRight:"3px solid #4f8ef7" },
-              ].map((s, i) => <div key={i} style={{ position:"absolute", width:22, height:22, ...s }} />)}
+          <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none" }}>
+            <div style={{ width:180, height:180, position:"relative" }}>
+              {[{top:0,left:0,borderTop:"3px solid #4f8ef7",borderLeft:"3px solid #4f8ef7"},
+                {top:0,right:0,borderTop:"3px solid #4f8ef7",borderRight:"3px solid #4f8ef7"},
+                {bottom:0,left:0,borderBottom:"3px solid #4f8ef7",borderLeft:"3px solid #4f8ef7"},
+                {bottom:0,right:0,borderBottom:"3px solid #4f8ef7",borderRight:"3px solid #4f8ef7"},
+              ].map((s,i) => <div key={i} style={{ position:"absolute", width:22, height:22, ...s }} />)}
             </div>
           </div>
         )}
@@ -125,9 +123,9 @@ function QRScanner({ onDetected, onCancel, action }) {
   );
 }
 
-// ── Modal de Checkin ──────────────────────────────────────────────────────────
+// ── Modal de Checkin ───────────────────────────────────────────────────────────
 function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
-  const [step, setStep]       = useState("select_action"); // select_action | scanning | confirming | success
+  const [step, setStep]       = useState("select_action");
   const [action, setAction]   = useState(null);
   const [openChk, setOpenChk] = useState(null);
   const [location, setLoc]    = useState(null);
@@ -138,37 +136,30 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
   const [loadingOpen, setLO]  = useState(true);
 
   const now     = new Date();
-  const horaFmt = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-  const dataFmt = now.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" });
+  const horaFmt = now.toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" });
+  const dataFmt = now.toLocaleDateString("pt-BR", { weekday:"long", day:"2-digit", month:"long" });
 
-  // Busca GPS — watchPosition para ter sempre a posição mais recente
   useEffect(() => {
     if (!navigator.geolocation) return;
     const id = navigator.geolocation.watchPosition(
       p => setLoc({ lat: p.coords.latitude, lon: p.coords.longitude }),
       () => {},
-      { timeout: 15000, enableHighAccuracy: true, maximumAge: 0 }
+      { timeout:15000, enableHighAccuracy:true, maximumAge:0 }
     );
     return () => navigator.geolocation.clearWatch(id);
   }, []);
 
-  // Verifica check-in aberto para essa OS — polling a cada 10s para tempo real
   useEffect(() => {
     async function checkOpen() {
       try {
-        const res  = await fetch(`${API}/checkin/open`, { headers: { Authorization: `Bearer ${token()}` } });
+        const res  = await fetch(`${API}/checkin/open`, { headers:{ Authorization:`Bearer ${token()}` } });
         const data = await res.json();
-        // Compara como string para evitar bug number vs string
-        if (data.open && String(data.order_id) === String(order.id)) {
-          setOpenChk(data);
-        } else {
-          setOpenChk(null);
-        }
+        if (data.open && String(data.order_id) === String(order.id)) setOpenChk(data);
+        else setOpenChk(null);
       } catch {}
       finally { setLO(false); }
     }
     checkOpen();
-    // Polling a cada 10s — tempo real entre colaborador e ADM
     const interval = setInterval(checkOpen, 10000);
     return () => clearInterval(interval);
   }, [order.id]);
@@ -187,24 +178,22 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
     setSending(true);
     setError("");
     try {
-      let res, data;
-      const endpoint = action === "start"
+      const endpoint = action==="start"
         ? `${API}/checkin/${order.client_id}/start`
         : `${API}/checkin/${openChk.checkin_id}/finish`;
-      const body = action === "start"
-        ? { order_id: order.id, lat: location?.lat||null, lon: location?.lon||null, notes: notes||null, qr_token: QR_TOKEN }
-        : { lat: location?.lat||null, lon: location?.lon||null, notes: notes||null, qr_token: QR_TOKEN };
+      const body = action==="start"
+        ? { order_id:order.id, lat:location?.lat||null, lon:location?.lon||null, notes:notes||null, qr_token:QR_TOKEN }
+        : { lat:location?.lat||null, lon:location?.lon||null, notes:notes||null, qr_token:QR_TOKEN };
 
-      res  = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
-        body: JSON.stringify(body),
+      const res  = await fetch(endpoint, {
+        method:"POST",
+        headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` },
+        body:JSON.stringify(body),
       });
-      data = await res.json();
+      const data = await res.json();
 
       if (!res.ok) {
         setError(data.msg || "Erro ao registrar. Tente novamente.");
-        // NÃO muda o step — fica em confirming com erro visível
         return;
       }
       setResult({ ...data, action });
@@ -232,7 +221,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
     err:     { background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#f87171", padding:"10px 14px", borderRadius:10, fontSize:13, marginBottom:14 },
     textarea:{ width:"100%", padding:"11px 13px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#e2e8f0", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box", marginBottom:14, resize:"none" },
     time:    { textAlign:"center", marginBottom:14 },
-    gps:     { fontSize:11, marginBottom:14 },
   };
 
   if (loadingOpen) return (
@@ -246,29 +234,22 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
   return (
     <div style={S.overlay} onClick={onClose}>
       <div style={S.card} onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
         <div style={S.header}>
           <div style={S.title}>📍 Registro de Serviço</div>
           <button style={S.close} onClick={onClose}>✕</button>
         </div>
-
-        {/* OS Info */}
         <div style={S.osBox}>
           <div style={S.osNum}>{order.number}</div>
           <div style={S.osClient}>{order.client_name}</div>
         </div>
 
-        {/* ── SELECT ACTION ── */}
         {step === "select_action" && (
           <>
             <div style={S.time}>
               <div style={{ fontSize:"1.8rem", fontWeight:700, color:"#e2e8f0", letterSpacing:"-1px" }}>{horaFmt}</div>
               <div style={{ fontSize:12, color:"#475569", textTransform:"capitalize" }}>{dataFmt}</div>
             </div>
-
             {error && <div style={S.err}>⚠️ {error}</div>}
-
             {openChk ? (
               <>
                 <div style={{ background:"rgba(245,158,11,0.06)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:12, padding:14, marginBottom:14, textAlign:"center" }}>
@@ -288,16 +269,10 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           </>
         )}
 
-        {/* ── SCANNING ── */}
         {step === "scanning" && (
-          <QRScanner
-            action={action}
-            onDetected={onQRDetected}
-            onCancel={() => setStep("select_action")}
-          />
+          <QRScanner action={action} onDetected={onQRDetected} onCancel={() => setStep("select_action")} />
         )}
 
-        {/* ── CONFIRMING ── */}
         {step === "confirming" && (
           <>
             <div style={S.time}>
@@ -309,29 +284,22 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
               <div style={{ fontSize:"1.8rem", fontWeight:700, color:"#e2e8f0", letterSpacing:"-1px" }}>{horaFmt}</div>
               <div style={{ fontSize:12, color:"#475569", textTransform:"capitalize" }}>{dataFmt}</div>
             </div>
-
             {action==="finish" && openChk && (
               <div style={{ background:"rgba(34,197,94,0.06)", border:"1px solid rgba(34,197,94,0.15)", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#4ade80", textAlign:"center" }}>
                 Entrada registrada às {openChk.checkin_at?.slice(11,16)}
               </div>
             )}
-
             <textarea style={S.textarea} rows={2}
               placeholder={action==="start" ? "Observação de entrada (opcional)" : "Observação de saída (opcional)"}
               value={notes} onChange={e => setNotes(e.target.value)}
             />
-
-            {/* GPS status em tempo real */}
             <div style={{ fontSize:12, marginBottom:14, padding:"8px 12px", borderRadius:8,
               background: location ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
               border: `1px solid ${location ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)"}`,
               color: location ? "#4ade80" : "#f59e0b" }}>
-              {location
-                ? `📍 GPS ativo — lat: ${location.lat.toFixed(5)}, lon: ${location.lon.toFixed(5)}`
-                : "⏳ Aguardando GPS... (certifique-se de permitir localização)"}
+              {location ? `📍 GPS ativo — lat: ${location.lat.toFixed(5)}, lon: ${location.lon.toFixed(5)}`
+                        : "⏳ Aguardando GPS..."}
             </div>
-
-            {/* Erro FIXO — não some até fechar */}
             {error && (
               <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", color:"#f87171", padding:"12px 16px", borderRadius:10, fontSize:13, marginBottom:14 }}>
                 <div style={{ fontWeight:700, marginBottom:4 }}>⚠️ Não foi possível registrar</div>
@@ -342,11 +310,10 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
                 </button>
               </div>
             )}
-
             {!error && (
               <>
-                <button style={{ ...(action==="start" ? S.btnBlue : S.btnGreen), opacity: (sending || !location)?0.6:1, cursor: (sending || !location)?"not-allowed":"pointer" }}
-                  onClick={confirmar} disabled={sending || !location}>
+                <button style={{ ...(action==="start" ? S.btnBlue : S.btnGreen), opacity:(sending||!location)?0.6:1, cursor:(sending||!location)?"not-allowed":"pointer" }}
+                  onClick={confirmar} disabled={sending||!location}>
                   {sending ? "Registrando..." : !location ? "Aguardando GPS..." : action==="start" ? "✓ Confirmar entrada" : "✓ Confirmar saída"}
                 </button>
                 <button style={S.btnGhost} onClick={() => setStep("scanning")} disabled={sending}>← Escanear novamente</button>
@@ -355,7 +322,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           </>
         )}
 
-        {/* ── SUCCESS ── */}
         {step === "success" && (
           <div style={{ textAlign:"center", padding:"16px 0" }}>
             <div style={{ fontSize:52, marginBottom:12 }}>{result?.action==="start" ? "📍" : "✅"}</div>
@@ -368,9 +334,7 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
                 <div style={{ color:"#22c55e", fontSize:"1.7rem", fontWeight:800, letterSpacing:"-1px" }}>{result.duration_str}</div>
               </div>
             )}
-            {result?.geo_msg && (
-              <div style={{ fontSize:11, color:"#475569", marginTop:8 }}>{result.geo_msg}</div>
-            )}
+            {result?.geo_msg && <div style={{ fontSize:11, color:"#475569", marginTop:8 }}>{result.geo_msg}</div>}
             <div style={{ color:"#475569", fontSize:12, marginTop:8 }}>{dataFmt} às {horaFmt}</div>
             <button style={{ ...S.btnGhost, marginTop:20 }} onClick={onClose}>Fechar</button>
           </div>
@@ -380,7 +344,7 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
   );
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
+// ── Componente principal ───────────────────────────────────────────────────────
 export default function Orders() {
   const { theme, themeId } = useTheme();
   const isGlass    = themeId === "glass";
@@ -388,25 +352,27 @@ export default function Orders() {
   const isMobile   = useIsMobile();
   const navigate   = useNavigate();
 
-  const [sidebarOpen,  setSidebarOpen]  = useState(false);
-  const [orders,       setOrders]       = useState([]);
-  const [clients,      setClients]      = useState([]);
-  const [products,     setProducts]     = useState([]);
-  const [loading,      setLoading]      = useState(true);
-  const [view,         setView]         = useState("list");
-  const [editing,      setEditing]      = useState(null);
-  const [form,         setForm]         = useState(EMPTY_FORM);
-  const [items,        setItems]        = useState([]);
-  const [deleteConfirm,setDeleteConfirm]= useState(null);
-  const [toast,        setToast]        = useState(null);
-  const [filterStatus, setFilterStatus] = useState("all");
-  const [search,       setSearch]       = useState("");
-  const [checkinOrder, setCheckinOrder] = useState(null); // OS com modal checkin aberto
+  const [sidebarOpen,    setSidebarOpen]    = useState(false);
+  const [orders,         setOrders]         = useState([]);
+  const [clients,        setClients]        = useState([]);
+  const [products,       setProducts]       = useState([]);
+  const [loading,        setLoading]        = useState(true);
+  const [view,           setView]           = useState("list");
+  const [editing,        setEditing]        = useState(null);
+  const [form,           setForm]           = useState(EMPTY_FORM);
+  const [items,          setItems]          = useState([]);
+  const [deleteConfirm,  setDeleteConfirm]  = useState(null);
+  const [toast,          setToast]          = useState(null);
+  const [filterStatus,   setFilterStatus]   = useState("all");
+  const [search,         setSearch]         = useState("");
+  const [checkinOrder,   setCheckinOrder]   = useState(null);
+  const [detailOrder,    setDetailOrder]    = useState(null);
+  const [orderCheckins,  setOrderCheckins]  = useState([]);
+  const [loadingCheckins,setLoadingCheckins]= useState(false);
   const pollingRef = useRef(null);
 
-  // ── Cache helpers ─────────────────────────────────────────────────────────
-  const CACHE_TTL = 60000; // 60s de cache
-
+  // ── Cache ─────────────────────────────────────────────────────────────────
+  const CACHE_TTL = 60000;
   function cacheGet(key) {
     try {
       const raw = sessionStorage.getItem(key);
@@ -416,23 +382,17 @@ export default function Orders() {
       return data;
     } catch { return null; }
   }
-
   function cacheSet(key, data) {
-    try { sessionStorage.setItem(key, JSON.stringify({ data, ts: Date.now() })); } catch {}
+    try { sessionStorage.setItem(key, JSON.stringify({ data, ts:Date.now() })); } catch {}
   }
-
   function cacheInvalidate(key) {
     try { sessionStorage.removeItem(key); } catch {}
   }
 
-  // ── Polling tempo real ────────────────────────────────────────────────────
-  async function fetchOrders(useCache = false) {
+  // ── Fetch ─────────────────────────────────────────────────────────────────
+  async function fetchOrders() {
     try {
-      if (useCache) {
-        const cached = cacheGet("sv_orders");
-        if (cached) { setOrders(cached); return; }
-      }
-      const res  = await fetch(`${API}/orders`, { headers: { Authorization: `Bearer ${token()}` } });
+      const res  = await fetch(`${API}/orders`, { headers:{ Authorization:`Bearer ${token()}` } });
       if (res.status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
       const data = await res.json();
       const list = Array.isArray(data) ? data : [];
@@ -443,53 +403,46 @@ export default function Orders() {
 
   async function fetchAll() {
     setLoading(true);
-
-    // Carrega do cache imediatamente para feedback instantâneo
-    const cachedOrders   = cacheGet("sv_orders");
-    const cachedClients  = cacheGet("sv_clients");
-    const cachedProducts = cacheGet("sv_products");
-    if (cachedOrders)   { setOrders(cachedOrders);     }
-    if (cachedClients)  { setClients(cachedClients);   }
-    if (cachedProducts) { setProducts(cachedProducts); }
-    if (cachedOrders && cachedClients && cachedProducts) { setLoading(false); }
-
+    const co = cacheGet("sv_orders"), cc = cacheGet("sv_clients"), cp = cacheGet("sv_products");
+    if (co) setOrders(co);
+    if (cc) setClients(cc);
+    if (cp) setProducts(cp);
+    if (co && cc && cp) setLoading(false);
     try {
-      const headers = { Authorization: `Bearer ${token()}` };
-      const resO = await fetch(`${API}/orders`, { headers });
+      const h = { Authorization:`Bearer ${token()}` };
+      const resO = await fetch(`${API}/orders`, { headers:h });
       if (resO.status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
       const dataO = await resO.json();
-      const orders = Array.isArray(dataO) ? dataO : [];
-      setOrders(orders);
-      cacheSet("sv_orders", orders);
-
-      try {
-        const resC  = await fetch(`${API}/clients`,  { headers });
-        const dataC = await resC.json();
-        const clients = Array.isArray(dataC) ? dataC : [];
-        setClients(clients);
-        cacheSet("sv_clients", clients);
-      } catch {}
-
-      try {
-        const resP  = await fetch(`${API}/products`, { headers });
-        const dataP = await resP.json();
-        const products = Array.isArray(dataP) ? dataP : [];
-        setProducts(products);
-        cacheSet("sv_products", products);
-      } catch {}
-
+      const ords = Array.isArray(dataO) ? dataO : [];
+      setOrders(ords); cacheSet("sv_orders", ords);
+      try { const r = await fetch(`${API}/clients`,  { headers:h }); const d = await r.json(); const c = Array.isArray(d)?d:[]; setClients(c);   cacheSet("sv_clients",  c); } catch {}
+      try { const r = await fetch(`${API}/products`, { headers:h }); const d = await r.json(); const p = Array.isArray(d)?d:[]; setProducts(p); cacheSet("sv_products", p); } catch {}
     } catch { showToast("Erro ao carregar ordens.", "error"); }
     finally { setLoading(false); }
   }
 
+  async function fetchOrderCheckins(orderId) {
+    setLoadingCheckins(true);
+    try {
+      const res  = await fetch(`${API}/orders/${orderId}/checkins`, { headers:{ Authorization:`Bearer ${token()}` } });
+      const data = await res.json();
+      setOrderCheckins(Array.isArray(data) ? data : []);
+    } catch { setOrderCheckins([]); }
+    finally { setLoadingCheckins(false); }
+  }
+
+  function openDetailOrder(o) {
+    setDetailOrder(o);
+    fetchOrderCheckins(o.id);
+  }
+
   useEffect(() => {
     fetchAll();
-    // Polling a cada 15s para tempo real sem sobrecarregar
     pollingRef.current = setInterval(fetchOrders, 15000);
     return () => clearInterval(pollingRef.current);
   }, []);
 
-  function showToast(msg, type = "success") {
+  function showToast(msg, type="success") {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   }
@@ -497,8 +450,8 @@ export default function Orders() {
   function openCreate() { setEditing(null); setForm(EMPTY_FORM); setItems([]); setView("form"); }
   function openEdit(o) {
     setEditing(o);
-    setForm({ client_id: o.client_id, status: o.status, notes: o.notes || "", payment_terms: o.payment_terms || "", discount: o.discount || 0 });
-    setItems(o.items || []);
+    setForm({ client_id:o.client_id, status:o.status, notes:o.notes||"", payment_terms:o.payment_terms||"", discount:o.discount||0 });
+    setItems(o.items||[]);
     setView("form");
   }
 
@@ -506,49 +459,41 @@ export default function Orders() {
   function removeItem(idx) { setItems(p => p.filter((_,i) => i!==idx)); }
   function updateItem(idx, fld, value) {
     setItems(p => {
-      const n = [...p];
-      n[idx] = { ...n[idx], [fld]: value };
-      if (fld==="qty" || fld==="price") n[idx].total = parseFloat(n[idx].qty||0) * parseFloat(n[idx].price||0);
+      const n = [...p]; n[idx] = { ...n[idx], [fld]:value };
+      if (fld==="qty"||fld==="price") n[idx].total = parseFloat(n[idx].qty||0)*parseFloat(n[idx].price||0);
       return n;
     });
   }
   function selectProduct(idx, pid) {
     const p = products.find(p => String(p.id)===String(pid));
     if (!p) return;
-    setItems(prev => {
-      const n = [...prev];
-      n[idx] = { ...n[idx], product_id:p.id, name:p.name, unit:p.unit||"un", price:p.price, total:parseFloat(n[idx].qty||1)*p.price };
-      return n;
-    });
+    setItems(prev => { const n=[...prev]; n[idx]={ ...n[idx], product_id:p.id, name:p.name, unit:p.unit||"un", price:p.price, total:parseFloat(n[idx].qty||1)*p.price }; return n; });
   }
 
-  const subtotal    = items.reduce((s,i) => s + parseFloat(i.qty||0)*parseFloat(i.price||0), 0);
-  const discountAmt = subtotal * (parseFloat(form.discount||0)/100);
-  const total       = subtotal - discountAmt;
+  const subtotal    = items.reduce((s,i) => s+parseFloat(i.qty||0)*parseFloat(i.price||0), 0);
+  const discountAmt = subtotal*(parseFloat(form.discount||0)/100);
+  const total       = subtotal-discountAmt;
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.client_id) { showToast("Selecione um cliente.", "error"); return; }
-    const payload = { ...form, client_id: parseInt(form.client_id), discount: parseFloat(form.discount||0), items };
-    const url    = editing ? `${API}/orders/${editing.id}` : `${API}/orders`;
+    const payload = { ...form, client_id:parseInt(form.client_id), discount:parseFloat(form.discount||0), items };
+    const url = editing ? `${API}/orders/${editing.id}` : `${API}/orders`;
     const method = editing ? "PUT" : "POST";
     try {
-      const res = await fetch(url, { method, headers: { "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body: JSON.stringify(payload) });
-      if (res.ok) {
-        cacheInvalidate("sv_orders");
-        showToast(editing ? "O.S atualizada!" : "O.S criada!"); setView("list"); fetchAll();
-      } else { const err = await res.json(); showToast(err.msg||"Erro.", "error"); }
+      const res = await fetch(url, { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body:JSON.stringify(payload) });
+      if (res.ok) { cacheInvalidate("sv_orders"); showToast(editing?"O.S atualizada!":"O.S criada!"); setView("list"); fetchAll(); }
+      else { const err = await res.json(); showToast(err.msg||"Erro.", "error"); }
     } catch { showToast("Erro de conexão.", "error"); }
   }
 
   async function changeStatus(o, status) {
     try {
       await fetch(`${API}/orders/${o.id}/status`, {
-        method:"PATCH",
-        headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` },
-        body: JSON.stringify({ status }),
+        method:"PATCH", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` },
+        body:JSON.stringify({ status }),
       });
-      fetchOrders();
+      cacheInvalidate("sv_orders"); fetchOrders();
     } catch { showToast("Erro ao alterar status.", "error"); }
   }
 
@@ -619,7 +564,6 @@ export default function Orders() {
               </div>
             </div>
           </div>
-
           <div style={formCard}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
               <p style={{ ...sectionLabel, marginBottom:0 }}>📦 Itens</p>
@@ -673,7 +617,6 @@ export default function Orders() {
               </>
             )}
           </div>
-
           <div style={{ display:"flex", justifyContent:"flex-end", gap:12, marginBottom:48, flexDirection:isMobile?"column":"row" }}>
             <button type="button" style={{ ...btnSecondary, width:isMobile?"100%":"auto" }} onClick={()=>setView("list")}>Cancelar</button>
             <button type="submit" style={{ ...btnPrimary, width:isMobile?"100%":"auto" }}>{editing?"Salvar Alterações":"Criar O.S"}</button>
@@ -695,12 +638,8 @@ export default function Orders() {
         .os-row:hover { background:${isGlass?"rgba(255,255,255,0.15)":`${theme.primary}0d`} !important; }
         @media (max-width:768px) { .card3d-os { transform:none !important; } .card3d-os:hover { transform:translateY(-6px) !important; } }
       `}</style>
-
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
-
       <div style={{ flex:1, padding:isMobile?"72px 16px 40px":"32px 36px", overflowY:"auto", position:"relative", zIndex:1 }}>
-
-        {/* HEADER */}
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28, flexWrap:"wrap", gap:12 }}>
           <div style={{ display:"flex", alignItems:"center", gap:14 }}>
             <img src={logoGif} alt="logo" style={{ width:isMobile?44:60, height:isMobile?44:60, objectFit:"contain", filter:"drop-shadow(0 0 10px rgba(255,255,255,0.3))" }}/>
@@ -712,13 +651,12 @@ export default function Orders() {
           <button style={{ ...btnPrimary, whiteSpace:"nowrap" }} onClick={openCreate}>+ Nova O.S</button>
         </div>
 
-        {/* CARDS */}
         <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16, marginBottom:28 }}>
           {[
-            { icon:"📋", label:"Total",        value:orders.length,                                      color:theme.primary, border:isGlass?"rgba(255,255,255,0.5)":`${theme.primary}44` },
-            { icon:"🔵", label:"Abertas",       value:orders.filter(o=>o.status==="open").length,        color:"#3b82f6",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(59,130,246,0.3)" },
-            { icon:"🟡", label:"Em andamento",  value:orders.filter(o=>o.status==="in_progress").length, color:"#f59e0b",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(245,158,11,0.3)" },
-            { icon:"✅", label:"Concluídas",    value:orders.filter(o=>o.status==="done").length,        color:"#22c55e",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(34,197,94,0.3)"  },
+            { icon:"📋", label:"Total",       value:orders.length,                                      color:theme.primary, border:isGlass?"rgba(255,255,255,0.5)":`${theme.primary}44` },
+            { icon:"🔵", label:"Abertas",      value:orders.filter(o=>o.status==="open").length,        color:"#3b82f6",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(59,130,246,0.3)" },
+            { icon:"🟡", label:"Em andamento", value:orders.filter(o=>o.status==="in_progress").length, color:"#f59e0b",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(245,158,11,0.3)" },
+            { icon:"✅", label:"Concluídas",   value:orders.filter(o=>o.status==="done").length,        color:"#22c55e",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(34,197,94,0.3)"  },
           ].map((c,i)=>(
             <div key={i} className="card3d-os" style={{ border:`1px solid ${c.border}` }}>
               <div style={{ fontSize:"1.5rem" }}>{c.icon}</div>
@@ -730,7 +668,6 @@ export default function Orders() {
           ))}
         </div>
 
-        {/* FILTROS */}
         <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:20, alignItems:"center" }}>
           <input style={{ ...inputStyle, width:isMobile?"100%":"280px" }} type="text" placeholder="🔍 Buscar por número ou cliente..." value={search} onChange={e=>setSearch(e.target.value)}/>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
@@ -742,7 +679,6 @@ export default function Orders() {
           </div>
         </div>
 
-        {/* TABELA */}
         <div className="table3d-os">
           {loading ? (
             <div style={{ display:"flex", alignItems:"center", justifyContent:"center", padding:"60px 0", color:theme.textMuted }}>Carregando...</div>
@@ -755,10 +691,7 @@ export default function Orders() {
             <table style={{ width:"100%", borderCollapse:"collapse", fontSize:"0.88rem", minWidth:isMobile?"620px":"unset" }}>
               <thead>
                 <tr>
-                  {(isMobile
-                    ?["Número","Cliente","Status","Total","Check-in","Ações"]
-                    :["Número","Cliente","Origem","Itens","Total","Criado em","Status","Check-in","Ações"]
-                  ).map(h=>(
+                  {(isMobile?["Número","Cliente","Status","Total","Check-in","Ações"]:["Número","Cliente","Origem","Itens","Total","Criado em","Status","Check-in","Ações"]).map(h=>(
                     <th key={h} style={{ textAlign:"left", padding:"12px 16px", color:theme.textMuted, fontWeight:600, fontSize:"0.75rem", textTransform:"uppercase", letterSpacing:"0.05em", background:isGlass?"rgba(255,255,255,0.1)":theme.bgCard, borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, whiteSpace:"nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -766,10 +699,15 @@ export default function Orders() {
               <tbody>
                 {filtered.map(o=>{
                   const st = STATUS_MAP[o.status]||STATUS_MAP.open;
-                  const podeCheckin = o.status==="open" || o.status==="in_progress";
+                  const podeCheckin = o.status==="open"||o.status==="in_progress";
                   return (
                     <tr key={o.id} className="os-row" style={{ borderBottom:`1px solid ${isGlass?"rgba(255,255,255,0.15)":theme.border}`, transition:"background 0.15s" }}>
-                      <td style={{ padding:"12px 16px", verticalAlign:"middle", fontWeight:700, color:theme.primary }}>{o.number}</td>
+                      <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
+                        <button style={{ background:"none", border:"none", fontWeight:700, color:theme.primary, cursor:"pointer", fontSize:"0.88rem", padding:0, textDecoration:"underline" }}
+                          onClick={() => openDetailOrder(o)}>
+                          {o.number}
+                        </button>
+                      </td>
                       <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
                         <div style={{ fontWeight:600, color:theme.textPrimary }}>{o.client_name}</div>
                       </td>
@@ -788,13 +726,10 @@ export default function Orders() {
                           {Object.entries(STATUS_MAP).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                         </select>
                       </td>
-                      {/* BOTÃO CHECK-IN */}
                       <td style={{ padding:"12px 16px", verticalAlign:"middle" }}>
                         {podeCheckin ? (
-                          <button
-                            style={{ background: o.status==="in_progress" ? "rgba(34,197,94,0.12)" : "rgba(79,142,247,0.12)", border:`1px solid ${o.status==="in_progress"?"rgba(34,197,94,0.3)":"rgba(79,142,247,0.3)"}`, borderRadius:8, padding:"5px 10px", cursor:"pointer", fontSize:"0.8rem", fontWeight:600, color:o.status==="in_progress"?"#22c55e":"#4f8ef7", whiteSpace:"nowrap" }}
-                            onClick={()=>setCheckinOrder(o)}
-                          >
+                          <button style={{ background:o.status==="in_progress"?"rgba(34,197,94,0.12)":"rgba(79,142,247,0.12)", border:`1px solid ${o.status==="in_progress"?"rgba(34,197,94,0.3)":"rgba(79,142,247,0.3)"}`, borderRadius:8, padding:"5px 10px", cursor:"pointer", fontSize:"0.8rem", fontWeight:600, color:o.status==="in_progress"?"#22c55e":"#4f8ef7", whiteSpace:"nowrap" }}
+                            onClick={()=>setCheckinOrder(o)}>
                             {o.status==="in_progress" ? "✅ Finalizar" : "📍 Check-in"}
                           </button>
                         ) : (
@@ -819,17 +754,94 @@ export default function Orders() {
       {/* MODAL CHECKIN */}
       {checkinOrder && (
         <CheckinModal
-          order={checkinOrder}
-          isGlass={isGlass}
-          isMobile={isMobile}
-          theme={theme}
+          order={checkinOrder} isGlass={isGlass} isMobile={isMobile} theme={theme}
           onClose={() => setCheckinOrder(null)}
-          onSuccess={() => {
-            cacheInvalidate("sv_orders");
-            fetchOrders();
-            showToast("Registro salvo!");
-          }}
+          onSuccess={() => { cacheInvalidate("sv_orders"); fetchOrders(); showToast("Registro salvo!"); setTimeout(() => setCheckinOrder(null), 1500); }}
         />
+      )}
+
+      {/* MODAL DETALHES DA OS */}
+      {detailOrder && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)", padding:16 }} onClick={() => setDetailOrder(null)}>
+          <div style={{ ...modalBg, borderRadius:20, padding:isMobile?"20px 16px":28, width:"100%", maxWidth:560, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 80px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+              <div>
+                <div style={{ fontWeight:700, fontSize:"1.1rem", color:theme.textPrimary }}>{detailOrder.number}</div>
+                <div style={{ fontSize:12, color:theme.textMuted }}>{detailOrder.client_name}</div>
+              </div>
+              <button style={{ background:isGlass?"rgba(255,255,255,0.3)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer" }} onClick={() => setDetailOrder(null)}>✕</button>
+            </div>
+
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
+              {[
+                { label:"Status",    value: STATUS_MAP[detailOrder.status]?.label || detailOrder.status },
+                { label:"Total",     value: fmt(detailOrder.total) },
+                { label:"Criado em", value: fmtDate(detailOrder.created_at) },
+                { label:"Concluído", value: fmtDate(detailOrder.finished_at) },
+              ].map((f,i) => (
+                <div key={i} style={{ background:isGlass?"rgba(255,255,255,0.1)":theme.bgCard, border:`1px solid ${isGlass?"rgba(255,255,255,0.2)":theme.borderCard}`, borderRadius:10, padding:"10px 14px" }}>
+                  <div style={{ fontSize:11, color:theme.textMuted, textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>{f.label}</div>
+                  <div style={{ fontSize:"0.9rem", fontWeight:600, color:theme.textPrimary }}>{f.value || "—"}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ fontSize:11, fontWeight:700, letterSpacing:"1.5px", textTransform:"uppercase", color:theme.textMuted, marginBottom:12 }}>
+              📍 Registros de Execução ({orderCheckins.length})
+            </div>
+            {loadingCheckins ? (
+              <div style={{ color:theme.textMuted, fontSize:13, textAlign:"center", padding:20 }}>Carregando...</div>
+            ) : orderCheckins.length === 0 ? (
+              <div style={{ color:theme.textMuted, fontSize:13, textAlign:"center", padding:20 }}>Nenhum registro de execução ainda.</div>
+            ) : orderCheckins.map((chk,i) => (
+              <div key={i} style={{ background:isGlass?"rgba(255,255,255,0.08)":theme.bgCard, border:`1px solid ${isGlass?"rgba(255,255,255,0.15)":theme.borderCard}`, borderRadius:12, padding:"14px 16px", marginBottom:10 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+                  <div>
+                    <div style={{ fontSize:12, color:theme.textMuted }}>Colaborador</div>
+                    <div style={{ fontWeight:600, color:theme.textPrimary, fontSize:"0.9rem" }}>{chk.user_name || "—"}</div>
+                  </div>
+                  {chk.duration_str && (
+                    <div style={{ background:"rgba(34,197,94,0.1)", border:"1px solid rgba(34,197,94,0.2)", borderRadius:8, padding:"4px 12px", textAlign:"center" }}>
+                      <div style={{ fontSize:10, color:"#64748b" }}>Duração</div>
+                      <div style={{ fontWeight:700, color:"#22c55e", fontSize:"0.9rem" }}>{chk.duration_str}</div>
+                    </div>
+                  )}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, fontSize:12 }}>
+                  <div>
+                    <div style={{ color:theme.textMuted, marginBottom:2 }}>📍 Entrada</div>
+                    <div style={{ color:theme.textPrimary, fontWeight:600 }}>{chk.checkin_at ? chk.checkin_at.replace("T"," ").slice(0,16) : "—"}</div>
+                  </div>
+                  <div>
+                    <div style={{ color:theme.textMuted, marginBottom:2 }}>🏁 Saída</div>
+                    <div style={{ color:theme.textPrimary, fontWeight:600 }}>{chk.checkout_at ? chk.checkout_at.replace("T"," ").slice(0,16) : "Em andamento..."}</div>
+                  </div>
+                  {(chk.latitude||chk.longitude) && (
+                    <div style={{ gridColumn:"1/-1" }}>
+                      <div style={{ color:theme.textMuted, marginBottom:2 }}>🗺️ GPS</div>
+                      <div style={{ color:"#22c55e", fontSize:11 }}>{chk.latitude?.toFixed(5)}, {chk.longitude?.toFixed(5)}</div>
+                    </div>
+                  )}
+                  {chk.notes && (
+                    <div style={{ gridColumn:"1/-1" }}>
+                      <div style={{ color:theme.textMuted, marginBottom:2 }}>📝 Observação</div>
+                      <div style={{ color:theme.textPrimary }}>{chk.notes}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            <div style={{ display:"flex", justifyContent:"flex-end", gap:12, marginTop:16 }}>
+              <button style={btnSecondary} onClick={() => setDetailOrder(null)}>Fechar</button>
+              {(detailOrder.status==="open"||detailOrder.status==="in_progress") && (
+                <button style={btnPrimary} onClick={() => { setDetailOrder(null); setCheckinOrder(detailOrder); }}>
+                  {detailOrder.status==="in_progress" ? "✅ Finalizar serviço" : "📍 Iniciar Check-in"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* MODAL DELETE */}
