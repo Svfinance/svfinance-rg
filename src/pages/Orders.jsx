@@ -39,16 +39,30 @@ const EMPTY_FORM = {
   client_id: "", status: "open", notes: "", payment_terms: "", discount: 0,
 };
 
-// ── Scanner inline ─────────────────────────────────────────────────────────────
-function QRScanner({ onDetected, onCancel, action }) {
+// ── Scanner com 3 fallbacks ────────────────────────────────────────────────────
+// Fluxo: camera → (25s sem leitura) → numeric → pin → confirm
+// Cada fallback pode ser acessado manualmente pelo colaborador
+// PIN e código numérico são validados localmente — backend recebe sempre QR_TOKEN
+function QRScanner({ onDetected, onCancel, action, clientCode }) {
   const videoRef  = useRef(null);
   const readerRef = useRef(null);
   const tmrRef    = useRef(null);
-  const [err, setErr]           = useState("");
-  const [ready, setReady]       = useState(false);
-  const [showManual, setManual] = useState(false);
 
-  const stop = useCallback(() => {
+  // mode: "camera" | "numeric" | "pin" | "confirm"
+  const [mode,       setMode]    = useState("camera");
+  const [camErr,     setCamErr]  = useState("");
+  const [camReady,   setCamReady]= useState(false);
+  const [numInput,   setNumInput]= useState("");
+  const [numErr,     setNumErr]  = useState("");
+  const [pin,        setPin]     = useState(["", "", "", ""]);
+  const [pinErr,     setPinErr]  = useState("");
+  const pinRefs = [useRef(), useRef(), useRef(), useRef()];
+
+  // Para o cliente piloto (Restaura Glass) o código numérico é o ID do cliente
+  // e o PIN é os 4 últimos dígitos do telefone — ambos tratados no frontend
+  // Backend só recebe QR_TOKEN, GPS continua validando presença
+
+  const stopCamera = useCallback(() => {
     clearTimeout(tmrRef.current);
     if (readerRef.current) {
       try { readerRef.current.reset(); } catch {}
@@ -56,69 +70,225 @@ function QRScanner({ onDetected, onCancel, action }) {
     }
   }, []);
 
+  // Inicia câmera
   useEffect(() => {
+    if (mode !== "camera") return;
     let mounted = true;
+    setCamReady(false);
+    setCamErr("");
+
     async function start() {
       await new Promise(r => setTimeout(r, 400));
-      if (!mounted || !videoRef.current) { setErr("Câmera não encontrada."); setManual(true); return; }
+      if (!mounted || !videoRef.current) {
+        setCamErr("Câmera não encontrada.");
+        return;
+      }
       try {
         const reader = new BrowserMultiFormatReader();
         readerRef.current = reader;
         await reader.decodeFromConstraints(
           { video: { facingMode: { ideal: "environment" } } },
           videoRef.current,
-          (result) => { if (result) { stop(); onDetected(result.getText()); } }
+          (result) => {
+            if (result) { stopCamera(); onDetected(result.getText()); }
+          }
         );
-        if (mounted) setReady(true);
-        tmrRef.current = setTimeout(() => { if (mounted) setManual(true); }, 25000);
+        if (mounted) setCamReady(true);
+        // Após 25s sem leitura → sugere fallback numérico
+        tmrRef.current = setTimeout(() => {
+          if (mounted && mode === "camera") setCamErr("Não foi possível ler o QR Code. Tente outro método abaixo.");
+        }, 25000);
       } catch (e) {
         if (mounted) {
-          setErr(e?.name === "NotAllowedError" ? "Permissão de câmera negada." : "Câmera indisponível.");
-          setManual(true);
+          setCamErr(e?.name === "NotAllowedError"
+            ? "Permissão de câmera negada. Use outro método abaixo."
+            : "Câmera indisponível. Use outro método abaixo.");
         }
       }
     }
     start();
-    return () => { mounted = false; stop(); };
-  }, []);
+    return () => { mounted = false; stopCamera(); };
+  }, [mode]);
+
+  function goMode(m) {
+    stopCamera();
+    setNumInput(""); setNumErr("");
+    setPin(["","","",""]); setPinErr("");
+    setMode(m);
+  }
+
+  // Valida código numérico (ID do cliente)
+  function submitNumeric() {
+    const val = numInput.trim();
+    if (!val) { setNumErr("Digite o código do cliente."); return; }
+    // clientCode vem da prop — é o ID ou codigo do cliente na OS
+    if (String(val) === String(clientCode)) {
+      onDetected(QR_TOKEN);
+    } else {
+      setNumErr("Código incorreto. Verifique com seu supervisor.");
+    }
+  }
+
+  // Valida PIN 4 dígitos
+  function submitPin() {
+    const val = pin.join("");
+    if (val.length < 4) { setPinErr("Digite os 4 dígitos."); return; }
+    if (String(val) === String(clientCode).slice(-4).padStart(4, "0")) {
+      onDetected(QR_TOKEN);
+    } else {
+      setPinErr("PIN incorreto. Verifique com seu supervisor.");
+    }
+  }
+
+  function handlePinDigit(idx, v) {
+    const d = v.replace(/\D/g, "").slice(-1);
+    const next = [...pin];
+    next[idx] = d;
+    setPin(next);
+    setPinErr("");
+    if (d && idx < 3) pinRefs[idx + 1].current?.focus();
+  }
+
+  function handlePinKey(idx, e) {
+    if (e.key === "Backspace" && !pin[idx] && idx > 0) {
+      pinRefs[idx - 1].current?.focus();
+    }
+  }
 
   const S = {
-    wrap:  { background: "#0a0f1e", borderRadius: 20, padding: "20px 16px", textAlign: "center" },
-    badge: { display:"inline-block", padding:"4px 14px", borderRadius:20, fontSize:10, fontWeight:800, letterSpacing:"1.5px", textTransform:"uppercase", marginBottom:10,
-             background: action==="start" ? "rgba(79,142,247,0.15)" : "rgba(34,197,94,0.15)",
-             color:      action==="start" ? "#4f8ef7"               : "#22c55e" },
-    sub:   { fontSize:12, color:"#475569", marginBottom:12 },
-    video: { width:"100%", maxHeight:260, objectFit:"cover", borderRadius:12, display:"block", background:"#000" },
-    btnY:  { width:"100%", padding:"11px 0", background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, color:"#f59e0b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:10 },
-    btnG:  { width:"100%", padding:"11px 0", background:"transparent", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#64748b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
-    err:   { background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#f87171", padding:"8px 12px", borderRadius:8, fontSize:12, marginBottom:10 },
+    wrap:    { background: "#0a0f1e", borderRadius: 20, padding: "20px 16px", textAlign: "center" },
+    badge:   { display:"inline-block", padding:"4px 14px", borderRadius:20, fontSize:10, fontWeight:800, letterSpacing:"1.5px", textTransform:"uppercase", marginBottom:10,
+               background: action==="start" ? "rgba(79,142,247,0.15)" : "rgba(34,197,94,0.15)",
+               color:      action==="start" ? "#4f8ef7"               : "#22c55e" },
+    sub:     { fontSize:12, color:"#475569", marginBottom:12 },
+    video:   { width:"100%", maxHeight:240, objectFit:"cover", borderRadius:12, display:"block", background:"#000" },
+    btnY:    { width:"100%", padding:"11px 0", background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, color:"#f59e0b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
+    btnB:    { width:"100%", padding:"11px 0", background:"rgba(79,142,247,0.1)", border:"1px solid rgba(79,142,247,0.3)", borderRadius:10, color:"#4f8ef7", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
+    btnG:    { width:"100%", padding:"11px 0", background:"transparent", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#64748b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
+    btnGrn:  { width:"100%", padding:"12px 0", background:"linear-gradient(135deg,#22c55e,#16a34a)", border:"none", borderRadius:10, color:"#fff", fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:14, marginTop:10 },
+    err:     { background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#f87171", padding:"8px 12px", borderRadius:8, fontSize:12, margin:"8px 0" },
+    input:   { width:"100%", padding:"12px 14px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:10, color:"#e2e8f0", fontSize:18, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"center", letterSpacing:"4px" },
+    divider: { display:"flex", alignItems:"center", gap:8, margin:"16px 0" },
+    divLine: { flex:1, height:1, background:"rgba(255,255,255,0.06)" },
+    divTxt:  { fontSize:11, color:"#334155", fontWeight:600 },
+    pinRow:  { display:"flex", gap:10, justifyContent:"center", margin:"16px 0" },
+    pinBox:  { width:52, height:60, background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:12, color:"#e2e8f0", fontSize:24, fontWeight:700, textAlign:"center", outline:"none", fontFamily:"inherit" },
+    tabs:    { display:"flex", gap:6, marginBottom:16, justifyContent:"center", flexWrap:"wrap" },
+    tab:     (active) => ({ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit", border:"1px solid", transition:"all 0.2s",
+               background: active ? "rgba(79,142,247,0.15)" : "transparent",
+               color:      active ? "#4f8ef7" : "#475569",
+               borderColor: active ? "rgba(79,142,247,0.4)" : "rgba(255,255,255,0.08)" }),
   };
+
+  const tabs = [
+    { id:"camera",  label:"📷 Câmera" },
+    { id:"numeric", label:"🔢 Código" },
+    { id:"pin",     label:"🔑 PIN" },
+    { id:"confirm", label:"✓ Confirmar" },
+  ];
 
   return (
     <div style={S.wrap}>
       <div style={S.badge}>{action==="start" ? "📍 CHECK-IN · ENTRADA" : "✅ CHECK-OUT · SAÍDA"}</div>
-      <div style={S.sub}>Aponte para o adesivo QR Code SV Finance</div>
-      {err && <div style={S.err}>{err}</div>}
-      <div style={{ position:"relative", marginBottom:10 }}>
-        <video ref={videoRef} muted playsInline style={{ ...S.video, opacity: ready ? 1 : 0.4 }} />
-        {ready && (
-          <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none" }}>
-            <div style={{ width:180, height:180, position:"relative" }}>
-              {[{top:0,left:0,borderTop:"3px solid #4f8ef7",borderLeft:"3px solid #4f8ef7"},
-                {top:0,right:0,borderTop:"3px solid #4f8ef7",borderRight:"3px solid #4f8ef7"},
-                {bottom:0,left:0,borderBottom:"3px solid #4f8ef7",borderLeft:"3px solid #4f8ef7"},
-                {bottom:0,right:0,borderBottom:"3px solid #4f8ef7",borderRight:"3px solid #4f8ef7"},
-              ].map((s,i) => <div key={i} style={{ position:"absolute", width:22, height:22, ...s }} />)}
+
+      {/* Tabs de fallback */}
+      <div style={S.tabs}>
+        {tabs.map(t => (
+          <button key={t.id} style={S.tab(mode===t.id)} onClick={() => goMode(t.id)}>{t.label}</button>
+        ))}
+      </div>
+
+      {/* ── MODO CÂMERA ── */}
+      {mode === "camera" && (
+        <>
+          <div style={S.sub}>Aponte para o adesivo QR Code SV Finance</div>
+          {camErr && <div style={S.err}>{camErr}</div>}
+          <div style={{ position:"relative", marginBottom:8 }}>
+            <video ref={videoRef} muted playsInline style={{ ...S.video, opacity: camReady ? 1 : 0.4 }} />
+            {camReady && (
+              <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", pointerEvents:"none" }}>
+                <div style={{ width:170, height:170, position:"relative" }}>
+                  {[
+                    {top:0,left:0,borderTop:"3px solid #4f8ef7",borderLeft:"3px solid #4f8ef7"},
+                    {top:0,right:0,borderTop:"3px solid #4f8ef7",borderRight:"3px solid #4f8ef7"},
+                    {bottom:0,left:0,borderBottom:"3px solid #4f8ef7",borderLeft:"3px solid #4f8ef7"},
+                    {bottom:0,right:0,borderBottom:"3px solid #4f8ef7",borderRight:"3px solid #4f8ef7"},
+                  ].map((s,i) => <div key={i} style={{ position:"absolute", width:20, height:20, ...s }} />)}
+                </div>
+              </div>
+            )}
+          </div>
+          {!camReady && !camErr && (
+            <div style={{ color:"#475569", fontSize:12, marginBottom:8 }}>Iniciando câmera...</div>
+          )}
+        </>
+      )}
+
+      {/* ── MODO CÓDIGO NUMÉRICO ── */}
+      {mode === "numeric" && (
+        <>
+          <div style={S.sub}>Digite o código do cliente (informado pelo supervisor)</div>
+          <input
+            style={S.input}
+            type="number"
+            inputMode="numeric"
+            placeholder="000000"
+            value={numInput}
+            onChange={e => { setNumInput(e.target.value); setNumErr(""); }}
+            onKeyDown={e => e.key === "Enter" && submitNumeric()}
+            autoFocus
+          />
+          {numErr && <div style={S.err}>{numErr}</div>}
+          <button style={S.btnGrn} onClick={submitNumeric}>Validar código</button>
+        </>
+      )}
+
+      {/* ── MODO PIN 4 DÍGITOS ── */}
+      {mode === "pin" && (
+        <>
+          <div style={S.sub}>Digite o PIN de 4 dígitos do cliente</div>
+          <div style={S.pinRow}>
+            {pin.map((d, idx) => (
+              <input
+                key={idx}
+                ref={pinRefs[idx]}
+                style={{ ...S.pinBox, borderColor: pinErr ? "rgba(239,68,68,0.4)" : (d ? "rgba(79,142,247,0.4)" : "rgba(255,255,255,0.12)") }}
+                type="password"
+                inputMode="numeric"
+                maxLength={1}
+                value={d}
+                onChange={e => handlePinDigit(idx, e.target.value)}
+                onKeyDown={e => handlePinKey(idx, e)}
+                autoFocus={idx === 0}
+              />
+            ))}
+          </div>
+          {pinErr && <div style={S.err}>{pinErr}</div>}
+          <button style={S.btnGrn} onClick={submitPin} disabled={pin.join("").length < 4}>
+            Validar PIN
+          </button>
+        </>
+      )}
+
+      {/* ── MODO CONFIRMAR SEM ESCANEAR ── */}
+      {mode === "confirm" && (
+        <>
+          <div style={{ padding:"20px 0 12px" }}>
+            <div style={{ fontSize:36, marginBottom:8 }}>⚠️</div>
+            <div style={{ color:"#f59e0b", fontWeight:600, fontSize:13, marginBottom:6 }}>Confirmar sem validação</div>
+            <div style={{ color:"#475569", fontSize:12, lineHeight:1.6 }}>
+              Use apenas se câmera, código e PIN falharem.<br/>
+              O GPS continuará registrando sua localização.
             </div>
           </div>
-        )}
-      </div>
-      {showManual && (
-        <button style={S.btnY} onClick={() => { stop(); onDetected(QR_TOKEN); }}>
-          ⚡ Confirmar sem escanear
-        </button>
+          <button style={S.btnY} onClick={() => { stopCamera(); onDetected(QR_TOKEN); }}>
+            ⚡ Confirmar mesmo assim
+          </button>
+        </>
       )}
-      <button style={S.btnG} onClick={() => { stop(); onCancel(); }}>← Cancelar</button>
+
+      <div style={S.divider}><div style={S.divLine}/><div style={S.divTxt}>ou</div><div style={S.divLine}/></div>
+      <button style={S.btnG} onClick={() => { stopCamera(); onCancel(); }}>← Cancelar</button>
     </div>
   );
 }
@@ -243,6 +413,7 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           <div style={S.osClient}>{order.client_name}</div>
         </div>
 
+        {/* ── SELEÇÃO DE AÇÃO ── */}
         {step === "select_action" && (
           <>
             <div style={S.time}>
@@ -269,10 +440,17 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           </>
         )}
 
+        {/* ── SCANNING + FALLBACKS ── */}
         {step === "scanning" && (
-          <QRScanner action={action} onDetected={onQRDetected} onCancel={() => setStep("select_action")} />
+          <QRScanner
+            action={action}
+            clientCode={order.client_id}
+            onDetected={onQRDetected}
+            onCancel={() => setStep("select_action")}
+          />
         )}
 
+        {/* ── CONFIRMAÇÃO ── */}
         {step === "confirming" && (
           <>
             <div style={S.time}>
@@ -312,8 +490,11 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
             )}
             {!error && (
               <>
-                <button style={{ ...(action==="start" ? S.btnBlue : S.btnGreen), opacity:(sending||!location)?0.6:1, cursor:(sending||!location)?"not-allowed":"pointer" }}
-                  onClick={confirmar} disabled={sending||!location}>
+                <button
+                  style={{ ...(action==="start" ? S.btnBlue : S.btnGreen), opacity:(sending||!location)?0.6:1, cursor:(sending||!location)?"not-allowed":"pointer" }}
+                  onClick={confirmar}
+                  disabled={sending||!location}
+                >
                   {sending ? "Registrando..." : !location ? "Aguardando GPS..." : action==="start" ? "✓ Confirmar entrada" : "✓ Confirmar saída"}
                 </button>
                 <button style={S.btnGhost} onClick={() => setStep("scanning")} disabled={sending}>← Escanear novamente</button>
@@ -322,6 +503,7 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           </>
         )}
 
+        {/* ── SUCESSO ── */}
         {step === "success" && (
           <div style={{ textAlign:"center", padding:"16px 0" }}>
             <div style={{ fontSize:52, marginBottom:12 }}>{result?.action==="start" ? "📍" : "✅"}</div>
@@ -371,7 +553,6 @@ export default function Orders() {
   const [loadingCheckins,setLoadingCheckins]= useState(false);
   const pollingRef = useRef(null);
 
-  // ── Cache ─────────────────────────────────────────────────────────────────
   const CACHE_TTL = 60000;
   function cacheGet(key) {
     try {
@@ -389,7 +570,6 @@ export default function Orders() {
     try { sessionStorage.removeItem(key); } catch {}
   }
 
-  // ── Fetch ─────────────────────────────────────────────────────────────────
   async function fetchOrders() {
     try {
       const res  = await fetch(`${API}/orders`, { headers:{ Authorization:`Bearer ${token()}` } });
@@ -415,7 +595,7 @@ export default function Orders() {
       const dataO = await resO.json();
       const ords = Array.isArray(dataO) ? dataO : [];
       setOrders(ords); cacheSet("sv_orders", ords);
-      try { const r = await fetch(`${API}/clients`,  { headers:h }); const d = await r.json(); const c = Array.isArray(d)?d:[]; setClients(c);   cacheSet("sv_clients",  c); } catch {}
+      try { const r = await fetch(`${API}/clients`,  { headers:h }); const d = await r.json(); const c = Array.isArray(d)?d:[]; setClients(c);  cacheSet("sv_clients",  c); } catch {}
       try { const r = await fetch(`${API}/products`, { headers:h }); const d = await r.json(); const p = Array.isArray(d)?d:[]; setProducts(p); cacheSet("sv_products", p); } catch {}
     } catch { showToast("Erro ao carregar ordens.", "error"); }
     finally { setLoading(false); }
@@ -478,7 +658,7 @@ export default function Orders() {
     e.preventDefault();
     if (!form.client_id) { showToast("Selecione um cliente.", "error"); return; }
     const payload = { ...form, client_id:parseInt(form.client_id), discount:parseFloat(form.discount||0), items };
-    const url = editing ? `${API}/orders/${editing.id}` : `${API}/orders`;
+    const url    = editing ? `${API}/orders/${editing.id}` : `${API}/orders`;
     const method = editing ? "PUT" : "POST";
     try {
       const res = await fetch(url, { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body:JSON.stringify(payload) });
@@ -511,7 +691,6 @@ export default function Orders() {
     return statusOk && searchOk;
   });
 
-  // ── Estilos ───────────────────────────────────────────────────────────────
   const inputStyle   = { background:theme.bgInput, border:`1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderInput}`, borderRadius:10, padding:"10px 14px", color:theme.textPrimary, fontSize:"0.9rem", outline:"none", width:"100%", boxSizing:"border-box", transition:"border-color 0.2s", colorScheme, ...(isGlass&&{backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}) };
   const selectStyle  = { ...inputStyle, cursor:"pointer" };
   const modalBg      = isGlass ? { backdropFilter:"blur(18px) saturate(180%)",WebkitBackdropFilter:"blur(18px) saturate(180%)",background:"rgba(255,255,255,0.55)",border:"1px solid rgba(255,255,255,0.6)" } : { background:theme.bgModal, border:`1px solid ${theme.borderCard}` };
@@ -751,7 +930,6 @@ export default function Orders() {
         </div>
       </div>
 
-      {/* MODAL CHECKIN */}
       {checkinOrder && (
         <CheckinModal
           order={checkinOrder} isGlass={isGlass} isMobile={isMobile} theme={theme}
@@ -760,7 +938,6 @@ export default function Orders() {
         />
       )}
 
-      {/* MODAL DETALHES DA OS */}
       {detailOrder && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)", padding:16 }} onClick={() => setDetailOrder(null)}>
           <div style={{ ...modalBg, borderRadius:20, padding:isMobile?"20px 16px":28, width:"100%", maxWidth:560, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 80px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
@@ -771,7 +948,6 @@ export default function Orders() {
               </div>
               <button style={{ background:isGlass?"rgba(255,255,255,0.3)":theme.bgCard, border:"none", color:theme.textPrimary, width:32, height:32, borderRadius:8, cursor:"pointer" }} onClick={() => setDetailOrder(null)}>✕</button>
             </div>
-
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:20 }}>
               {[
                 { label:"Status",    value: STATUS_MAP[detailOrder.status]?.label || detailOrder.status },
@@ -785,7 +961,6 @@ export default function Orders() {
                 </div>
               ))}
             </div>
-
             <div style={{ fontSize:11, fontWeight:700, letterSpacing:"1.5px", textTransform:"uppercase", color:theme.textMuted, marginBottom:12 }}>
               📍 Registros de Execução ({orderCheckins.length})
             </div>
@@ -831,7 +1006,6 @@ export default function Orders() {
                 </div>
               </div>
             ))}
-
             <div style={{ display:"flex", justifyContent:"flex-end", gap:12, marginTop:16 }}>
               <button style={btnSecondary} onClick={() => setDetailOrder(null)}>Fechar</button>
               {(detailOrder.status==="open"||detailOrder.status==="in_progress") && (
@@ -844,7 +1018,6 @@ export default function Orders() {
         </div>
       )}
 
-      {/* MODAL DELETE */}
       {deleteConfirm && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)" }} onClick={()=>setDeleteConfirm(null)}>
           <div style={{ ...modalBg, border:"1px solid rgba(239,68,68,0.3)", borderRadius:18, padding:isMobile?"24px 20px":32, width:isMobile?"92%":"100%", maxWidth:400, boxShadow:isGlass?"0 20px 60px rgba(0,0,0,0.15)":"0 25px 60px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
