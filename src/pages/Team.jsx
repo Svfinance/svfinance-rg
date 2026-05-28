@@ -19,11 +19,12 @@ function useIsMobile() {
 }
 
 const ROLES = [
-  { value: "admin",     label: "Admin",      desc: "Acesso total"                  },
-  { value: "financial", label: "Financeiro", desc: "Transações e relatórios"       },
-  { value: "seller",    label: "Vendedor",   desc: "Orçamentos e vendas"           },
-  { value: "stock",     label: "Estoque",    desc: "Produtos e movimentações"      },
-  { value: "viewer",    label: "Visualizar", desc: "Somente leitura"               },
+  { value: "admin",       label: "Admin",       desc: "Acesso total"                   },
+  { value: "encarregado", label: "Encarregado", desc: "Supervisiona equipe + gera PIN" },
+  { value: "financial",   label: "Financeiro",  desc: "Transações e relatórios"        },
+  { value: "seller",      label: "Vendedor",    desc: "Orçamentos e vendas"            },
+  { value: "stock",       label: "Estoque",     desc: "Produtos e movimentações"       },
+  { value: "viewer",      label: "Visualizar",  desc: "Somente leitura"                },
 ];
 
 const EMPTY_FORM = { name: "", email: "", role: "seller", password: "" };
@@ -133,11 +134,12 @@ export default function Team() {
   });
 
   const roleColor = (role) => ({
-    admin:     { color: "#ef4444", bg: "rgba(239,68,68,0.12)"   },
-    financial: { color: "#3b82f6", bg: "rgba(59,130,246,0.12)"  },
-    seller:    { color: "#22c55e", bg: "rgba(34,197,94,0.12)"   },
-    stock:     { color: "#f59e0b", bg: "rgba(245,158,11,0.12)"  },
-    viewer:    { color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
+    admin:       { color: "#ef4444", bg: "rgba(239,68,68,0.12)"   },
+    encarregado: { color: "#a78bfa", bg: "rgba(167,139,250,0.12)" },
+    financial:   { color: "#3b82f6", bg: "rgba(59,130,246,0.12)"  },
+    seller:      { color: "#22c55e", bg: "rgba(34,197,94,0.12)"   },
+    stock:       { color: "#f59e0b", bg: "rgba(245,158,11,0.12)"  },
+    viewer:      { color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
   }[role] || { color: theme.textMuted, bg: "transparent" });
 
   const roleLabel = (role) => ROLES.find(r => r.value === role)?.label || role;
@@ -294,7 +296,7 @@ export default function Team() {
         {/* LEGENDA DE PERFIS */}
         <div style={{ marginTop: 24, padding: "16px 20px", background: isGlass ? "rgba(255,255,255,0.12)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.25)" : theme.borderCard}`, borderRadius: 14 }}>
           <div style={{ fontSize: "0.78rem", fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>Perfis de Acesso</div>
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(5,1fr)", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(3,1fr)", gap: 10 }}>
             {ROLES.map(r => {
               const rc = roleColor(r.value);
               return (

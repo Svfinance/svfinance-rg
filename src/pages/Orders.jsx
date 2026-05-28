@@ -5,6 +5,8 @@ import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
 import { BrowserMultiFormatReader } from "@zxing/browser";
+import { enqueueCheckin, uuid } from "../offline/offlineDB";
+import { syncNow } from "../offline/syncEngine";
 
 const API = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
@@ -40,16 +42,14 @@ const EMPTY_FORM = {
 };
 
 // ── Scanner com 3 fallbacks ────────────────────────────────────────────────────
-// Fluxo: camera → (25s sem leitura) → numeric → pin → confirm
-// Cada fallback pode ser acessado manualmente pelo colaborador
-// PIN e código numérico são validados localmente — backend recebe sempre QR_TOKEN
+// Fluxo: camera → numeric → pin → confirm. Cada um acessível pelas tabs.
+// Código numérico e PIN do scanner são validados localmente (referência client_id).
 function QRScanner({ onDetected, onCancel, action, clientCode }) {
   const videoRef  = useRef(null);
   const readerRef = useRef(null);
   const tmrRef    = useRef(null);
 
-  // mode: "camera" | "numeric" | "pin" | "confirm"
-  const [mode,       setMode]    = useState("camera");
+  const [mode,       setMode]    = useState("camera"); // camera|numeric|pin|confirm
   const [camErr,     setCamErr]  = useState("");
   const [camReady,   setCamReady]= useState(false);
   const [numInput,   setNumInput]= useState("");
@@ -57,10 +57,6 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
   const [pin,        setPin]     = useState(["", "", "", ""]);
   const [pinErr,     setPinErr]  = useState("");
   const pinRefs = [useRef(), useRef(), useRef(), useRef()];
-
-  // Para o cliente piloto (Restaura Glass) o código numérico é o ID do cliente
-  // e o PIN é os 4 últimos dígitos do telefone — ambos tratados no frontend
-  // Backend só recebe QR_TOKEN, GPS continua validando presença
 
   const stopCamera = useCallback(() => {
     clearTimeout(tmrRef.current);
@@ -70,7 +66,6 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
     }
   }, []);
 
-  // Inicia câmera
   useEffect(() => {
     if (mode !== "camera") return;
     let mounted = true;
@@ -79,22 +74,16 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
 
     async function start() {
       await new Promise(r => setTimeout(r, 400));
-      if (!mounted || !videoRef.current) {
-        setCamErr("Câmera não encontrada.");
-        return;
-      }
+      if (!mounted || !videoRef.current) { setCamErr("Câmera não encontrada."); return; }
       try {
         const reader = new BrowserMultiFormatReader();
         readerRef.current = reader;
         await reader.decodeFromConstraints(
           { video: { facingMode: { ideal: "environment" } } },
           videoRef.current,
-          (result) => {
-            if (result) { stopCamera(); onDetected(result.getText()); }
-          }
+          (result) => { if (result) { stopCamera(); onDetected(result.getText()); } }
         );
         if (mounted) setCamReady(true);
-        // Após 25s sem leitura → sugere fallback numérico
         tmrRef.current = setTimeout(() => {
           if (mounted && mode === "camera") setCamErr("Não foi possível ler o QR Code. Tente outro método abaixo.");
         }, 25000);
@@ -117,27 +106,18 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
     setMode(m);
   }
 
-  // Valida código numérico (ID do cliente)
   function submitNumeric() {
     const val = numInput.trim();
     if (!val) { setNumErr("Digite o código do cliente."); return; }
-    // clientCode vem da prop — é o ID ou codigo do cliente na OS
-    if (String(val) === String(clientCode)) {
-      onDetected(QR_TOKEN);
-    } else {
-      setNumErr("Código incorreto. Verifique com seu supervisor.");
-    }
+    if (String(val) === String(clientCode)) onDetected(QR_TOKEN);
+    else setNumErr("Código incorreto. Verifique com seu supervisor.");
   }
 
-  // Valida PIN 4 dígitos
   function submitPin() {
     const val = pin.join("");
     if (val.length < 4) { setPinErr("Digite os 4 dígitos."); return; }
-    if (String(val) === String(clientCode).slice(-4).padStart(4, "0")) {
-      onDetected(QR_TOKEN);
-    } else {
-      setPinErr("PIN incorreto. Verifique com seu supervisor.");
-    }
+    if (String(val) === String(clientCode).slice(-4).padStart(4, "0")) onDetected(QR_TOKEN);
+    else setPinErr("PIN incorreto. Verifique com seu supervisor.");
   }
 
   function handlePinDigit(idx, v) {
@@ -148,11 +128,8 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
     setPinErr("");
     if (d && idx < 3) pinRefs[idx + 1].current?.focus();
   }
-
   function handlePinKey(idx, e) {
-    if (e.key === "Backspace" && !pin[idx] && idx > 0) {
-      pinRefs[idx - 1].current?.focus();
-    }
+    if (e.key === "Backspace" && !pin[idx] && idx > 0) pinRefs[idx - 1].current?.focus();
   }
 
   const S = {
@@ -162,9 +139,8 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
                color:      action==="start" ? "#4f8ef7"               : "#22c55e" },
     sub:     { fontSize:12, color:"#475569", marginBottom:12 },
     video:   { width:"100%", maxHeight:240, objectFit:"cover", borderRadius:12, display:"block", background:"#000" },
-    btnY:    { width:"100%", padding:"11px 0", background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, color:"#f59e0b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
-    btnB:    { width:"100%", padding:"11px 0", background:"rgba(79,142,247,0.1)", border:"1px solid rgba(79,142,247,0.3)", borderRadius:10, color:"#4f8ef7", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
     btnG:    { width:"100%", padding:"11px 0", background:"transparent", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#64748b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
+    btnY:    { width:"100%", padding:"11px 0", background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)", borderRadius:10, color:"#f59e0b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginTop:8 },
     btnGrn:  { width:"100%", padding:"12px 0", background:"linear-gradient(135deg,#22c55e,#16a34a)", border:"none", borderRadius:10, color:"#fff", fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:14, marginTop:10 },
     err:     { background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#f87171", padding:"8px 12px", borderRadius:8, fontSize:12, margin:"8px 0" },
     input:   { width:"100%", padding:"12px 14px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.12)", borderRadius:10, color:"#e2e8f0", fontSize:18, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"center", letterSpacing:"4px" },
@@ -191,14 +167,12 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
     <div style={S.wrap}>
       <div style={S.badge}>{action==="start" ? "📍 CHECK-IN · ENTRADA" : "✅ CHECK-OUT · SAÍDA"}</div>
 
-      {/* Tabs de fallback */}
       <div style={S.tabs}>
         {tabs.map(t => (
           <button key={t.id} style={S.tab(mode===t.id)} onClick={() => goMode(t.id)}>{t.label}</button>
         ))}
       </div>
 
-      {/* ── MODO CÂMERA ── */}
       {mode === "camera" && (
         <>
           <div style={S.sub}>Aponte para o adesivo QR Code SV Finance</div>
@@ -218,59 +192,38 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
               </div>
             )}
           </div>
-          {!camReady && !camErr && (
-            <div style={{ color:"#475569", fontSize:12, marginBottom:8 }}>Iniciando câmera...</div>
-          )}
+          {!camReady && !camErr && <div style={{ color:"#475569", fontSize:12, marginBottom:8 }}>Iniciando câmera...</div>}
         </>
       )}
 
-      {/* ── MODO CÓDIGO NUMÉRICO ── */}
       {mode === "numeric" && (
         <>
           <div style={S.sub}>Digite o código do cliente (informado pelo supervisor)</div>
-          <input
-            style={S.input}
-            type="number"
-            inputMode="numeric"
-            placeholder="000000"
-            value={numInput}
-            onChange={e => { setNumInput(e.target.value); setNumErr(""); }}
-            onKeyDown={e => e.key === "Enter" && submitNumeric()}
-            autoFocus
-          />
+          <input style={S.input} type="number" inputMode="numeric" placeholder="000000"
+            value={numInput} onChange={e => { setNumInput(e.target.value); setNumErr(""); }}
+            onKeyDown={e => e.key === "Enter" && submitNumeric()} autoFocus />
           {numErr && <div style={S.err}>{numErr}</div>}
           <button style={S.btnGrn} onClick={submitNumeric}>Validar código</button>
         </>
       )}
 
-      {/* ── MODO PIN 4 DÍGITOS ── */}
       {mode === "pin" && (
         <>
           <div style={S.sub}>Digite o PIN de 4 dígitos do cliente</div>
           <div style={S.pinRow}>
             {pin.map((d, idx) => (
-              <input
-                key={idx}
-                ref={pinRefs[idx]}
+              <input key={idx} ref={pinRefs[idx]}
                 style={{ ...S.pinBox, borderColor: pinErr ? "rgba(239,68,68,0.4)" : (d ? "rgba(79,142,247,0.4)" : "rgba(255,255,255,0.12)") }}
-                type="password"
-                inputMode="numeric"
-                maxLength={1}
-                value={d}
+                type="password" inputMode="numeric" maxLength={1} value={d}
                 onChange={e => handlePinDigit(idx, e.target.value)}
-                onKeyDown={e => handlePinKey(idx, e)}
-                autoFocus={idx === 0}
-              />
+                onKeyDown={e => handlePinKey(idx, e)} autoFocus={idx === 0} />
             ))}
           </div>
           {pinErr && <div style={S.err}>{pinErr}</div>}
-          <button style={S.btnGrn} onClick={submitPin} disabled={pin.join("").length < 4}>
-            Validar PIN
-          </button>
+          <button style={S.btnGrn} onClick={submitPin} disabled={pin.join("").length < 4}>Validar PIN</button>
         </>
       )}
 
-      {/* ── MODO CONFIRMAR SEM ESCANEAR ── */}
       {mode === "confirm" && (
         <>
           <div style={{ padding:"20px 0 12px" }}>
@@ -281,9 +234,7 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
               O GPS continuará registrando sua localização.
             </div>
           </div>
-          <button style={S.btnY} onClick={() => { stopCamera(); onDetected(QR_TOKEN); }}>
-            ⚡ Confirmar mesmo assim
-          </button>
+          <button style={S.btnY} onClick={() => { stopCamera(); onDetected(QR_TOKEN); }}>⚡ Confirmar mesmo assim</button>
         </>
       )}
 
@@ -305,6 +256,11 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
   const [result, setResult]   = useState(null);
   const [loadingOpen, setLO]  = useState(true);
 
+  // PIN (cliente sem GPS) e offline
+  const [pinMode, setPinMode]   = useState(false);
+  const [pinValue, setPinValue] = useState("");
+  const [offlineMsg, setOfflineMsg] = useState("");
+
   const now     = new Date();
   const horaFmt = now.toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" });
   const dataFmt = now.toLocaleDateString("pt-BR", { weekday:"long", day:"2-digit", month:"long" });
@@ -321,6 +277,8 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
 
   useEffect(() => {
     async function checkOpen() {
+      // Offline: não dá pra consultar; assume sem check-in aberto e segue
+      if (!navigator.onLine) { setOpenChk(null); setLO(false); return; }
       try {
         const res  = await fetch(`${API}/checkin/open`, { headers:{ Authorization:`Bearer ${token()}` } });
         const data = await res.json();
@@ -344,16 +302,48 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
     setStep("confirming");
   }
 
+  // Monta o corpo do check-in (com local_id sempre)
+  function buildBody() {
+    const base = {
+      lat: location?.lat || null,
+      lon: location?.lon || null,
+      notes: notes || null,
+      qr_token: QR_TOKEN,
+      pin: pinMode ? pinValue : null,
+      local_id: uuid(),
+    };
+    if (action === "start") return { ...base, kind: "start", client_id: order.client_id, order_id: order.id };
+    return { ...base, kind: "finish", checkin_id: openChk?.checkin_id };
+  }
+
   async function confirmar() {
     setSending(true);
     setError("");
+    setOfflineMsg("");
+
+    const body = buildBody();
+
+    // ── OFFLINE: enfileira e encerra ────────────────────────────────────────
+    if (!navigator.onLine) {
+      try {
+        await enqueueCheckin(body);
+        setResult({ action, offline: true });
+        setStep("success");
+        setOfflineMsg("Sem internet — registro salvo e será sincronizado automaticamente.");
+        onSuccess();
+      } catch {
+        setError("Não foi possível salvar offline. Tente novamente.");
+      } finally {
+        setSending(false);
+      }
+      return;
+    }
+
+    // ── ONLINE: envia direto ────────────────────────────────────────────────
     try {
       const endpoint = action==="start"
         ? `${API}/checkin/${order.client_id}/start`
         : `${API}/checkin/${openChk.checkin_id}/finish`;
-      const body = action==="start"
-        ? { order_id:order.id, lat:location?.lat||null, lon:location?.lon||null, notes:notes||null, qr_token:QR_TOKEN }
-        : { lat:location?.lat||null, lon:location?.lon||null, notes:notes||null, qr_token:QR_TOKEN };
 
       const res  = await fetch(endpoint, {
         method:"POST",
@@ -363,14 +353,29 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.msg || "Erro ao registrar. Tente novamente.");
+        // Cliente sem GPS → pede PIN
+        if (data.sem_coordenadas) {
+          setPinMode(true);
+          setError("Cliente sem localização cadastrada. Digite o PIN do encarregado.");
+        } else {
+          setError(data.msg || "Erro ao registrar. Tente novamente.");
+        }
         return;
       }
       setResult({ ...data, action });
       setStep("success");
       onSuccess();
     } catch (e) {
-      setError("Erro de conexão: " + (e.message || "verifique sua internet."));
+      // Falhou a rede no meio → enfileira como offline
+      try {
+        await enqueueCheckin(body);
+        setResult({ action, offline: true });
+        setStep("success");
+        setOfflineMsg("Conexão instável — registro salvo e será sincronizado automaticamente.");
+        onSuccess();
+      } catch {
+        setError("Erro de conexão: " + (e.message || "verifique sua internet."));
+      }
     } finally {
       setSending(false);
     }
@@ -390,6 +395,7 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
     btnGhost:{ width:"100%", padding:"11px 0", background:"transparent", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, color:"#64748b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginBottom:8 },
     err:     { background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#f87171", padding:"10px 14px", borderRadius:10, fontSize:13, marginBottom:14 },
     textarea:{ width:"100%", padding:"11px 13px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#e2e8f0", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box", marginBottom:14, resize:"none" },
+    pinInput:{ width:"100%", padding:"12px 14px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(245,158,11,0.4)", borderRadius:10, color:"#e2e8f0", fontSize:20, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"center", letterSpacing:"6px", marginBottom:12 },
     time:    { textAlign:"center", marginBottom:14 },
   };
 
@@ -420,6 +426,11 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
               <div style={{ fontSize:"1.8rem", fontWeight:700, color:"#e2e8f0", letterSpacing:"-1px" }}>{horaFmt}</div>
               <div style={{ fontSize:12, color:"#475569", textTransform:"capitalize" }}>{dataFmt}</div>
             </div>
+            {!navigator.onLine && (
+              <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)", color:"#f59e0b", padding:"8px 12px", borderRadius:8, fontSize:12, marginBottom:12, textAlign:"center" }}>
+                📴 Você está offline — o registro será sincronizado depois.
+              </div>
+            )}
             {error && <div style={S.err}>⚠️ {error}</div>}
             {openChk ? (
               <>
@@ -462,15 +473,29 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
               <div style={{ fontSize:"1.8rem", fontWeight:700, color:"#e2e8f0", letterSpacing:"-1px" }}>{horaFmt}</div>
               <div style={{ fontSize:12, color:"#475569", textTransform:"capitalize" }}>{dataFmt}</div>
             </div>
+
             {action==="finish" && openChk && (
               <div style={{ background:"rgba(34,197,94,0.06)", border:"1px solid rgba(34,197,94,0.15)", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#4ade80", textAlign:"center" }}>
                 Entrada registrada às {openChk.checkin_at?.slice(11,16)}
               </div>
             )}
+
             <textarea style={S.textarea} rows={2}
               placeholder={action==="start" ? "Observação de entrada (opcional)" : "Observação de saída (opcional)"}
               value={notes} onChange={e => setNotes(e.target.value)}
             />
+
+            {/* Campo de PIN (aparece quando backend pede) */}
+            {pinMode && (
+              <div style={{ marginBottom:14 }}>
+                <div style={{ color:"#f59e0b", fontSize:12, fontWeight:600, marginBottom:6, textAlign:"center" }}>
+                  🔑 PIN do encarregado (6 dígitos)
+                </div>
+                <input style={S.pinInput} type="number" inputMode="numeric" placeholder="000000"
+                  value={pinValue} onChange={e => setPinValue(e.target.value.slice(0,6))} autoFocus />
+              </div>
+            )}
+
             <div style={{ fontSize:12, marginBottom:14, padding:"8px 12px", borderRadius:8,
               background: location ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
               border: `1px solid ${location ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)"}`,
@@ -478,26 +503,36 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
               {location ? `📍 GPS ativo — lat: ${location.lat.toFixed(5)}, lon: ${location.lon.toFixed(5)}`
                         : "⏳ Aguardando GPS..."}
             </div>
+
             {error && (
               <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", color:"#f87171", padding:"12px 16px", borderRadius:10, fontSize:13, marginBottom:14 }}>
-                <div style={{ fontWeight:700, marginBottom:4 }}>⚠️ Não foi possível registrar</div>
+                <div style={{ fontWeight:700, marginBottom:4 }}>⚠️ Atenção</div>
                 <div>{error}</div>
-                <button style={{ marginTop:10, width:"100%", padding:"8px 0", background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, color:"#f87171", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:12 }}
-                  onClick={() => { setError(""); setStep("scanning"); }}>
-                  ← Tentar escanear novamente
-                </button>
+                {!pinMode && (
+                  <button style={{ marginTop:10, width:"100%", padding:"8px 0", background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, color:"#f87171", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:12 }}
+                    onClick={() => { setError(""); setStep("scanning"); }}>
+                    ← Tentar escanear novamente
+                  </button>
+                )}
               </div>
             )}
-            {!error && (
+
+            {/* Botão de confirmar: aparece sempre (mesmo com erro de PIN, para retentar com PIN) */}
+            {(!error || pinMode) && (
               <>
                 <button
                   style={{ ...(action==="start" ? S.btnBlue : S.btnGreen), opacity:(sending||!location)?0.6:1, cursor:(sending||!location)?"not-allowed":"pointer" }}
                   onClick={confirmar}
-                  disabled={sending||!location}
+                  disabled={sending||!location || (pinMode && pinValue.length < 4)}
                 >
-                  {sending ? "Registrando..." : !location ? "Aguardando GPS..." : action==="start" ? "✓ Confirmar entrada" : "✓ Confirmar saída"}
+                  {sending ? "Registrando..."
+                    : !location ? "Aguardando GPS..."
+                    : pinMode ? "✓ Validar PIN e confirmar"
+                    : action==="start" ? "✓ Confirmar entrada" : "✓ Confirmar saída"}
                 </button>
-                <button style={S.btnGhost} onClick={() => setStep("scanning")} disabled={sending}>← Escanear novamente</button>
+                {!pinMode && (
+                  <button style={S.btnGhost} onClick={() => setStep("scanning")} disabled={sending}>← Escanear novamente</button>
+                )}
               </>
             )}
           </>
@@ -506,17 +541,22 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
         {/* ── SUCESSO ── */}
         {step === "success" && (
           <div style={{ textAlign:"center", padding:"16px 0" }}>
-            <div style={{ fontSize:52, marginBottom:12 }}>{result?.action==="start" ? "📍" : "✅"}</div>
-            <div style={{ fontSize:"1.1rem", fontWeight:700, marginBottom:6, color: result?.action==="start" ? "#4f8ef7" : "#22c55e" }}>
-              {result?.action==="start" ? "Check-in registrado!" : "Serviço concluído!"}
+            <div style={{ fontSize:52, marginBottom:12 }}>{result?.offline ? "⏳" : result?.action==="start" ? "📍" : "✅"}</div>
+            <div style={{ fontSize:"1.1rem", fontWeight:700, marginBottom:6, color: result?.offline ? "#f59e0b" : result?.action==="start" ? "#4f8ef7" : "#22c55e" }}>
+              {result?.offline ? "Registro salvo!" : result?.action==="start" ? "Check-in registrado!" : "Serviço concluído!"}
             </div>
-            {result?.action==="finish" && result?.duration_str && (
+            {offlineMsg && (
+              <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:"10px 14px", margin:"12px auto", fontSize:12, color:"#f59e0b" }}>
+                {offlineMsg}
+              </div>
+            )}
+            {!result?.offline && result?.action==="finish" && result?.duration_str && (
               <div style={{ background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.15)", borderRadius:14, padding:"14px 20px", margin:"14px auto", display:"inline-block" }}>
                 <div style={{ color:"#475569", fontSize:11, marginBottom:2 }}>Duração do serviço</div>
                 <div style={{ color:"#22c55e", fontSize:"1.7rem", fontWeight:800, letterSpacing:"-1px" }}>{result.duration_str}</div>
               </div>
             )}
-            {result?.geo_msg && <div style={{ fontSize:11, color:"#475569", marginTop:8 }}>{result.geo_msg}</div>}
+            {!result?.offline && result?.geo_msg && <div style={{ fontSize:11, color:"#475569", marginTop:8 }}>{result.geo_msg}</div>}
             <div style={{ color:"#475569", fontSize:12, marginTop:8 }}>{dataFmt} às {horaFmt}</div>
             <button style={{ ...S.btnGhost, marginTop:20 }} onClick={onClose}>Fechar</button>
           </div>
@@ -619,7 +659,13 @@ export default function Orders() {
   useEffect(() => {
     fetchAll();
     pollingRef.current = setInterval(fetchOrders, 15000);
-    return () => clearInterval(pollingRef.current);
+    // Ao voltar a rede, sincroniza fila e recarrega
+    const onOnline = () => { syncNow().then(() => fetchOrders()); };
+    window.addEventListener("online", onOnline);
+    return () => {
+      clearInterval(pollingRef.current);
+      window.removeEventListener("online", onOnline);
+    };
   }, []);
 
   function showToast(msg, type="success") {
@@ -991,10 +1037,24 @@ export default function Orders() {
                     <div style={{ color:theme.textMuted, marginBottom:2 }}>🏁 Saída</div>
                     <div style={{ color:theme.textPrimary, fontWeight:600 }}>{chk.checkout_at ? chk.checkout_at.replace("T"," ").slice(0,16) : "Em andamento..."}</div>
                   </div>
+                  {/* Endereço do cliente (resolve item 4) */}
+                  {chk.client_address && chk.client_address !== "—" && (
+                    <div style={{ gridColumn:"1/-1" }}>
+                      <div style={{ color:theme.textMuted, marginBottom:2 }}>🏠 Endereço</div>
+                      <div style={{ color:theme.textPrimary }}>{chk.client_address}</div>
+                    </div>
+                  )}
                   {(chk.latitude||chk.longitude) && (
                     <div style={{ gridColumn:"1/-1" }}>
-                      <div style={{ color:theme.textMuted, marginBottom:2 }}>🗺️ GPS</div>
+                      <div style={{ color:theme.textMuted, marginBottom:2 }}>🗺️ GPS do colaborador</div>
                       <div style={{ color:"#22c55e", fontSize:11 }}>{chk.latitude?.toFixed(5)}, {chk.longitude?.toFixed(5)}</div>
+                    </div>
+                  )}
+                  {chk.synced_offline && (
+                    <div style={{ gridColumn:"1/-1" }}>
+                      <span style={{ display:"inline-block", fontSize:10, background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.3)", color:"#f59e0b", borderRadius:6, padding:"2px 8px", fontWeight:600 }}>
+                        ⏳ Registrado offline
+                      </span>
                     </div>
                   )}
                   {chk.notes && (

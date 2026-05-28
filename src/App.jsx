@@ -22,7 +22,9 @@ import Reports        from "./pages/Reports"
 import Commissions    from "./pages/Commissions"
 import BrandStudio    from "./pages/BrandStudio"
 import CheckinScanner from "./pages/Checkin/CheckinScanner"
+import CheckinPin     from "./pages/CheckinPin"
 import ProtectedRoute from "./components/ProtectedRoute"
+import OfflineBar     from "./components/OfflineBar"
 
 function App() {
   return (
@@ -30,6 +32,7 @@ function App() {
       <PlanProvider>
         <NichoProvider>
           <BrowserRouter>
+            <OfflineBar />
             <Routes>
               {/* Rotas públicas */}
               <Route path="/"               element={<Login />} />
@@ -51,8 +54,15 @@ function App() {
 
               {/* /orders — todos os roles operacionais */}
               <Route path="/orders" element={
-                <ProtectedRoute roles={["admin","financial","seller","stock","viewer"]}>
+                <ProtectedRoute roles={["admin","financial","seller","stock","viewer","encarregado"]}>
                   <Orders />
+                </ProtectedRoute>
+              } />
+
+              {/* Autorização de check-in (PIN) — admin e encarregado */}
+              <Route path="/autorizacao-checkin" element={
+                <ProtectedRoute roles={["admin","encarregado"]}>
+                  <CheckinPin />
                 </ProtectedRoute>
               } />
 
