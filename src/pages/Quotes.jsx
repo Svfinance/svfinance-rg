@@ -5,6 +5,7 @@ import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
 import { useTheme } from "../contexts/ThemeContext";
 import { PRINT_THEMES, buildPrintCSS } from "../utils/printThemes";
+import { enqueueMutation, getMutationsByEntity, tmpId, saveSnapshot, getSnapshot } from "../offline/offlineDB";
 
 const API = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
@@ -55,8 +56,10 @@ export default function Quotes() {
 
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [quotes, setQuotes]                 = useState([]);
+  const [pending, setPending]               = useState([]); // criados offline
   const [products, setProducts]             = useState([]);
   const [clients, setClients]               = useState([]);
+  const [pendingClients, setPendingClients] = useState([]); // clientes criados offline
   const [company, setCompany]               = useState({});
   const [loading, setLoading]               = useState(true);
   const [view, setView]                     = useState("list");
@@ -79,35 +82,67 @@ export default function Quotes() {
   const [savingClient, setSavingClient]     = useState(false);
   const logoInputRef = useRef();
 
+  async function loadPending() {
+    try {
+      const q = await getMutationsByEntity("quote");
+      setPending(q.map(m => ({ ...m.payload, id: m.tmp_ref, __pending: true })));
+      const c = await getMutationsByEntity("client");
+      setPendingClients(c.map(m => ({ ...m.payload, id: m.tmp_ref, __pending: true })));
+    } catch { setPending([]); setPendingClients([]); }
+  }
+
   async function fetchQuotes() {
+    const snap = await getSnapshot("quotes");
+    if (snap) setQuotes(snap);
+    if (!navigator.onLine) return;
     const res  = await fetch(`${API}/quotes`, { headers:{ Authorization:`Bearer ${token()}` } });
     if (res.status === 401) { localStorage.removeItem("token"); navigate("/"); return; }
     const data = await res.json();
-    setQuotes(Array.isArray(data) ? data : []);
+    const list = Array.isArray(data) ? data : [];
+    setQuotes(list);
+    saveSnapshot("quotes", list);
   }
   async function fetchProducts() {
+    const snap = await getSnapshot("products");
+    if (snap) setProducts(snap);
+    if (!navigator.onLine) return;
     const res  = await fetch(`${API}/products`, { headers:{ Authorization:`Bearer ${token()}` } });
     const data = await res.json();
-    setProducts(Array.isArray(data) ? data : []);
+    const list = Array.isArray(data) ? data : [];
+    setProducts(list);
+    saveSnapshot("products", list);
   }
   async function fetchClients() {
+    const snap = await getSnapshot("clients");
+    if (snap) setClients(snap);
+    if (!navigator.onLine) return;
     const res  = await fetch(`${API}/clients`, { headers:{ Authorization:`Bearer ${token()}` } });
     const data = await res.json();
-    setClients(Array.isArray(data) ? data : []);
+    const list = Array.isArray(data) ? data : [];
+    setClients(list);
+    saveSnapshot("clients", list);
   }
   async function fetchCompany() {
+    const snap = await getSnapshot("company");
+    if (snap) { setCompany(snap); setCompanyForm(snap); setLogoPreview(snap.company_logo || null); }
+    if (!navigator.onLine) return;
     const res  = await fetch(`${API}/company`, { headers:{ Authorization:`Bearer ${token()}` } });
     const data = await res.json();
     setCompany(data); setCompanyForm(data);
     setLogoPreview(data.company_logo || null);
+    saveSnapshot("company", data);
   }
 
   useEffect(() => {
     (async () => {
       setLoading(true);
       await Promise.all([fetchQuotes(), fetchProducts(), fetchClients(), fetchCompany()]);
+      await loadPending();
       setLoading(false);
     })();
+    const onSynced = () => { fetchQuotes(); fetchClients(); loadPending(); };
+    window.addEventListener("sv_synced", onSynced);
+    return () => window.removeEventListener("sv_synced", onSynced);
   }, []);
 
   function showToast(msg, type = "success") {
@@ -126,6 +161,7 @@ export default function Quotes() {
   }
 
   async function saveCompany() {
+    if (!navigator.onLine) { showToast("Dados da empresa precisam de internet.", "warn"); return; }
     const res = await fetch(`${API}/company`, {
       method:"PUT", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` },
       body: JSON.stringify(companyForm),
@@ -139,7 +175,8 @@ export default function Quotes() {
       setForm(f => ({ ...f, client_id:null, client_name:"", client_email:"", client_phone:"", client_document:"", client_address:"" }));
       return;
     }
-    const c = clients.find(c => String(c.id)===String(clientId));
+    const all = [...pendingClients, ...clients];
+    const c = all.find(c => String(c.id)===String(clientId));
     if (!c) return;
     setForm(f => ({
       ...f,
@@ -156,6 +193,29 @@ export default function Quotes() {
     e.preventDefault();
     if (!clientForm.name.trim()) { showToast("Nome é obrigatório.", "error"); return; }
     setSavingClient(true);
+
+    // ── OFFLINE: cria cliente com tmpId e já vincula ao orçamento ──
+    if (!navigator.onLine) {
+      const ref = tmpId("tmpcli");
+      await enqueueMutation("client", { ...clientForm }, { tmp_ref: ref });
+      setForm(f => ({
+        ...f,
+        client_id:       ref,
+        client_name:     clientForm.name,
+        client_email:    clientForm.email    || "",
+        client_phone:    clientForm.phone    || "",
+        client_document: clientForm.document || "",
+        client_address:  clientForm.address  || "",
+      }));
+      showToast("📴 Cliente salvo offline e vinculado.");
+      await loadPending();
+      setNewClientModal(false);
+      setClientForm(EMPTY_CLIENT_FORM);
+      setSavingClient(false);
+      return;
+    }
+
+    // ── ONLINE ──
     try {
       const res  = await fetch(`${API}/clients`, {
         method:"POST",
@@ -186,6 +246,7 @@ export default function Quotes() {
 
   function openCreate() { setEditing(null); setForm(EMPTY_FORM); setItems([]); setView("form"); }
   function openEdit(q) {
+    if (q.__pending) { showToast("Orçamento ainda não sincronizado.", "warn"); return; }
     setEditing(q);
     setForm({ client_name:q.client_name, client_email:q.client_email||"", client_phone:q.client_phone||"", client_document:q.client_document||"", client_address:q.client_address||"", status:q.status, valid_until:q.valid_until||"", payment_terms:q.payment_terms||"", notes:q.notes||"", discount:q.discount||0, client_id:q.client_id||null });
     setItems(q.items||[]);
@@ -229,37 +290,66 @@ export default function Quotes() {
     e.preventDefault();
     if (!form.client_name.trim()) { showToast("Nome do cliente obrigatório.","error"); return; }
     const payload = { ...form, discount:parseFloat(form.discount||0), items };
+
+    // ── OFFLINE: só criação ──
+    if (!navigator.onLine) {
+      if (editing) { showToast("Edição precisa de internet.", "warn"); return; }
+      const ref = tmpId("tmpqt");
+      await enqueueMutation("quote", payload, { tmp_ref: ref });
+      showToast("📴 Orçamento salvo offline — sincroniza ao reconectar.");
+      setView("list");
+      loadPending();
+      return;
+    }
+
+    // ── ONLINE ──
     const url    = editing ? `${API}/quotes/${editing.id}` : `${API}/quotes`;
     const method = editing ? "PUT" : "POST";
-    const res = await fetch(url, { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body:JSON.stringify(payload) });
-    if (res.ok) { showToast(editing?"Orçamento atualizado!":"Orçamento criado!"); setView("list"); fetchQuotes(); }
-    else { const err = await res.json(); showToast(err.msg||"Erro.","error"); }
+    try {
+      const res = await fetch(url, { method, headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body:JSON.stringify(payload) });
+      if (res.ok) { showToast(editing?"Orçamento atualizado!":"Orçamento criado!"); setView("list"); fetchQuotes(); }
+      else { const err = await res.json(); showToast(err.msg||"Erro.","error"); }
+    } catch {
+      if (!editing) {
+        const ref = tmpId("tmpqt");
+        await enqueueMutation("quote", payload, { tmp_ref: ref });
+        showToast("📴 Conexão instável — orçamento salvo offline.");
+        setView("list");
+        loadPending();
+      } else {
+        showToast("Erro de conexão.","error");
+      }
+    }
   }
 
   async function changeStatus(q, status) {
+    if (q.__pending) { showToast("Orçamento ainda não sincronizado.", "warn"); return; }
+    if (!navigator.onLine) { showToast("Mudar status precisa de internet.", "warn"); return; }
     await fetch(`${API}/quotes/${q.id}/status`, { method:"PATCH", headers:{ "Content-Type":"application/json", Authorization:`Bearer ${token()}` }, body:JSON.stringify({ status }) });
     fetchQuotes();
   }
 
   async function handleDelete(id) {
+    if (String(id).startsWith("tmp")) { showToast("Item offline ainda não sincronizado.", "warn"); setDeleteConfirm(null); return; }
+    if (!navigator.onLine) { showToast("Exclusão precisa de internet.", "warn"); setDeleteConfirm(null); return; }
     const res = await fetch(`${API}/quotes/${id}`, { method:"DELETE", headers:{ Authorization:`Bearer ${token()}` } });
     if (res.ok) { showToast("Orçamento removido."); setDeleteConfirm(null); fetchQuotes(); }
     else showToast("Erro ao remover.","error");
   }
 
   async function handleSell(quote) {
+    if (quote.__pending) { showToast("Orçamento ainda não sincronizado.", "warn"); return; }
+    if (!navigator.onLine) { showToast("Vender precisa de internet.", "warn"); return; }
     setSelling(true);
     try {
       const headers = { "Content-Type":"application/json", Authorization:`Bearer ${token()}` };
 
-      // Passo 1: Garante status aprovado (independente do status atual)
       if (quote.status !== "approved") {
         await fetch(`${API}/quotes/${quote.id}/status`, {
           method:"PATCH", headers, body:JSON.stringify({ status:"approved" }),
         });
       }
 
-      // Passo 2: Cria a Order a partir do orçamento
       const resOrder = await fetch(`${API}/orders/from-quote/${quote.id}`, {
         method:"POST", headers,
       });
@@ -271,7 +361,6 @@ export default function Quotes() {
       const orderId     = orderData.id;
       const orderNumber = orderData.number;
 
-      // Passo 3: Conclui a venda imediatamente (baixa estoque + cria transação)
       const resComplete = await fetch(`${API}/orders/${orderId}/complete`, {
         method:"POST", headers,
       });
@@ -289,9 +378,11 @@ export default function Quotes() {
     finally { setSelling(false); }
   }
 
-  function openPrint(q) { setPrintQuote(q); setView("print"); }
+  function openPrint(q) {
+    if (q.__pending) { showToast("Orçamento ainda não sincronizado.", "warn"); return; }
+    setPrintQuote(q); setView("print");
+  }
 
-  // ── IMPRESSÃO via window.open — nunca sai em branco ──────────────
   function handlePrint() {
     if (!printQuote) return;
     const T   = PRINT_THEMES[printTheme] || PRINT_THEMES.blue;
@@ -419,9 +510,10 @@ export default function Quotes() {
     setTimeout(() => w.print(), 600);
   }
 
-  const filteredQuotes = quotes.filter(q => {
+  const allQuotes = [...pending, ...quotes];
+  const filteredQuotes = allQuotes.filter(q => {
     const statusOk = filterStatus==="all" || q.status===filterStatus;
-    const searchOk = q.client_name.toLowerCase().includes(search.toLowerCase()) || q.number.toLowerCase().includes(search.toLowerCase());
+    const searchOk = (q.client_name||"").toLowerCase().includes(search.toLowerCase()) || (q.number||"").toLowerCase().includes(search.toLowerCase());
     return statusOk && searchOk;
   });
 
@@ -454,13 +546,11 @@ export default function Quotes() {
     const T = PRINT_THEMES[printTheme] || PRINT_THEMES.blue;
     return (
       <div style={{ background:T.pageBg, minHeight:"100vh", display:"flex", flexDirection:"column" }}>
-        {/* Barra de controle */}
         <div style={{ background:T.barBg, borderBottom:`1px solid ${T.barBorder}`, padding:"12px 24px", display:"flex", gap:14, alignItems:"center", flexWrap:"wrap" }}>
           <button onClick={() => setView("list")} style={{ background:T.backBtn, color:T.backColor, border:`1px solid rgba(255,255,255,0.12)`, borderRadius:8, padding:"8px 16px", cursor:"pointer", fontWeight:600, fontSize:"0.88rem" }}>
             ← Voltar
           </button>
 
-          {/* Seletor de tema */}
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <span style={{ fontSize:11, fontWeight:700, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>Tema PDF:</span>
             {Object.values(PRINT_THEMES).map(t => (
@@ -475,7 +565,6 @@ export default function Quotes() {
           </button>
         </div>
 
-        {/* Preview resumido */}
         <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", padding:32 }}>
           <div style={{ background:T.cardBg, border:`1px solid ${T.accentBorder}`, borderRadius:20, padding:"40px 48px", textAlign:"center", maxWidth:420 }}>
             <div style={{ fontSize:"3.5rem", marginBottom:16 }}>🖨️</div>
@@ -515,6 +604,13 @@ export default function Quotes() {
             <h1 style={{ fontSize:isMobile?"1.3rem":"1.75rem", fontWeight:700, margin:0, color:theme.textPrimary }}>{editing?"Editar Orçamento":"Novo Orçamento"}</h1>
             {editing && <p style={{ color:theme.textMuted, margin:"4px 0 0" }}>{editing.number}</p>}
           </div>
+
+          {!navigator.onLine && (
+            <div style={{ background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)", color:"#f59e0b", padding:"10px 16px", borderRadius:10, fontSize:13, marginBottom:20 }}>
+              📴 Offline — o orçamento será salvo e sincronizado ao reconectar. Você pode até criar um cliente novo offline.
+            </div>
+          )}
+
           <form onSubmit={handleSubmit}>
 
             {/* CLIENTE */}
@@ -528,6 +624,7 @@ export default function Quotes() {
                   </div>
                   <select style={selectStyle} value={form.client_id||""} onChange={e => selectClient(e.target.value)}>
                     <option value="">— Digite manualmente ou selecione —</option>
+                    {pendingClients.map(c => <option key={c.id} value={c.id}>⏳ {c.name}{c.document?` — ${c.document}`:""} (offline)</option>)}
                     {clients.map(c => <option key={c.id} value={c.id}>{c.name}{c.document?` — ${c.document}`:""}</option>)}
                   </select>
                 </div>
@@ -643,6 +740,11 @@ export default function Quotes() {
                 <h2 style={{ margin:0, fontSize:"1.2rem", fontWeight:700, color:theme.textPrimary }}>👤 Novo Cliente</h2>
                 <button style={btnClose} onClick={() => setNewClientModal(false)}>✕</button>
               </div>
+              {!navigator.onLine && (
+                <div style={{ background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)", color:"#f59e0b", padding:"8px 12px", borderRadius:8, fontSize:12, marginBottom:16 }}>
+                  📴 Offline — cliente será salvo e vinculado ao orçamento; sincroniza depois.
+                </div>
+              )}
               <form onSubmit={handleSaveNewClient}>
                 <div style={{ display:"flex", flexDirection:"column", gap:14, marginBottom:24 }}>
                   <div style={fieldStyle}><label style={labelStyle}>Nome *</label><input style={inputStyle} required placeholder="Nome completo ou razão social" value={clientForm.name} onChange={e=>setClientForm({...clientForm,name:e.target.value})} /></div>
@@ -661,7 +763,7 @@ export default function Quotes() {
           </div>
         )}
 
-        {toast && <div style={{ ...toastStyle, background:toast.type==="error"?"#ef4444":"#22c55e", right:28 }}>{toast.msg}</div>}
+        {toast && <div style={{ ...toastStyle, background:toast.type==="error"?"#ef4444":toast.type==="warn"?"#f59e0b":"#22c55e", right:28 }}>{toast.msg}</div>}
       </PageLayout>
     );
   }
@@ -699,11 +801,17 @@ export default function Quotes() {
           </div>
         </div>
 
+        {!navigator.onLine && (
+          <div style={{ background:"rgba(245,158,11,0.1)", border:"1px solid rgba(245,158,11,0.3)", color:"#f59e0b", padding:"10px 16px", borderRadius:10, fontSize:13, marginBottom:20 }}>
+            📴 Você está offline. Novos orçamentos serão salvos e sincronizados ao reconectar.
+          </div>
+        )}
+
         <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16, marginBottom:28 }}>
           {[
-            { icon:"📋", label:"Total",          value:quotes.length,                                                            color:theme.primary, border:isGlass?"rgba(255,255,255,0.5)":`${theme.primary}33` },
+            { icon:"📋", label:"Total",          value:allQuotes.length,                                                         color:theme.primary, border:isGlass?"rgba(255,255,255,0.5)":`${theme.primary}33` },
             { icon:"✅", label:"Aprovados",      value:quotes.filter(q=>q.status==="approved").length,                          color:"#22c55e",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(34,197,94,0.2)"  },
-            { icon:"⏳", label:"Pendentes",      value:quotes.filter(q=>q.status==="draft"||q.status==="sent").length,          color:"#f59e0b",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(245,158,11,0.2)" },
+            { icon:"⏳", label:"Pendentes (offline)", value:pending.length,                                                     color:"#f59e0b",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(245,158,11,0.2)" },
             { icon:"💰", label:"Total Aprovado", value:fmt(quotes.filter(q=>q.status==="approved").reduce((s,q)=>s+q.total,0)), color:"#22c55e",     border:isGlass?"rgba(255,255,255,0.5)":"rgba(34,197,94,0.2)"  },
           ].map((c,i) => (
             <div key={i} className="card3d-q" style={{ border:`1px solid ${c.border}` }}>
@@ -739,18 +847,24 @@ export default function Quotes() {
               <tbody>
                 {filteredQuotes.map(q => {
                   const st         = STATUS_MAP[q.status]||STATUS_MAP.draft;
-                  const isApproved = q.status==="approved";
                   return (
-                    <tr key={q.id} className="q-row" style={{ borderBottom:`1px solid ${theme.borderCard}`, transition:"background 0.15s" }}>
-                      <td style={{ ...td, fontWeight:700, color:theme.primary }}>{q.number}</td>
+                    <tr key={q.id} className="q-row" style={{ borderBottom:`1px solid ${theme.borderCard}`, transition:"background 0.15s", opacity:q.__pending?0.85:1 }}>
+                      <td style={{ ...td, fontWeight:700, color:theme.primary }}>
+                        {q.number || "—"}
+                        {q.__pending && <span style={{ marginLeft:6, fontSize:9, background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.3)", color:"#f59e0b", borderRadius:6, padding:"1px 6px", fontWeight:700 }}>⏳</span>}
+                      </td>
                       <td style={td}>
                         <div style={{ fontWeight:600, color:theme.textPrimary }}>{q.client_name}</div>
                         {!isMobile&&q.client_email&&<div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{q.client_email}</div>}
                       </td>
                       <td style={td}>
-                        <select style={{ border:"none", borderRadius:20, padding:"4px 10px", fontSize:"0.75rem", fontWeight:600, cursor:"pointer", colorScheme, outline:"none", color:st.color, background:st.bg }} value={q.status} onChange={e => changeStatus(q,e.target.value)}>
-                          {Object.entries(STATUS_MAP).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
-                        </select>
+                        {q.__pending ? (
+                          <span style={{ fontSize:"0.72rem", fontWeight:600, padding:"4px 10px", borderRadius:20, background:"rgba(245,158,11,0.12)", color:"#f59e0b" }}>Aguardando sync</span>
+                        ) : (
+                          <select style={{ border:"none", borderRadius:20, padding:"4px 10px", fontSize:"0.75rem", fontWeight:600, cursor:"pointer", colorScheme, outline:"none", color:st.color, background:st.bg }} value={q.status} onChange={e => changeStatus(q,e.target.value)}>
+                            {Object.entries(STATUS_MAP).map(([k,v]) => <option key={k} value={k}>{v.label}</option>)}
+                          </select>
+                        )}
                       </td>
                       {!isMobile&&<td style={{ ...td, color:theme.textSecondary }}>{(q.items||[]).length} itens</td>}
                       <td style={{ ...td, fontWeight:700, color:"#22c55e" }}>{fmt(q.total)}</td>
@@ -758,9 +872,9 @@ export default function Quotes() {
                       {!isMobile&&<td style={{ ...td, color:theme.textMuted }}>{fmtDate(q.created_at)}</td>}
                       <td style={td}>
                         <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                          {q.status !== "cancelled" && q.status !== "rejected" && <button className="btn-sell" onClick={() => setSellConfirm(q)}>🛒 Vender</button>}
-                          <button style={btnAction} onClick={() => openPrint(q)}>🖨️</button>
-                          <button style={btnAction} onClick={() => openEdit(q)}>✏️</button>
+                          {!q.__pending && q.status !== "cancelled" && q.status !== "rejected" && <button className="btn-sell" onClick={() => setSellConfirm(q)}>🛒 Vender</button>}
+                          {!q.__pending && <button style={btnAction} onClick={() => openPrint(q)}>🖨️</button>}
+                          {!q.__pending && <button style={btnAction} onClick={() => openEdit(q)}>✏️</button>}
                           <button style={{ ...btnAction, background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)" }} onClick={() => setDeleteConfirm(q)}>🗑️</button>
                         </div>
                       </td>
@@ -841,7 +955,7 @@ export default function Quotes() {
               <h2 style={{ margin:0, fontSize:"1.1rem", fontWeight:700, color:"#ef4444" }}>Excluir Orçamento</h2>
               <button style={btnClose} onClick={() => setDeleteConfirm(null)}>✕</button>
             </div>
-            <p style={{ color:theme.textSecondary, marginBottom:24 }}>Excluir <strong style={{ color:theme.textPrimary }}>{deleteConfirm.number}</strong> de <strong style={{ color:theme.textPrimary }}>{deleteConfirm.client_name}</strong>?</p>
+            <p style={{ color:theme.textSecondary, marginBottom:24 }}>Excluir <strong style={{ color:theme.textPrimary }}>{deleteConfirm.number || "este orçamento"}</strong> de <strong style={{ color:theme.textPrimary }}>{deleteConfirm.client_name}</strong>?</p>
             <div style={{ display:"flex", gap:12, flexDirection:isMobile?"column":"row", justifyContent:"flex-end" }}>
               <button style={{ ...btnSecondary, width:isMobile?"100%":"auto" }} onClick={() => setDeleteConfirm(null)}>Cancelar</button>
               <button style={{ background:"#ef4444", color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:700, cursor:"pointer", width:isMobile?"100%":"auto" }} onClick={() => handleDelete(deleteConfirm.id)}>Excluir</button>
@@ -850,7 +964,7 @@ export default function Quotes() {
         </div>
       )}
 
-      {toast && <div style={{ ...toastStyle, background:toast.type==="error"?"#ef4444":"#22c55e", left:isMobile?16:"auto", right:isMobile?16:28, textAlign:isMobile?"center":"left" }}>{toast.msg}</div>}
+      {toast && <div style={{ ...toastStyle, background:toast.type==="error"?"#ef4444":toast.type==="warn"?"#f59e0b":"#22c55e", left:isMobile?16:"auto", right:isMobile?16:28, textAlign:isMobile?"center":"left" }}>{toast.msg}</div>}
     </PageLayout>
   );
 }
