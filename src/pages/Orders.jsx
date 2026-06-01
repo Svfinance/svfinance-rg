@@ -49,36 +49,51 @@ const EMPTY_FORM = {
 };
 
 // ── COMPONENTE: CARTÃO RESTAURA GLASS ──────────────────────────────────
+// Replica fielmente o cartão físico manual da Restaura Glass
+
+function LogoRG() {
+  return (
+    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="48" height="48" rx="4" fill="white"/>
+      <polygon points="6,4 22,4 30,14 22,14 22,10 10,10 10,38 6,38" fill="#111"/>
+      <polygon points="22,4 30,4 30,14 22,14" fill="#111"/>
+      <polygon points="22,14 30,14 38,24 30,24 30,20 22,20" fill="#111"/>
+      <polygon points="22,24 30,24 38,38 30,38 26,30 22,30" fill="#111"/>
+      <polygon points="10,10 22,10 22,14 10,14" fill="#111"/>
+      <polygon points="10,20 22,20 22,24 10,24" fill="#111"/>
+    </svg>
+  );
+}
+
 function RestauraGlassCard({ order, items, theme, isMobile }) {
   const [card, setCard] = useState({
-    frequencia: "semanal",
+    mensal: false,
+    quinzenal: false,
+    semanal: false,
+    esporadico: false,
+    obs: "",
     mes: new Date().getMonth() + 1,
     ano: new Date().getFullYear(),
-    dias_semana: "ter",
-    obs_contrato: "",
     semanas: [
-      { numero: 1, hora: "", realizado: false },
-      { numero: 2, hora: "", realizado: false },
-      { numero: 3, hora: "", realizado: false },
-      { numero: 4, hora: "", realizado: false },
-      { numero: 5, hora: "", realizado: false },
+      { numero: 1, int: false, hr: "", rubrica: "", x: false },
+      { numero: 2, int: false, hr: "", rubrica: "", x: false },
+      { numero: 3, int: false, hr: "", rubrica: "", x: false },
+      { numero: 4, int: false, hr: "", rubrica: "", x: false },
+      { numero: 5, int: false, hr: "", rubrica: "", x: false },
     ],
+    dias: { seg: false, ter: false, qua: false, qui: false, sex: false, sab: false },
   });
   const [ocorrencias, setOcorrencias] = useState([]);
   const [showCalendario, setShowCalendario] = useState(false);
-  const [novaDataRemarcacao, setNovaDataRemarcacao] = useState("");
-  const [novaHoraRemarcacao, setNovaHoraRemarcacao] = useState("");
+  const [novaData, setNovaData] = useState("");
+  const [novaHora, setNovaHora] = useState("");
+  const [salvando, setSalvando] = useState(false);
 
-  const corRG = "#1a8a3c"; // Verde Restaura Glass
-  const corTexto = "#333";
+  const borda = "1px solid #111";
+  const fontePrincipal = "'Arial', sans-serif";
 
-  // Carregar cartão do localStorage (fallback de backend)
   useEffect(() => {
     async function carregar() {
-      const chave = `sv_rg_card_${order.id}`;
-      const chaveOcc = `sv_rg_occ_${order.id}`;
-
-      // Tentar backend
       if (navigator.onLine) {
         try {
           const res = await fetch(`${API}/limpeza/card/${order.id}`, {
@@ -86,27 +101,23 @@ function RestauraGlassCard({ order, items, theme, isMobile }) {
           });
           if (res.ok) {
             const data = await res.json();
-            setCard(data.card || card);
+            if (data.card && data.card.semanas) setCard(data.card);
             setOcorrencias(data.ocorrencias || []);
             return;
           }
         } catch {}
       }
-
-      // Fallback localStorage
-      const saved = localStorage.getItem(chave);
-      const savedOcc = localStorage.getItem(chaveOcc);
-      if (saved) setCard(JSON.parse(saved));
-      if (savedOcc) setOcorrencias(JSON.parse(savedOcc));
+      const saved = localStorage.getItem(`sv_rg_card_${order.id}`);
+      const savedOcc = localStorage.getItem(`sv_rg_occ_${order.id}`);
+      if (saved) { try { setCard(JSON.parse(saved)); } catch {} }
+      if (savedOcc) { try { setOcorrencias(JSON.parse(savedOcc)); } catch {} }
     }
     carregar();
   }, [order.id]);
 
-  // Salvar cartão (backend + localStorage)
   async function salvarCartao() {
-    const chave = `sv_rg_card_${order.id}`;
-    localStorage.setItem(chave, JSON.stringify(card));
-
+    setSalvando(true);
+    localStorage.setItem(`sv_rg_card_${order.id}`, JSON.stringify(card));
     if (navigator.onLine) {
       try {
         await fetch(`${API}/limpeza/card/${order.id}`, {
@@ -116,25 +127,23 @@ function RestauraGlassCard({ order, items, theme, isMobile }) {
         });
       } catch {}
     }
+    setSalvando(false);
     alert("Cartão salvo!");
   }
 
-  // Registrar ocorrência
   async function registrarOcorrencia(tipo, descricao = "") {
     const novaOcc = {
       id: uuid(),
-      tipo, // "fechou" | "remarcou" | "nao_compareceu" | "mudou_ponto"
+      tipo,
       data: new Date().toISOString().split("T")[0],
       hora: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       descricao,
-      reagendamento_data: tipo === "remarcou" ? novaDataRemarcacao : null,
-      reagendamento_hora: tipo === "remarcou" ? novaHoraRemarcacao : null,
+      reagendamento_data: tipo === "remarcou" ? novaData : null,
+      reagendamento_hora: tipo === "remarcou" ? novaHora : null,
     };
-
     const novasOcc = [...ocorrencias, novaOcc];
     setOcorrencias(novasOcc);
     localStorage.setItem(`sv_rg_occ_${order.id}`, JSON.stringify(novasOcc));
-
     if (navigator.onLine) {
       try {
         await fetch(`${API}/limpeza/occurrence`, {
@@ -144,260 +153,253 @@ function RestauraGlassCard({ order, items, theme, isMobile }) {
         });
       } catch {}
     }
-
     setShowCalendario(false);
-    setNovaDataRemarcacao("");
-    setNovaHoraRemarcacao("");
-    alert(`Ocorrência registrada: ${tipo}`);
+    setNovaData(""); setNovaHora("");
+    alert("Ocorrência registrada!");
   }
 
   const atualizarSemana = (idx, campo, valor) => {
-    const novasSemanas = [...card.semanas];
-    novasSemanas[idx] = { ...novasSemanas[idx], [campo]: valor };
-    setCard({ ...card, semanas: novasSemanas });
+    const s = [...card.semanas];
+    s[idx] = { ...s[idx], [campo]: valor };
+    setCard({ ...card, semanas: s });
   };
 
-  // Estilos do cartão (branco + verde Restaura Glass)
-  const estiloCartao = {
-    background: "#f9f9f9",
-    border: `2px solid ${corRG}`,
-    borderRadius: 12,
-    padding: isMobile ? 16 : 24,
-    fontFamily: "'Segoe UI', Tahoma, sans-serif",
-    color: corTexto,
+  const inputBase = {
+    border: borda,
+    background: "white",
+    fontFamily: fontePrincipal,
+    fontSize: "0.85rem",
+    padding: "1px 3px",
+    outline: "none",
   };
 
-  const estiloTitulo = {
-    color: corRG,
-    fontSize: isMobile ? "1rem" : "1.2rem",
-    fontWeight: 700,
-    margin: "0 0 12px 0",
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
+  const cellStyle = {
+    border: borda,
+    padding: "4px 6px",
+    fontFamily: fontePrincipal,
   };
 
-  const estiloInput = {
-    padding: 8,
-    border: `1px solid ${corRG}`,
-    borderRadius: 6,
-    fontSize: "0.9rem",
-    fontFamily: "inherit",
-    width: "100%",
-    boxSizing: "border-box",
-    marginBottom: 8,
+  const semanaLabel = {
+    fontSize: isMobile ? "1.4rem" : "1.8rem",
+    fontWeight: 900,
+    fontFamily: "'Arial Black', 'Arial Bold', sans-serif",
+    letterSpacing: "-0.5px",
+    color: "#111",
+    display: "flex",
+    alignItems: "center",
+    height: "100%",
+    paddingLeft: 12,
   };
-
-  const estiloBotao = {
-    padding: "10px 16px",
-    marginBottom: 8,
-    border: "none",
-    borderRadius: 6,
-    fontWeight: 600,
-    cursor: "pointer",
-    fontFamily: "inherit",
-    fontSize: "0.9rem",
-  };
-
-  const estiloBotaoVerde = {
-    ...estiloBotao,
-    background: corRG,
-    color: "#fff",
-  };
-
-  const estiloBotaoBranco = {
-    ...estiloBotao,
-    background: "#fff",
-    border: `2px solid ${corRG}`,
-    color: corRG,
-  };
-
-  const estiloBotaoOcorrencia = (tipo) => ({
-    ...estiloBotao,
-    background: tipo === "fechou" ? "#ef4444" : tipo === "remarcou" ? "#3b82f6" : tipo === "nao_compareceu" ? "#f59e0b" : "#6b7280",
-    color: "#fff",
-    width: "100%",
-    marginBottom: 8,
-  });
 
   return (
-    <div style={estiloCartao}>
-      {/* CABEÇALHO COM LOGO/MARCA */}
-      <div style={{ textAlign: "center", marginBottom: 20, paddingBottom: 16, borderBottom: `2px solid ${corRG}` }}>
-        <div style={{ fontSize: isMobile ? "1.4rem" : "1.8rem", fontWeight: 700, color: corRG, marginBottom: 4 }}>
-          🪟 RESTAURA GLASS
-        </div>
-        <div style={{ fontSize: "0.8rem", color: "#666", letterSpacing: "0.08em" }}>
-          ESPECIALISTA EM LIMPEZA DE VIDROS
-        </div>
-      </div>
+    <div style={{ background: "#fff", fontFamily: fontePrincipal, color: "#111", maxWidth: 600, margin: "0 auto" }}>
 
-      {/* FREQUÊNCIA */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={estiloTitulo}>Frequência</label>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-          {["mensal", "quinzenal", "semanal", "esporadico"].map(freq => (
-            <label key={freq} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-              <input type="radio" name="frequencia" value={freq} checked={card.frequencia === freq}
-                onChange={e => setCard({ ...card, frequencia: e.target.value })} style={{ cursor: "pointer" }} />
-              <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>
-                {freq === "mensal" ? "Mensal" : freq === "quinzenal" ? "Quinzenal" : freq === "semanal" ? "Semanal" : "Esporádico"}
-              </span>
+      {/* CARTÃO - área imprimível */}
+      <div id="rg-card-print" style={{ border: "2px solid #111", background: "#fff", padding: 0 }}>
+
+        {/* LINHA 1: frequência + logo + obs */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: borda }}>
+          {/* esquerda: checkboxes frequência */}
+          <div style={{ borderRight: borda, padding: "6px 10px", display: "flex", flexDirection: "column", gap: 3 }}>
+            {[
+              { key: "mensal",     label: "Mensal" },
+              { key: "quinzenal",  label: "Quinzenal" },
+              { key: "semanal",    label: "Semanal" },
+              { key: "esporadico", label: "Esporádico" },
+            ].map(f => (
+              <label key={f.key} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "0.82rem", fontWeight: 600, cursor: "pointer" }}>
+                <input type="checkbox" checked={!!card[f.key]}
+                  onChange={e => setCard({ ...card, [f.key]: e.target.checked })}
+                  style={{ width: 14, height: 14, cursor: "pointer", accentColor: "#111" }} />
+                {f.label}
+              </label>
+            ))}
+          </div>
+
+          {/* direita: logo + obs */}
+          <div style={{ padding: "6px 10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+              <LogoRG />
+              <div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, letterSpacing: "-0.5px", lineHeight: 1.1 }}>RestauraGlass<sup style={{ fontSize: "0.5rem" }}>®</sup></div>
+                <div style={{ fontSize: "0.5rem", letterSpacing: "0.08em", color: "#333", textTransform: "uppercase" }}>Especialista em limpeza de vidros</div>
+              </div>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.8rem", fontWeight: 700 }}>
+              <span>Obs:</span>
+              <input style={{ ...inputBase, flex: 1, borderTop: "none", borderLeft: "none", borderRight: "none", borderRadius: 0 }}
+                value={card.obs} onChange={e => setCard({ ...card, obs: e.target.value })} placeholder="nº contrato, observação..." />
+            </div>
+          </div>
+        </div>
+
+        {/* LINHA 2: Mês / Ano */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", borderBottom: borda }}>
+          <div style={{ ...cellStyle, borderRight: borda, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>Mês:</span>
+            <input type="number" min="1" max="12" style={{ ...inputBase, width: 40 }}
+              value={card.mes} onChange={e => setCard({ ...card, mes: parseInt(e.target.value) || 1 })} />
+          </div>
+          <div style={{ ...cellStyle, display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>Ano:</span>
+            <input type="number" style={{ ...inputBase, width: 60 }}
+              value={card.ano} onChange={e => setCard({ ...card, ano: parseInt(e.target.value) || 2026 })} />
+          </div>
+        </div>
+
+        {/* LINHA 3: Cliente */}
+        <div style={{ ...cellStyle, borderBottom: borda, display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontWeight: 700, fontSize: "0.9rem" }}>Cliente:</span>
+          <span style={{ fontSize: "0.9rem" }}>{order.client_name}</span>
+        </div>
+
+        {/* LINHAS 4-8: 5 semanas */}
+        {card.semanas.map((semana, idx) => (
+          <div key={idx}>
+            <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", borderBottom: borda, minHeight: 52 }}>
+              {/* esquerda: int + hr */}
+              <div style={{ borderRight: borda, padding: "4px 8px", display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: 3, fontSize: "0.78rem", fontWeight: 700 }}>
+                    <span>int</span>
+                    <input type="checkbox" checked={!!semana.int}
+                      onChange={e => atualizarSemana(idx, "int", e.target.checked)}
+                      style={{ width: 13, height: 13, accentColor: "#111" }} />
+                  </label>
+                  <label style={{ display: "flex", alignItems: "center", gap: 3, fontSize: "0.78rem", fontWeight: 700 }}>
+                    <span>hr</span>
+                    <input type="time" value={semana.hr}
+                      onChange={e => atualizarSemana(idx, "hr", e.target.value)}
+                      style={{ ...inputBase, width: 80, fontSize: "0.78rem" }} />
+                  </label>
+                </div>
+                {/* linhas de rubrica */}
+                <div style={{ fontSize: "0.9rem", color: "#555", letterSpacing: 4 }}>
+                  <input style={{ ...inputBase, width: "100%", fontSize: "0.75rem", borderTop: "none", borderLeft: "none", borderRight: "none", borderBottom: "1px solid #999" }}
+                    value={semana.rubrica || ""}
+                    onChange={e => atualizarSemana(idx, "rubrica", e.target.value)}
+                    placeholder="assinatura" />
+                </div>
+              </div>
+              {/* direita: Nª semana */}
+              <div style={semanaLabel}>
+                {semana.numero}ª semana
+              </div>
+            </div>
+            {/* linha do X entre semanas (exceto após última) */}
+            {idx < 4 && (
+              <div style={{ borderBottom: borda, padding: "2px 8px", display: "flex", alignItems: "center", gap: 8 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.75rem", color: "#555" }}>
+                  <input type="checkbox" checked={!!semana.x}
+                    onChange={e => atualizarSemana(idx, "x", e.target.checked)}
+                    style={{ width: 13, height: 13, accentColor: "#111" }} />
+                  <span style={{ fontWeight: 700 }}>x</span>
+                </label>
+              </div>
+            )}
+          </div>
+        ))}
+
+        {/* RODAPÉ: dias da semana */}
+        <div style={{ display: "flex", alignItems: "center", padding: "6px 8px", gap: isMobile ? 8 : 14, flexWrap: "wrap" }}>
+          {[
+            { key: "seg", label: "SEG" },
+            { key: "ter", label: "TER" },
+            { key: "qua", label: "QUA" },
+            { key: "qui", label: "QUI" },
+            { key: "sex", label: "SEX" },
+            { key: "sab", label: "SAB" },
+          ].map(d => (
+            <label key={d.key} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}>
+              <span>{d.label}</span>
+              <input type="checkbox" checked={!!card.dias[d.key]}
+                onChange={e => setCard({ ...card, dias: { ...card.dias, [d.key]: e.target.checked } })}
+                style={{ width: 14, height: 14, accentColor: "#111", border: "1px solid #111" }} />
             </label>
           ))}
         </div>
       </div>
+      {/* FIM DO CARTÃO IMPRIMÍVEL */}
 
-      {/* MÊS / ANO / CLIENTE / OBS */}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
-        <div>
-          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG }}>OBS / Nº Contrato</label>
-          <input style={estiloInput} type="text" value={card.obs_contrato}
-            onChange={e => setCard({ ...card, obs_contrato: e.target.value })} placeholder="Ex: 125/126" />
-        </div>
-        <div>
-          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG }}>Mês</label>
-          <input style={estiloInput} type="number" min="1" max="12" value={card.mes}
-            onChange={e => setCard({ ...card, mes: parseInt(e.target.value) })} />
-        </div>
-        <div>
-          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG }}>Ano</label>
-          <input style={estiloInput} type="number" value={card.ano}
-            onChange={e => setCard({ ...card, ano: parseInt(e.target.value) })} />
-        </div>
-        <div>
-          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG }}>Cliente</label>
-          <div style={{ ...estiloInput, padding: 8, marginBottom: 0, background: "#f0f0f0", cursor: "default", display: "flex", alignItems: "center" }}>
-            {order.client_name}
-          </div>
-        </div>
-      </div>
-
-      {/* DIAS DA SEMANA */}
-      <div style={{ marginBottom: 16 }}>
-        <label style={estiloTitulo}>Dia Fixo da Semana</label>
-        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(6, 1fr)", gap: 8 }}>
-          {["seg", "ter", "qua", "qui", "sex", "sab"].map(dia => {
-            const labels = { seg: "SEG", ter: "TER", qua: "QUA", qui: "QUI", sex: "SEX", sab: "SAB" };
-            return (
-              <label key={dia} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
-                <input type="radio" name="dias_semana" value={dia} checked={card.dias_semana === dia}
-                  onChange={e => setCard({ ...card, dias_semana: e.target.value })} style={{ cursor: "pointer" }} />
-                <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{labels[dia]}</span>
-              </label>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* 5 SEMANAS */}
-      <div style={{ marginBottom: 16, paddingTop: 16, borderTop: `1px solid ${corRG}` }}>
-        <label style={estiloTitulo}>Execução por Semana</label>
-        {card.semanas.map((semana, idx) => (
-          <div key={idx} style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center", paddingBottom: 12, borderBottom: `1px solid ${corRG}aa` }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: corRG, marginBottom: 4 }}>{semana.numero}ª semana</div>
-              <input style={{ ...estiloInput, marginBottom: 0 }} type="time" value={semana.hora}
-                onChange={e => atualizarSemana(idx, "hora", e.target.value)} placeholder="HH:MM" />
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14 }}>
-              <input type="checkbox" checked={semana.realizado}
-                onChange={e => atualizarSemana(idx, "realizado", e.target.checked)} style={{ width: 20, height: 20, cursor: "pointer" }} />
-              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#666" }}>Realizado</span>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* SERVIÇOS (SEM VALOR) */}
-      {items && items.length > 0 && (
-        <div style={{ marginBottom: 16, padding: 12, background: `${corRG}11`, borderRadius: 6 }}>
-          <div style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG, marginBottom: 6 }}>SERVIÇO(S)</div>
-          {items.map((item, i) => (
-            <div key={i} style={{ fontSize: "0.85rem", color: corTexto, marginBottom: 4 }}>
-              • {item.name || `Serviço ${i + 1}`}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* BOTÕES PRINCIPAIS */}
-      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 16 }}>
-        <button style={estiloBotaoVerde} onClick={salvarCartao}>
-          💾 Salvar Cartão
+      {/* BOTÕES DE AÇÃO (não imprimíveis) */}
+      <div style={{ marginTop: 16, display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 10 }}>
+        <button onClick={salvarCartao} disabled={salvando}
+          style={{ padding: "11px 0", background: "#111", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, fontSize: "0.9rem", cursor: "pointer", fontFamily: fontePrincipal }}>
+          {salvando ? "Salvando..." : "💾 Salvar Cartão"}
         </button>
-        <button style={estiloBotaoBranco} onClick={() => window.print()}>
-          🖨️ Imprimir Relatório
+        <button onClick={() => window.print()}
+          style={{ padding: "11px 0", background: "#fff", color: "#111", border: "2px solid #111", borderRadius: 8, fontWeight: 700, fontSize: "0.9rem", cursor: "pointer", fontFamily: fontePrincipal }}>
+          🖨️ Imprimir
         </button>
       </div>
 
-      {/* OCORRÊNCIAS - 4 BOTÕES */}
-      <div style={{ paddingTop: 16, borderTop: `2px solid ${corRG}`, marginBottom: 16 }}>
-        <div style={{ ...estiloTitulo, marginBottom: 12, color: "#ef4444" }}>⚠️ Desfecho da Visita</div>
-
-        <button style={estiloBotaoOcorrencia("fechou")} onClick={() => registrarOcorrencia("fechou")}>
-          🔒 Loja/Escritório Fechado
-        </button>
-
-        <button style={estiloBotaoOcorrencia("remarcou")} onClick={() => setShowCalendario(!showCalendario)}>
-          📅 Cliente Remarcou
-        </button>
+      {/* 4 BOTÕES DE DESFECHO DA VISITA */}
+      <div style={{ marginTop: 16, padding: "14px", background: "#f8f8f8", border: "1px solid #ddd", borderRadius: 8 }}>
+        <div style={{ fontSize: "0.75rem", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#666", marginBottom: 10 }}>
+          ⚠️ Desfecho da Visita
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 8 }}>
+          <button onClick={() => registrarOcorrencia("fechou")}
+            style={{ padding: "10px 8px", background: "#ef4444", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>
+            🔒 Loja / Fechado
+          </button>
+          <button onClick={() => setShowCalendario(!showCalendario)}
+            style={{ padding: "10px 8px", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>
+            📅 Cliente Remarcou
+          </button>
+          <button onClick={() => registrarOcorrencia("nao_compareceu")}
+            style={{ padding: "10px 8px", background: "#f59e0b", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>
+            ❌ Não Compareceu
+          </button>
+          <button onClick={() => registrarOcorrencia("mudou_ponto")}
+            style={{ padding: "10px 8px", background: "#6b7280", color: "#fff", border: "none", borderRadius: 7, fontWeight: 700, fontSize: "0.85rem", cursor: "pointer" }}>
+            📍 Mudou de Ponto
+          </button>
+        </div>
 
         {showCalendario && (
-          <div style={{ background: "#f0f8ff", padding: 12, borderRadius: 6, marginBottom: 12 }}>
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: 4 }}>Nova data:</label>
-            <input style={estiloInput} type="date" value={novaDataRemarcacao}
-              onChange={e => setNovaDataRemarcacao(e.target.value)} />
-            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: 4 }}>Nova hora:</label>
-            <input style={estiloInput} type="time" value={novaHoraRemarcacao}
-              onChange={e => setNovaHoraRemarcacao(e.target.value)} />
-            <button style={{ ...estiloBotaoVerde, width: "100%" }} onClick={() => registrarOcorrencia("remarcou", "Cliente marcou nova data")}>
+          <div style={{ marginTop: 10, padding: 12, background: "#fff", border: "1px solid #ddd", borderRadius: 7 }}>
+            <div style={{ fontSize: "0.8rem", fontWeight: 700, marginBottom: 8 }}>Nova data da visita:</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+              <div>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, display: "block", marginBottom: 3 }}>Data</label>
+                <input type="date" value={novaData} onChange={e => setNovaData(e.target.value)}
+                  style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: "0.85rem", boxSizing: "border-box" }} />
+              </div>
+              <div>
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, display: "block", marginBottom: 3 }}>Hora</label>
+                <input type="time" value={novaHora} onChange={e => setNovaHora(e.target.value)}
+                  style={{ width: "100%", padding: "6px 8px", border: "1px solid #ccc", borderRadius: 5, fontSize: "0.85rem", boxSizing: "border-box" }} />
+              </div>
+            </div>
+            <button onClick={() => registrarOcorrencia("remarcou", "Cliente remarcou a visita")}
+              style={{ width: "100%", padding: "8px 0", background: "#3b82f6", color: "#fff", border: "none", borderRadius: 6, fontWeight: 700, cursor: "pointer", fontSize: "0.85rem" }}>
               ✓ Confirmar Remarcação
             </button>
           </div>
         )}
-
-        <button style={estiloBotaoOcorrencia("nao_compareceu")} onClick={() => registrarOcorrencia("nao_compareceu")}>
-          ❌ Cliente Não Compareceu
-        </button>
-
-        <button style={estiloBotaoOcorrencia("mudou_ponto")} onClick={() => registrarOcorrencia("mudou_ponto")}>
-          📍 Loja Mudou de Ponto
-        </button>
       </div>
 
       {/* HISTÓRICO DE OCORRÊNCIAS */}
       {ocorrencias.length > 0 && (
-        <div style={{ paddingTop: 16, borderTop: `1px solid ${corRG}` }}>
-          <div style={estiloTitulo}>📝 Histórico de Ocorrências</div>
+        <div style={{ marginTop: 14, padding: "12px 14px", background: "#f8f8f8", border: "1px solid #ddd", borderRadius: 8 }}>
+          <div style={{ fontSize: "0.75rem", fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#666", marginBottom: 8 }}>
+            📝 Histórico de Ocorrências
+          </div>
           {ocorrencias.map((occ, i) => {
-            const tipos = {
-              fechou: "🔒 Fechado",
-              remarcou: "📅 Remarcado",
-              nao_compareceu: "❌ Não compareceu",
-              mudou_ponto: "📍 Mudou ponto",
-            };
+            const tipos = { fechou: "🔒 Fechado", remarcou: "📅 Remarcado", nao_compareceu: "❌ Não compareceu", mudou_ponto: "📍 Mudou ponto" };
             return (
-              <div key={i} style={{ fontSize: "0.8rem", marginBottom: 8, padding: 8, background: "#f5f5f5", borderRadius: 6 }}>
-                <strong style={{ color: corRG }}>{tipos[occ.tipo] || occ.tipo}</strong>
+              <div key={i} style={{ padding: "6px 10px", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 6, marginBottom: 6, fontSize: "0.8rem" }}>
+                <strong>{tipos[occ.tipo] || occ.tipo}</strong>
                 <div style={{ color: "#666", marginTop: 2 }}>
                   {occ.data} às {occ.hora}
-                  {occ.reagendamento_data && ` → Remarcado para ${occ.reagendamento_data} às ${occ.reagendamento_hora}`}
+                  {occ.reagendamento_data && <span style={{ color: "#3b82f6" }}> → {occ.reagendamento_data} às {occ.reagendamento_hora}</span>}
                 </div>
               </div>
             );
           })}
         </div>
       )}
-
-      {/* RODAPÉ COM CONTATOS */}
-      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `2px solid ${corRG}`, fontSize: "0.75rem", color: "#666", textAlign: "center", lineHeight: 1.6 }}>
-        <div style={{ fontWeight: 700, color: corRG, marginBottom: 6 }}>📞 Comercial - Residencial</div>
-        <div>📱 <strong>Rafael</strong> (Orçamentos): <a href="tel:+5544998514234" style={{ color: corRG, textDecoration: "none" }}>44 99851-4234</a></div>
-        <div>📱 <strong>Aline</strong> (Administrativo): <a href="tel:+5544999049964" style={{ color: corRG, textDecoration: "none" }}>44 99904-9964</a></div>
-        <div style={{ marginTop: 6 }}>
-          📸 @oficialrestauraglass &nbsp; | &nbsp; 🌐 <a href="https://www.restauraglass.com.br" style={{ color: corRG, textDecoration: "none" }}>www.restauraglass.com.br</a>
-        </div>
-      </div>
     </div>
   );
 }
