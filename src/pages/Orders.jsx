@@ -12,6 +12,13 @@ const API = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
 const QR_TOKEN = "sv-checkin-universal";
 
+// ── ISOLAMENTO RESTAURA GLASS ───────────────────────────────────────────
+const RESTAURA_GLASS_COMPANY_ID = "17";
+function isRestauraGlass() {
+  const companyId = String(localStorage.getItem("company_id") || "");
+  return companyId === RESTAURA_GLASS_COMPANY_ID;
+}
+
 function fmt(v) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 }
@@ -41,15 +48,367 @@ const EMPTY_FORM = {
   client_id: "", status: "open", notes: "", payment_terms: "", discount: 0,
 };
 
+// ── COMPONENTE: CARTÃO RESTAURA GLASS ──────────────────────────────────
+function RestauraGlassCard({ order, items, theme, isMobile }) {
+  const [card, setCard] = useState({
+    frequencia: "semanal",
+    mes: new Date().getMonth() + 1,
+    ano: new Date().getFullYear(),
+    dias_semana: "ter",
+    obs_contrato: "",
+    semanas: [
+      { numero: 1, hora: "", realizado: false },
+      { numero: 2, hora: "", realizado: false },
+      { numero: 3, hora: "", realizado: false },
+      { numero: 4, hora: "", realizado: false },
+      { numero: 5, hora: "", realizado: false },
+    ],
+  });
+  const [ocorrencias, setOcorrencias] = useState([]);
+  const [showCalendario, setShowCalendario] = useState(false);
+  const [novaDataRemarcacao, setNovaDataRemarcacao] = useState("");
+  const [novaHoraRemarcacao, setNovaHoraRemarcacao] = useState("");
+
+  const corRG = "#1a8a3c"; // Verde Restaura Glass
+  const corTexto = "#333";
+
+  // Carregar cartão do localStorage (fallback de backend)
+  useEffect(() => {
+    async function carregar() {
+      const chave = `sv_rg_card_${order.id}`;
+      const chaveOcc = `sv_rg_occ_${order.id}`;
+
+      // Tentar backend
+      if (navigator.onLine) {
+        try {
+          const res = await fetch(`${API}/limpeza/card/${order.id}`, {
+            headers: { Authorization: `Bearer ${token()}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setCard(data.card || card);
+            setOcorrencias(data.ocorrencias || []);
+            return;
+          }
+        } catch {}
+      }
+
+      // Fallback localStorage
+      const saved = localStorage.getItem(chave);
+      const savedOcc = localStorage.getItem(chaveOcc);
+      if (saved) setCard(JSON.parse(saved));
+      if (savedOcc) setOcorrencias(JSON.parse(savedOcc));
+    }
+    carregar();
+  }, [order.id]);
+
+  // Salvar cartão (backend + localStorage)
+  async function salvarCartao() {
+    const chave = `sv_rg_card_${order.id}`;
+    localStorage.setItem(chave, JSON.stringify(card));
+
+    if (navigator.onLine) {
+      try {
+        await fetch(`${API}/limpeza/card/${order.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
+          body: JSON.stringify({ card }),
+        });
+      } catch {}
+    }
+    alert("Cartão salvo!");
+  }
+
+  // Registrar ocorrência
+  async function registrarOcorrencia(tipo, descricao = "") {
+    const novaOcc = {
+      id: uuid(),
+      tipo, // "fechou" | "remarcou" | "nao_compareceu" | "mudou_ponto"
+      data: new Date().toISOString().split("T")[0],
+      hora: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      descricao,
+      reagendamento_data: tipo === "remarcou" ? novaDataRemarcacao : null,
+      reagendamento_hora: tipo === "remarcou" ? novaHoraRemarcacao : null,
+    };
+
+    const novasOcc = [...ocorrencias, novaOcc];
+    setOcorrencias(novasOcc);
+    localStorage.setItem(`sv_rg_occ_${order.id}`, JSON.stringify(novasOcc));
+
+    if (navigator.onLine) {
+      try {
+        await fetch(`${API}/limpeza/occurrence`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
+          body: JSON.stringify({ order_id: order.id, ...novaOcc }),
+        });
+      } catch {}
+    }
+
+    setShowCalendario(false);
+    setNovaDataRemarcacao("");
+    setNovaHoraRemarcacao("");
+    alert(`Ocorrência registrada: ${tipo}`);
+  }
+
+  const atualizarSemana = (idx, campo, valor) => {
+    const novasSemanas = [...card.semanas];
+    novasSemanas[idx] = { ...novasSemanas[idx], [campo]: valor };
+    setCard({ ...card, semanas: novasSemanas });
+  };
+
+  // Estilos do cartão (branco + verde Restaura Glass)
+  const estiloCartao = {
+    background: "#f9f9f9",
+    border: `2px solid ${corRG}`,
+    borderRadius: 12,
+    padding: isMobile ? 16 : 24,
+    fontFamily: "'Segoe UI', Tahoma, sans-serif",
+    color: corTexto,
+  };
+
+  const estiloTitulo = {
+    color: corRG,
+    fontSize: isMobile ? "1rem" : "1.2rem",
+    fontWeight: 700,
+    margin: "0 0 12px 0",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+  };
+
+  const estiloInput = {
+    padding: 8,
+    border: `1px solid ${corRG}`,
+    borderRadius: 6,
+    fontSize: "0.9rem",
+    fontFamily: "inherit",
+    width: "100%",
+    boxSizing: "border-box",
+    marginBottom: 8,
+  };
+
+  const estiloBotao = {
+    padding: "10px 16px",
+    marginBottom: 8,
+    border: "none",
+    borderRadius: 6,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    fontSize: "0.9rem",
+  };
+
+  const estiloBotaoVerde = {
+    ...estiloBotao,
+    background: corRG,
+    color: "#fff",
+  };
+
+  const estiloBotaoBranco = {
+    ...estiloBotao,
+    background: "#fff",
+    border: `2px solid ${corRG}`,
+    color: corRG,
+  };
+
+  const estiloBotaoOcorrencia = (tipo) => ({
+    ...estiloBotao,
+    background: tipo === "fechou" ? "#ef4444" : tipo === "remarcou" ? "#3b82f6" : tipo === "nao_compareceu" ? "#f59e0b" : "#6b7280",
+    color: "#fff",
+    width: "100%",
+    marginBottom: 8,
+  });
+
+  return (
+    <div style={estiloCartao}>
+      {/* CABEÇALHO COM LOGO/MARCA */}
+      <div style={{ textAlign: "center", marginBottom: 20, paddingBottom: 16, borderBottom: `2px solid ${corRG}` }}>
+        <div style={{ fontSize: isMobile ? "1.4rem" : "1.8rem", fontWeight: 700, color: corRG, marginBottom: 4 }}>
+          🪟 RESTAURA GLASS
+        </div>
+        <div style={{ fontSize: "0.8rem", color: "#666", letterSpacing: "0.08em" }}>
+          ESPECIALISTA EM LIMPEZA DE VIDROS
+        </div>
+      </div>
+
+      {/* FREQUÊNCIA */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={estiloTitulo}>Frequência</label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+          {["mensal", "quinzenal", "semanal", "esporadico"].map(freq => (
+            <label key={freq} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+              <input type="radio" name="frequencia" value={freq} checked={card.frequencia === freq}
+                onChange={e => setCard({ ...card, frequencia: e.target.value })} style={{ cursor: "pointer" }} />
+              <span style={{ fontSize: "0.85rem", fontWeight: 500 }}>
+                {freq === "mensal" ? "Mensal" : freq === "quinzenal" ? "Quinzenal" : freq === "semanal" ? "Semanal" : "Esporádico"}
+              </span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* MÊS / ANO / CLIENTE / OBS */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG }}>OBS / Nº Contrato</label>
+          <input style={estiloInput} type="text" value={card.obs_contrato}
+            onChange={e => setCard({ ...card, obs_contrato: e.target.value })} placeholder="Ex: 125/126" />
+        </div>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG }}>Mês</label>
+          <input style={estiloInput} type="number" min="1" max="12" value={card.mes}
+            onChange={e => setCard({ ...card, mes: parseInt(e.target.value) })} />
+        </div>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG }}>Ano</label>
+          <input style={estiloInput} type="number" value={card.ano}
+            onChange={e => setCard({ ...card, ano: parseInt(e.target.value) })} />
+        </div>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG }}>Cliente</label>
+          <div style={{ ...estiloInput, padding: 8, marginBottom: 0, background: "#f0f0f0", cursor: "default", display: "flex", alignItems: "center" }}>
+            {order.client_name}
+          </div>
+        </div>
+      </div>
+
+      {/* DIAS DA SEMANA */}
+      <div style={{ marginBottom: 16 }}>
+        <label style={estiloTitulo}>Dia Fixo da Semana</label>
+        <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(6, 1fr)", gap: 8 }}>
+          {["seg", "ter", "qua", "qui", "sex", "sab"].map(dia => {
+            const labels = { seg: "SEG", ter: "TER", qua: "QUA", qui: "QUI", sex: "SEX", sab: "SAB" };
+            return (
+              <label key={dia} style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}>
+                <input type="radio" name="dias_semana" value={dia} checked={card.dias_semana === dia}
+                  onChange={e => setCard({ ...card, dias_semana: e.target.value })} style={{ cursor: "pointer" }} />
+                <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{labels[dia]}</span>
+              </label>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 5 SEMANAS */}
+      <div style={{ marginBottom: 16, paddingTop: 16, borderTop: `1px solid ${corRG}` }}>
+        <label style={estiloTitulo}>Execução por Semana</label>
+        {card.semanas.map((semana, idx) => (
+          <div key={idx} style={{ display: "flex", gap: 12, marginBottom: 12, alignItems: "center", paddingBottom: 12, borderBottom: `1px solid ${corRG}aa` }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: corRG, marginBottom: 4 }}>{semana.numero}ª semana</div>
+              <input style={{ ...estiloInput, marginBottom: 0 }} type="time" value={semana.hora}
+                onChange={e => atualizarSemana(idx, "hora", e.target.value)} placeholder="HH:MM" />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 14 }}>
+              <input type="checkbox" checked={semana.realizado}
+                onChange={e => atualizarSemana(idx, "realizado", e.target.checked)} style={{ width: 20, height: 20, cursor: "pointer" }} />
+              <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "#666" }}>Realizado</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* SERVIÇOS (SEM VALOR) */}
+      {items && items.length > 0 && (
+        <div style={{ marginBottom: 16, padding: 12, background: `${corRG}11`, borderRadius: 6 }}>
+          <div style={{ fontSize: "0.75rem", fontWeight: 700, color: corRG, marginBottom: 6 }}>SERVIÇO(S)</div>
+          {items.map((item, i) => (
+            <div key={i} style={{ fontSize: "0.85rem", color: corTexto, marginBottom: 4 }}>
+              • {item.name || `Serviço ${i + 1}`}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* BOTÕES PRINCIPAIS */}
+      <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 16 }}>
+        <button style={estiloBotaoVerde} onClick={salvarCartao}>
+          💾 Salvar Cartão
+        </button>
+        <button style={estiloBotaoBranco} onClick={() => window.print()}>
+          🖨️ Imprimir Relatório
+        </button>
+      </div>
+
+      {/* OCORRÊNCIAS - 4 BOTÕES */}
+      <div style={{ paddingTop: 16, borderTop: `2px solid ${corRG}`, marginBottom: 16 }}>
+        <div style={{ ...estiloTitulo, marginBottom: 12, color: "#ef4444" }}>⚠️ Desfecho da Visita</div>
+
+        <button style={estiloBotaoOcorrencia("fechou")} onClick={() => registrarOcorrencia("fechou")}>
+          🔒 Loja/Escritório Fechado
+        </button>
+
+        <button style={estiloBotaoOcorrencia("remarcou")} onClick={() => setShowCalendario(!showCalendario)}>
+          📅 Cliente Remarcou
+        </button>
+
+        {showCalendario && (
+          <div style={{ background: "#f0f8ff", padding: 12, borderRadius: 6, marginBottom: 12 }}>
+            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: 4 }}>Nova data:</label>
+            <input style={estiloInput} type="date" value={novaDataRemarcacao}
+              onChange={e => setNovaDataRemarcacao(e.target.value)} />
+            <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 600, marginBottom: 4 }}>Nova hora:</label>
+            <input style={estiloInput} type="time" value={novaHoraRemarcacao}
+              onChange={e => setNovaHoraRemarcacao(e.target.value)} />
+            <button style={{ ...estiloBotaoVerde, width: "100%" }} onClick={() => registrarOcorrencia("remarcou", "Cliente marcou nova data")}>
+              ✓ Confirmar Remarcação
+            </button>
+          </div>
+        )}
+
+        <button style={estiloBotaoOcorrencia("nao_compareceu")} onClick={() => registrarOcorrencia("nao_compareceu")}>
+          ❌ Cliente Não Compareceu
+        </button>
+
+        <button style={estiloBotaoOcorrencia("mudou_ponto")} onClick={() => registrarOcorrencia("mudou_ponto")}>
+          📍 Loja Mudou de Ponto
+        </button>
+      </div>
+
+      {/* HISTÓRICO DE OCORRÊNCIAS */}
+      {ocorrencias.length > 0 && (
+        <div style={{ paddingTop: 16, borderTop: `1px solid ${corRG}` }}>
+          <div style={estiloTitulo}>📝 Histórico de Ocorrências</div>
+          {ocorrencias.map((occ, i) => {
+            const tipos = {
+              fechou: "🔒 Fechado",
+              remarcou: "📅 Remarcado",
+              nao_compareceu: "❌ Não compareceu",
+              mudou_ponto: "📍 Mudou ponto",
+            };
+            return (
+              <div key={i} style={{ fontSize: "0.8rem", marginBottom: 8, padding: 8, background: "#f5f5f5", borderRadius: 6 }}>
+                <strong style={{ color: corRG }}>{tipos[occ.tipo] || occ.tipo}</strong>
+                <div style={{ color: "#666", marginTop: 2 }}>
+                  {occ.data} às {occ.hora}
+                  {occ.reagendamento_data && ` → Remarcado para ${occ.reagendamento_data} às ${occ.reagendamento_hora}`}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* RODAPÉ COM CONTATOS */}
+      <div style={{ marginTop: 20, paddingTop: 16, borderTop: `2px solid ${corRG}`, fontSize: "0.75rem", color: "#666", textAlign: "center", lineHeight: 1.6 }}>
+        <div style={{ fontWeight: 700, color: corRG, marginBottom: 6 }}>📞 Comercial - Residencial</div>
+        <div>📱 <strong>Rafael</strong> (Orçamentos): <a href="tel:+5544998514234" style={{ color: corRG, textDecoration: "none" }}>44 99851-4234</a></div>
+        <div>📱 <strong>Aline</strong> (Administrativo): <a href="tel:+5544999049964" style={{ color: corRG, textDecoration: "none" }}>44 99904-9964</a></div>
+        <div style={{ marginTop: 6 }}>
+          📸 @oficialrestauraglass &nbsp; | &nbsp; 🌐 <a href="https://www.restauraglass.com.br" style={{ color: corRG, textDecoration: "none" }}>www.restauraglass.com.br</a>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Scanner com 3 fallbacks ──────────────────────────────────────────────────
-// Fluxo: camera → numeric → pin → confirm. Cada um acessível pelas tabs.
-// Código numérico e PIN do scanner são validados localmente (referência client_id).
 function QRScanner({ onDetected, onCancel, action, clientCode }) {
   const videoRef  = useRef(null);
   const readerRef = useRef(null);
   const tmrRef    = useRef(null);
 
-  const [mode,       setMode]    = useState("camera"); // camera|numeric|pin|confirm
+  const [mode,       setMode]    = useState("camera");
   const [camErr,     setCamErr]  = useState("");
   const [camReady,   setCamReady]= useState(false);
   const [numInput,   setNumInput]= useState("");
@@ -256,7 +615,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
   const [result, setResult]   = useState(null);
   const [loadingOpen, setLO]  = useState(true);
 
-  // PIN (cliente sem GPS) e offline
   const [pinMode, setPinMode]   = useState(false);
   const [pinValue, setPinValue] = useState("");
   const [offlineMsg, setOfflineMsg] = useState("");
@@ -277,7 +635,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
 
   useEffect(() => {
     async function checkOpen() {
-      // Offline: não dá pra consultar; assume sem check-in aberto e segue
       if (!navigator.onLine) { setOpenChk(null); setLO(false); return; }
       try {
         const res  = await fetch(`${API}/checkin/open`, { headers:{ Authorization:`Bearer ${token()}` } });
@@ -302,7 +659,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
     setStep("confirming");
   }
 
-  // Monta o corpo do check-in (com local_id sempre)
   function buildBody() {
     const base = {
       lat: location?.lat || null,
@@ -323,11 +679,9 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
 
     const body = buildBody();
 
-    // ── OFFLINE: enfileira, aplica status otimista e encerra ────────────────
     if (!navigator.onLine) {
       try {
         await enqueueCheckin(body);
-        // STATUS OTIMISTA: start → in_progress, finish → done
         if (action === "start") await setOrderStatusOverlay(order.id, "in_progress");
         else                    await setOrderStatusOverlay(order.id, "done");
         setResult({ action, offline: true });
@@ -342,7 +696,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
       return;
     }
 
-    // ── ONLINE: envia direto ────────────────────────────────────────────────
     try {
       const endpoint = action==="start"
         ? `${API}/checkin/${order.client_id}/start`
@@ -356,7 +709,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
       const data = await res.json();
 
       if (!res.ok) {
-        // Cliente sem GPS → pede PIN
         if (data.sem_coordenadas) {
           setPinMode(true);
           setError("Cliente sem localização cadastrada. Digite o PIN do encarregado.");
@@ -369,7 +721,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
       setStep("success");
       onSuccess();
     } catch (e) {
-      // Falhou a rede no meio → enfileira como offline + status otimista
       try {
         await enqueueCheckin(body);
         if (action === "start") await setOrderStatusOverlay(order.id, "in_progress");
@@ -424,7 +775,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           <div style={S.osClient}>{order.client_name}</div>
         </div>
 
-        {/* ── SELEÇÃO DE AÇÃO ── */}
         {step === "select_action" && (
           <>
             <div style={S.time}>
@@ -456,7 +806,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           </>
         )}
 
-        {/* ── SCANNING + FALLBACKS ── */}
         {step === "scanning" && (
           <QRScanner
             action={action}
@@ -466,7 +815,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           />
         )}
 
-        {/* ── CONFIRMAÇÃO ── */}
         {step === "confirming" && (
           <>
             <div style={S.time}>
@@ -490,7 +838,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
               value={notes} onChange={e => setNotes(e.target.value)}
             />
 
-            {/* Campo de PIN (aparece quando backend pede) */}
             {pinMode && (
               <div style={{ marginBottom:14 }}>
                 <div style={{ color:"#f59e0b", fontSize:12, fontWeight:600, marginBottom:6, textAlign:"center" }}>
@@ -522,7 +869,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
               </div>
             )}
 
-            {/* Botão de confirmar: aparece sempre (mesmo com erro de PIN, para retentar com PIN) */}
             {(!error || pinMode) && (
               <>
                 <button
@@ -543,7 +889,6 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
           </>
         )}
 
-        {/* ── SUCESSO ── */}
         {step === "success" && (
           <div style={{ textAlign:"center", padding:"16px 0" }}>
             <div style={{ fontSize:52, marginBottom:12 }}>{result?.offline ? "⏳" : result?.action==="start" ? "📍" : "✅"}</div>
@@ -578,10 +923,11 @@ export default function Orders() {
   const colorScheme = isGlass ? "light" : "dark";
   const isMobile   = useIsMobile();
   const navigate   = useNavigate();
+  const rg = isRestauraGlass(); // Detecta Restaura Glass
 
   const [sidebarOpen,    setSidebarOpen]    = useState(false);
   const [orders,         setOrders]         = useState([]);
-  const [overlays,       setOverlays]       = useState({}); // status otimista offline
+  const [overlays,       setOverlays]       = useState({});
   const [clients,        setClients]        = useState([]);
   const [products,       setProducts]       = useState([]);
   const [loading,        setLoading]        = useState(true);
@@ -616,7 +962,6 @@ export default function Orders() {
     try { sessionStorage.removeItem(key); } catch {}
   }
 
-  // Carrega os overlays de status otimista
   async function loadOverlays() {
     try { setOverlays(await getOrderOverlays()); } catch { setOverlays({}); }
   }
@@ -641,7 +986,6 @@ export default function Orders() {
     if (cp) setProducts(cp);
     if (co && cc && cp) setLoading(false);
     await loadOverlays();
-    // Offline: fica no cache
     if (!navigator.onLine) { setLoading(false); return; }
     try {
       const h = { Authorization:`Bearer ${token()}` };
@@ -674,10 +1018,8 @@ export default function Orders() {
   useEffect(() => {
     fetchAll();
     pollingRef.current = setInterval(fetchOrders, 15000);
-    // Ao voltar a rede, sincroniza fila e recarrega
     const onOnline = () => { syncNow().then(() => fetchOrders()); };
     window.addEventListener("online", onOnline);
-    // Quando o sync limpa overlays/cria coisas, recarrega
     const onSynced = () => { fetchOrders(); };
     window.addEventListener("sv_synced", onSynced);
     return () => {
@@ -753,7 +1095,6 @@ export default function Orders() {
     } catch { showToast("Erro de conexão.", "error"); }
   }
 
-  // Aplica o status otimista (overlay) por cima dos status do servidor
   function effectiveStatus(o) {
     return overlays[String(o.id)] || o.status;
   }
@@ -765,7 +1106,6 @@ export default function Orders() {
     return statusOk && searchOk;
   });
 
-  // Contadores usam o status efetivo (com overlay)
   const countBy = (s) => orders.filter(o => effectiveStatus(o)===s).length;
 
   const inputStyle   = { background:theme.bgInput, border:`1px solid ${isGlass?"rgba(255,255,255,0.4)":theme.borderInput}`, borderRadius:10, padding:"10px 14px", color:theme.textPrimary, fontSize:"0.9rem", outline:"none", width:"100%", boxSizing:"border-box", transition:"border-color 0.2s", colorScheme, ...(isGlass&&{backdropFilter:"blur(8px)",WebkitBackdropFilter:"blur(8px)"}) };
@@ -1029,7 +1369,18 @@ export default function Orders() {
         />
       )}
 
-      {detailOrder && (
+      {detailOrder && rg && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)", padding:16, overflowY:"auto" }} onClick={() => setDetailOrder(null)}>
+          <div style={{ width:"100%", maxWidth:900, padding:20, overflowY:"auto", maxHeight:"95vh" }} onClick={e => e.stopPropagation()}>
+            <RestauraGlassCard order={detailOrder} items={detailOrder.items||[]} theme={theme} isMobile={isMobile} />
+            <div style={{ marginTop:16, display:"flex", gap:12, justifyContent:"center" }}>
+              <button style={{ ...btnSecondary, padding:"10px 24px" }} onClick={() => setDetailOrder(null)}>← Voltar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailOrder && !rg && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:999, backdropFilter:"blur(4px)", padding:16 }} onClick={() => setDetailOrder(null)}>
           <div style={{ ...modalBg, borderRadius:20, padding:isMobile?"20px 16px":28, width:"100%", maxWidth:560, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 24px 80px rgba(0,0,0,0.6)" }} onClick={e=>e.stopPropagation()}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
@@ -1082,7 +1433,6 @@ export default function Orders() {
                     <div style={{ color:theme.textMuted, marginBottom:2 }}>🏁 Saída</div>
                     <div style={{ color:theme.textPrimary, fontWeight:600 }}>{chk.checkout_at ? chk.checkout_at.replace("T"," ").slice(0,16) : "Em andamento..."}</div>
                   </div>
-                  {/* Endereço do cliente */}
                   {chk.client_address && chk.client_address !== "—" && (
                     <div style={{ gridColumn:"1/-1" }}>
                       <div style={{ color:theme.textMuted, marginBottom:2 }}>🏠 Endereço</div>
