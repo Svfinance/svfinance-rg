@@ -334,16 +334,15 @@ export default function Settings() {
                 <p style={{ color:theme.textMuted, fontSize:"0.82rem", margin:"0 0 24px" }}>Salvo automaticamente.</p>
                 <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16 }}>
                   {[
-                    {id:"vertical",label:"Vertical",desc:"Sidebar lateral retrátil"},
-                    {id:"horizontal",label:"Horizontal",desc:"Barra no topo com dropdown"},
-                    {id:"dock",label:"Dock Convexo",desc:"Bolinhas em arco projetando"},
-                    {id:"dock_concave",label:"Dock Côncavo",desc:"Bolinhas em arco recuado"},
+                    {id:"vertical",     label:"Lateral",     icon:"▐", desc:"Sidebar lateral retrátil — expande no hover"},
+                    {id:"horizontal",   label:"Horizontal",  icon:"▬", desc:"Barra no topo com navegação horizontal"},
+                    {id:"dock_concave", label:"Côncavo",     icon:"⬤", desc:"Dock côncavo — aparece na lateral direita"},
                   ].map(s => {
                     const isAct = sidebarStyle === s.id;
                     return (
                       <div key={s.id} onClick={()=>handleSidebarStyle(s.id)} style={{ borderRadius:16, padding:20, cursor:"pointer", transition:"all 0.2s", background:isAct?(isGlass?"rgba(255,255,255,0.3)":`${theme.primary}18`):(isGlass?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.03)"), border:`2px solid ${isAct?theme.primary:isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, boxShadow:isAct?`0 0 20px ${theme.primary}33`:"none", position:"relative" }}>
                         {isAct && <div style={{ position:"absolute", top:10, right:10, background:theme.primaryGrad, color:"#fff", fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20 }}>ATIVO</div>}
-                        <div style={{ fontSize:"2rem", marginBottom:10 }}>{s.id==="vertical"?"▐":s.id==="horizontal"?"▬":"⬤"}</div>
+                        <div style={{ fontSize:"2rem", marginBottom:10 }}>{s.icon}</div>
                         <div style={{ fontWeight:700, fontSize:"0.92rem", color:isAct?theme.primary:theme.textPrimary, marginBottom:4 }}>{s.label}</div>
                         <div style={{ fontSize:"0.75rem", color:theme.textMuted, lineHeight:1.4, marginBottom:12 }}>{s.desc}</div>
                         <button onClick={e=>{e.stopPropagation();handleSidebarStyle(s.id);}} style={{ width:"100%", padding:"8px", borderRadius:10, border:"none", cursor:"pointer", fontWeight:600, fontSize:"0.82rem", background:isAct?theme.primaryGrad:`${theme.primary}22`, color:isAct?"#fff":theme.primary }}>{isAct?"✓ Ativo":"Aplicar"}</button>

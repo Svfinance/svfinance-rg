@@ -210,7 +210,7 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
   if (!loaded) return <div style={{textAlign:"center",padding:"40px 0",color:RGT.textSub}}>Carregando cartão...</div>;
 
   // ── ESTILOS BASE ──
-  const inp = { border:`1px solid ${RGT.verdeBd}`, borderRadius:6, padding:"5px 8px", background:"rgba(255,255,255,0.9)", color:"#1a1a1a", fontFamily:"inherit", fontSize:"0.85rem", outline:"none", width:"100%", boxSizing:"border-box" };
+  const inp = { border:`1px solid ${RGT.verdeBd}`, borderRadius:6, padding:"5px 8px", background:"#ffffff", color:"#1a1a1a", fontFamily:"inherit", fontSize:"0.85rem", outline:"none", width:"100%", boxSizing:"border-box", colorScheme:"light" };
   const section = { background:RGT.cardBg, backdropFilter:RGT.cardBlur, WebkitBackdropFilter:RGT.cardBlur, border:`1px solid ${RGT.verdeBd}`, borderRadius:RGT.radius, padding:isMobile?"14px":"18px", marginBottom:14, boxShadow:RGT.cardShadow };
   const labelG  = { fontSize:"0.7rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:RGT.verde, marginBottom:5, display:"block" };
   const btnVerde = { background:RGT.verde, color:"#fff", border:"none", borderRadius:8, padding:"9px 18px", fontWeight:700, cursor:"pointer", fontSize:"0.85rem", fontFamily:"inherit" };
@@ -278,6 +278,8 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
                     <label style={{ display:"flex", alignItems:"center", gap:3, fontSize:"0.72rem", fontWeight:700, color:"#1a1a1a" }}>
                       hr <input type="time" value={sem.hr} onChange={e=>setSemana(idx,"hr",e.target.value)} style={{ ...fB, width:80, fontSize:"0.72rem" }}/>
                     </label>
+                    <input type="date" value={sem.data_dia||""} onChange={e=>setSemana(idx,"data_dia",e.target.value)}
+                      style={{ ...fB, width:115, fontSize:"0.68rem" }}/>
                   </div>
                   {/* botão checkin */}
                   {!sem.checkin_at
@@ -457,9 +459,16 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
                 <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>
                   <input type="checkbox" checked={!!sem.int} onChange={e=>setSemana(idx,"int",e.target.checked)} style={{width:14,height:14,accentColor:RGT.verde}}/> Int
                 </label>
-                <div style={{display:"flex",alignItems:"center",gap:4}}>
-                  <span style={{fontSize:"0.78rem",fontWeight:600}}>Hora:</span>
-                  <input type="time" value={sem.hr} onChange={e=>setSemana(idx,"hr",e.target.value)} style={{...inp,width:100}}/>
+                <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{fontSize:"0.75rem",fontWeight:600,color:RGT.verde}}>Hora</span>
+                    <input type="time" value={sem.hr} onChange={e=>setSemana(idx,"hr",e.target.value)} style={{...inp,width:95}}/>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{fontSize:"0.75rem",fontWeight:600,color:RGT.verde}}>Data</span>
+                    <input type="date" value={sem.data_dia||""} onChange={e=>setSemana(idx,"data_dia",e.target.value)}
+                      style={{...inp,width:130}}/>
+                  </div>
                 </div>
                 <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"0.78rem",fontWeight:600,cursor:"pointer",marginLeft:"auto"}}>
                   <input type="checkbox" checked={!!sem.x} onChange={e=>setSemana(idx,"x",e.target.checked)} style={{width:14,height:14,accentColor:RGT.verde}}/> ✓ Ok
@@ -537,11 +546,22 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
 function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
   const [busca, setBusca]           = useState("");
   const [clienteSel, setClienteSel] = useState(null);
+  const [endereco, setEndereco]     = useState("");
   const [card, setCard]             = useState(cardInicial("semanal"));
   const [criando, setCriando]       = useState(false);
   const [showDropdown, setShowDD]   = useState(false);
   const [dropRect, setDropRect]     = useState(null);
+  const [modoForm, setModoForm]     = useState("digital"); // "digital" | "fisico"
   const inputRef = useRef(null);
+
+  // Abre Google Maps / Apple Maps com o endereço do cliente
+  function abrirLocalizacao() {
+    if (!endereco.trim()) return;
+    const q = encodeURIComponent(endereco.trim());
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS) window.open(`maps://maps.apple.com/?q=${q}`, "_blank");
+    else window.open(`https://maps.google.com/?q=${q}`, "_blank");
+  }
 
   const filtrados = busca.length >= 1
     ? clients.filter(c =>
@@ -557,7 +577,15 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
     }
   }
 
-  function selecionarCliente(c) { setClienteSel(c); setBusca(c.name); setShowDD(false); }
+  function selecionarCliente(c) {
+    setClienteSel(c);
+    setBusca(c.name);
+    setShowDD(false);
+    // Montar endereço completo do cadastro do cliente
+    const partes = [c.logradouro, c.numero, c.complemento, c.bairro, c.municipio, c.uf].filter(Boolean);
+    const end = partes.length > 0 ? partes.join(", ") : (c.address || "");
+    setEndereco(end);
+  }
 
   function setFreq(f) {
     const qtd = QTD_SEMANAS[f]; const atual = card.semanas;
@@ -582,7 +610,7 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
     setCriando(true); await onSubmit(clienteSel,card); setCriando(false);
   }
 
-  const inp = { border:`1px solid ${RGT.verdeBd}`, borderRadius:6, padding:"8px 10px", background:"rgba(255,255,255,0.9)", color:RGT.text, fontFamily:"inherit", fontSize:"0.88rem", outline:"none", width:"100%", boxSizing:"border-box" };
+  const inp = { border:`1px solid ${RGT.verdeBd}`, borderRadius:6, padding:"8px 10px", background:"#ffffff", color:"#1a1a1a", fontFamily:"inherit", fontSize:"0.88rem", outline:"none", width:"100%", boxSizing:"border-box", colorScheme:"light" };
   const section = { background:RGT.cardBg, backdropFilter:RGT.cardBlur, WebkitBackdropFilter:RGT.cardBlur, border:`1px solid ${RGT.verdeBd}`, borderRadius:RGT.radius, padding:isMobile?"14px":"18px", marginBottom:14, boxShadow:RGT.cardShadow };
   const labelG  = { fontSize:"0.7rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:RGT.verde, marginBottom:5, display:"block" };
   const btnVerde = { background:RGT.verde, color:"#fff", border:"none", borderRadius:8, padding:"10px 20px", fontWeight:700, cursor:"pointer", fontSize:"0.88rem", fontFamily:"inherit" };
@@ -590,6 +618,18 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
 
   return (
     <div style={{ fontFamily:"'Segoe UI',Arial,sans-serif", color:RGT.text }}>
+
+      {/* TOGGLE DIGITAL / FÍSICO */}
+      <div style={{ display:"flex", gap:8, marginBottom:14 }}>
+        <button onClick={()=>setModoForm("digital")}
+          style={{ ...modoForm==="digital"?btnVerde:btnBranco, padding:"7px 16px", fontSize:"0.82rem" }}>
+          📱 Digital
+        </button>
+        <button onClick={()=>setModoForm("fisico")}
+          style={{ ...modoForm==="fisico"?btnVerde:btnBranco, padding:"7px 16px", fontSize:"0.82rem" }}>
+          🖨️ Cartão Físico
+        </button>
+      </div>
 
       {/* HEADER */}
       <div style={{...section,display:"flex",alignItems:"center",gap:14,marginBottom:14}}>
@@ -633,10 +673,28 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
           )}
         </div>
         {clienteSel && (
-          <div style={{ marginTop:10, padding:"10px 14px", background:"rgba(240,250,244,0.9)", border:`1px solid ${RGT.verdeBd}`, borderRadius:8, fontSize:"0.85rem" }}>
-            <div style={{ fontWeight:700, color:RGT.verde }}>✅ {clienteSel.name}</div>
-            {clienteSel.address && <div style={{ color:RGT.textSub, marginTop:2 }}>{clienteSel.address}</div>}
-            {clienteSel.codigo && <div style={{ color:RGT.textSub, marginTop:2 }}>Código: #{clienteSel.codigo}</div>}
+          <div style={{ marginTop:10, padding:"12px 14px", background:"rgba(240,250,244,0.9)", border:`1px solid ${RGT.verdeBd}`, borderRadius:8, fontSize:"0.85rem" }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10, flexWrap:"wrap" }}>
+              <div>
+                <div style={{ fontWeight:700, color:RGT.verde }}>✅ {clienteSel.name}</div>
+                {clienteSel.codigo && <div style={{ color:RGT.textSub, fontSize:"0.78rem", marginTop:2 }}>Código: #{clienteSel.codigo}</div>}
+              </div>
+            </div>
+            {/* Endereço editável + botão abrir localização */}
+            <div style={{ marginTop:10 }}>
+              <span style={{ fontSize:"0.7rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:RGT.verde, display:"block", marginBottom:4 }}>Endereço</span>
+              <div style={{ display:"flex", gap:8 }}>
+                <input style={{ ...inp, flex:1, fontSize:"0.83rem" }}
+                  placeholder="Endereço do cliente..."
+                  value={endereco}
+                  onChange={e => setEndereco(e.target.value)}/>
+                <button type="button" onClick={abrirLocalizacao}
+                  title="Abrir no Maps"
+                  style={{ background:RGT.verde, color:"#fff", border:"none", borderRadius:8, padding:"0 14px", fontWeight:700, cursor:"pointer", fontSize:"0.82rem", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+                  📍 Abrir localização
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

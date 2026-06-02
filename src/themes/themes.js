@@ -1,7 +1,7 @@
 export const RG_COMPANY_ID = "17";
 export const isRGUser = () =>
   String(typeof localStorage !== "undefined" ? localStorage.getItem("company_id") || "" : "") === RG_COMPANY_ID;
-export const RG_THEMES = ["clean", "rg_dark"];
+export const RG_THEMES = ["clean"];
 
 export const THEMES = {
 
@@ -88,90 +88,47 @@ export const THEMES = {
     chartColors:["#d4af37","#f0d060","#4ade80","#f87171","#e879f9","#38bdf8","#fb923c","#a3e635"],
   },
 
-  // ══ CLEAN — RestauraGlass CLARO ══
-  // Fundo branco limpo, sem imagem, identidade verde profissional
+  // ══ CLEAN — RestauraGlass ══
+  // Único tema da Restaura Glass — fundo branco profissional
   clean: {
     id:"clean", name:"Clean & Vidro", emoji:"🧼",
-    description:"Restaura Glass — branco profissional",
+    description:"Restaura Glass — identidade verde profissional",
     isGlassTheme:false, isCleanTheme:true, isRGTheme:true,
-    bgPrimary:"#f8fdf9",
+    bgPrimary:"#f4fbf6",
     bgSecondary:"rgba(255,255,255,0.95)",
-    bgCard:"rgba(255,255,255,0.88)",
+    bgCard:"rgba(255,255,255,0.92)",
     bgCardHover:"#ffffff",
     bgInput:"#ffffff",
     bgModal:"#ffffff",
     border:"rgba(22,163,74,0.12)",
-    borderCard:"rgba(22,163,74,0.18)",
-    borderInput:"rgba(22,163,74,0.28)",
-    borderActive:"rgba(21,128,61,0.6)",
+    borderCard:"rgba(22,163,74,0.20)",
+    borderInput:"rgba(22,163,74,0.30)",
+    borderActive:"rgba(21,128,61,0.65)",
     primary:"#16a34a",
     primaryDark:"#15803d",
     primaryGrad:"linear-gradient(135deg,#16a34a,#22c55e)",
     accent:"#15803d",
     accentGrad:"linear-gradient(135deg,#14532d,#16a34a,#22c55e)",
-    textPrimary:"#0f1a0f",
-    textSecondary:"#1f3d22",
-    textMuted:"#4a7a50",
+    // texto preto nos inputs para boa leitura
+    textPrimary:"#111827",
+    textSecondary:"#374151",
+    textMuted:"#9ca3af",
     textActive:"#15803d",
     income:"#15803d",
     expense:"#dc2626",
     warning:"#d97706",
     purple:"#7c3aed",
-    sidebarBg:"rgba(255,255,255,0.96)",
+    sidebarBg:"rgba(255,255,255,0.98)",
     sidebarActive:"rgba(22,163,74,0.10)",
-    sidebarBorder:"rgba(22,163,74,0.25)",
-    sidebarShadow:"rgba(22,163,74,0.06)",
+    sidebarBorder:"rgba(22,163,74,0.22)",
+    sidebarShadow:"rgba(22,163,74,0.05)",
     cardBorderTop:"#16a34a",
-    cardShadow:"rgba(22,163,74,0.08)",
+    cardShadow:"rgba(22,163,74,0.07)",
     cardBackdrop:"none",
     sidebarBackdrop:"none",
     mapOpacity:"0",
     isLight:true,
     chartColors:["#16a34a","#22c55e","#4ade80","#d97706","#dc2626","#7c3aed","#0ea5e9","#f59e0b"],
-  },
-
-  // ══ RG DARK — RestauraGlass NOTURNO ══
-  // Gradiente CSS profundo, sem imagem, glassmorphism premium
-  // Inspirado em interfaces de monitoramento modernas
-  rg_dark: {
-    id:"rg_dark", name:"RG Night", emoji:"🌿",
-    description:"Restaura Glass — modo noturno premium",
-    isGlassTheme:true, isCleanTheme:true, isRGTheme:true,
-    // Gradiente CSS — sem imagem de fundo
-    bgPrimary:"linear-gradient(140deg, #010c05 0%, #021408 35%, #031a0c 65%, #010c05 100%)",
-    bgSecondary:"rgba(20,60,30,0.55)",
-    bgCard:"rgba(8,28,14,0.72)",
-    bgCardHover:"rgba(14,42,22,0.85)",
-    bgInput:"rgba(255,255,255,0.06)",
-    bgModal:"rgba(3,14,7,0.97)",
-    border:"rgba(34,197,94,0.10)",
-    borderCard:"rgba(34,197,94,0.16)",
-    borderInput:"rgba(34,197,94,0.26)",
-    borderActive:"rgba(74,222,128,0.7)",
-    primary:"#22c55e",
-    primaryDark:"#16a34a",
-    primaryGrad:"linear-gradient(135deg,#16a34a,#22c55e,#4ade80)",
-    accent:"#4ade80",
-    accentGrad:"linear-gradient(135deg,#16a34a,#22c55e,#4ade80)",
-    textPrimary:"#e2faea",
-    textSecondary:"#9cbfaa",
-    textMuted:"#4d7a5e",
-    textActive:"#4ade80",
-    income:"#4ade80",
-    expense:"#f87171",
-    warning:"#fbbf24",
-    purple:"#c084fc",
-    sidebarBg:"rgba(2,12,5,0.92)",
-    sidebarActive:"rgba(34,197,94,0.14)",
-    sidebarBorder:"rgba(34,197,94,0.28)",
-    sidebarShadow:"rgba(34,197,94,0.06)",
-    cardBorderTop:"rgba(34,197,94,0.5)",
-    cardShadow:"rgba(0,200,80,0.05)",
-    cardBackdrop:"blur(28px) saturate(200%)",
-    sidebarBackdrop:"blur(32px) saturate(200%)",
-    mapOpacity:"0",
-    isLight:false,
-    chartColors:["#22c55e","#4ade80","#86efac","#fbbf24","#f87171","#c084fc","#38bdf8","#fb923c"],
   },
 };
 
