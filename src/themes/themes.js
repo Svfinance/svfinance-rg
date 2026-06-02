@@ -1,12 +1,13 @@
 export const RG_COMPANY_ID = "17";
 export const isRGUser = () =>
   String(typeof localStorage !== "undefined" ? localStorage.getItem("company_id") || "" : "") === RG_COMPANY_ID;
+export const RG_THEMES = ["clean", "rg_dark"];
 
 export const THEMES = {
 
   blue: {
-    id: "blue", name: "Azul & Roxo", emoji: "🔵",
-    description: "Tema padrão do sistema", isGlassTheme: false, isRGTheme: false,
+    id:"blue", name:"Azul & Roxo", emoji:"🔵", description:"Tema padrão do sistema",
+    isGlassTheme:false, isRGTheme:false,
     bgPrimary:"#020617", bgSecondary:"#0f172a", bgCard:"rgba(255,255,255,0.03)", bgCardHover:"rgba(255,255,255,0.06)",
     bgInput:"rgba(255,255,255,0.05)", bgModal:"#0f172a",
     border:"rgba(255,255,255,0.07)", borderCard:"rgba(255,255,255,0.08)", borderInput:"rgba(255,255,255,0.1)", borderActive:"rgba(99,102,241,0.6)",
@@ -21,8 +22,8 @@ export const THEMES = {
   },
 
   glass: {
-    id:"glass", name:"Glass & Gelo", emoji:"🪟",
-    description:"Ultra glassmorphism — fundo gelo", isGlassTheme:true, isRGTheme:false,
+    id:"glass", name:"Glass & Gelo", emoji:"🪟", description:"Ultra glassmorphism — fundo gelo",
+    isGlassTheme:true, isRGTheme:false,
     bgImageAsset:"fundoglassegelo.jpg", bgImageFallback:"#c9d8e8", bgOverlay:"rgba(200,215,235,0.25)",
     bgPrimary:"transparent", bgSecondary:"rgba(255,255,255,0.08)", bgCard:"rgba(255,255,255,0.12)", bgCardHover:"rgba(255,255,255,0.22)",
     bgInput:"rgba(255,255,255,0.18)", bgModal:"rgba(255,255,255,0.55)",
@@ -38,8 +39,8 @@ export const THEMES = {
   },
 
   aurora: {
-    id:"aurora", name:"Aurora Glass", emoji:"🌌",
-    description:"Dark glass com brilho iridescente", isGlassTheme:false, isRGTheme:false,
+    id:"aurora", name:"Aurora Glass", emoji:"🌌", description:"Dark glass com brilho iridescente",
+    isGlassTheme:false, isRGTheme:false,
     bgPrimary:"#070d1a", bgSecondary:"#0c1528", bgCard:"rgba(255,255,255,0.04)", bgCardHover:"rgba(255,255,255,0.08)",
     bgInput:"rgba(255,255,255,0.06)", bgModal:"rgba(10,18,38,0.95)",
     border:"rgba(255,255,255,0.06)", borderCard:"rgba(255,255,255,0.09)", borderInput:"rgba(255,255,255,0.12)", borderActive:"rgba(129,196,255,0.5)",
@@ -54,8 +55,8 @@ export const THEMES = {
   },
 
   gray: {
-    id:"gray", name:"Cinza & Prata", emoji:"⚪",
-    description:"Glass executivo — fundo escritório", isGlassTheme:true, isRGTheme:false,
+    id:"gray", name:"Cinza & Prata", emoji:"⚪", description:"Glass executivo — fundo escritório",
+    isGlassTheme:true, isRGTheme:false,
     bgImageAsset:"fundocinzaprata.jpg", bgImageFallback:"#1a1f2e", bgOverlay:"rgba(15,20,35,0.45)",
     bgPrimary:"transparent", bgSecondary:"rgba(255,255,255,0.05)", bgCard:"rgba(255,255,255,0.08)", bgCardHover:"rgba(255,255,255,0.14)",
     bgInput:"rgba(255,255,255,0.10)", bgModal:"rgba(20,25,40,0.85)",
@@ -71,8 +72,8 @@ export const THEMES = {
   },
 
   fashion: {
-    id:"fashion", name:"Fashion & Street", emoji:"👗",
-    description:"Streetwear — ideal para lojas de roupa", isGlassTheme:true, isRGTheme:false,
+    id:"fashion", name:"Fashion & Street", emoji:"👗", description:"Streetwear — ideal para lojas de roupa",
+    isGlassTheme:true, isRGTheme:false,
     bgImageAsset:"fundofashion.jpg", bgImageFallback:"#0a0a0a", bgOverlay:"rgba(0,0,0,0.65)",
     bgPrimary:"transparent", bgSecondary:"rgba(255,255,255,0.04)", bgCard:"rgba(255,255,255,0.06)", bgCardHover:"rgba(255,255,255,0.10)",
     bgInput:"rgba(255,255,255,0.08)", bgModal:"rgba(10,10,10,0.92)",
@@ -87,51 +88,91 @@ export const THEMES = {
     chartColors:["#d4af37","#f0d060","#4ade80","#f87171","#e879f9","#38bdf8","#fb923c","#a3e635"],
   },
 
-  // ══════════════════════════════════════════════════════
-  // 🧼 CLEAN — RestauraGlass CLARO
-  // Exclusivo company_id=17 (Restaura Glass)
-  // ══════════════════════════════════════════════════════
+  // ══ CLEAN — RestauraGlass CLARO ══
+  // Fundo branco limpo, sem imagem, identidade verde profissional
   clean: {
     id:"clean", name:"Clean & Vidro", emoji:"🧼",
-    description:"Limpeza de fachadas — identidade RestauraGlass",
-    isGlassTheme:true, isCleanTheme:true, isRGTheme:true,
-    bgImageAsset:"fundorestaura.jpg", bgImageFallback:"#f0faf0", bgOverlay:"rgba(240,255,240,0.08)",
-    bgPrimary:"transparent", bgSecondary:"rgba(255,255,255,0.70)", bgCard:"rgba(255,255,255,0.72)", bgCardHover:"rgba(255,255,255,0.90)",
-    bgInput:"rgba(255,255,255,0.85)", bgModal:"rgba(255,255,255,0.98)",
-    border:"rgba(22,163,74,0.10)", borderCard:"rgba(22,163,74,0.15)", borderInput:"rgba(22,163,74,0.22)", borderActive:"rgba(21,128,61,0.55)",
-    primary:"#16a34a", primaryDark:"#15803d", primaryGrad:"linear-gradient(135deg,#16a34a,#22c55e)",
-    accent:"#15803d", accentGrad:"linear-gradient(135deg,#14532d,#16a34a,#22c55e)",
-    textPrimary:"#0f1a0f", textSecondary:"#1f3d22", textMuted:"#4a7a50", textActive:"#15803d",
-    income:"#15803d", expense:"#dc2626", warning:"#d97706", purple:"#7c3aed",
-    sidebarBg:"rgba(255,255,255,0.78)", sidebarActive:"rgba(22,163,74,0.10)", sidebarBorder:"rgba(22,163,74,0.30)", sidebarShadow:"rgba(22,163,74,0.06)",
-    cardBorderTop:"#16a34a", cardShadow:"rgba(0,0,0,0.06)", cardBackdrop:"blur(24px) saturate(200%)", sidebarBackdrop:"blur(28px) saturate(200%)",
-    mapOpacity:"0", isLight:true,
+    description:"Restaura Glass — branco profissional",
+    isGlassTheme:false, isCleanTheme:true, isRGTheme:true,
+    bgPrimary:"#f8fdf9",
+    bgSecondary:"rgba(255,255,255,0.95)",
+    bgCard:"rgba(255,255,255,0.88)",
+    bgCardHover:"#ffffff",
+    bgInput:"#ffffff",
+    bgModal:"#ffffff",
+    border:"rgba(22,163,74,0.12)",
+    borderCard:"rgba(22,163,74,0.18)",
+    borderInput:"rgba(22,163,74,0.28)",
+    borderActive:"rgba(21,128,61,0.6)",
+    primary:"#16a34a",
+    primaryDark:"#15803d",
+    primaryGrad:"linear-gradient(135deg,#16a34a,#22c55e)",
+    accent:"#15803d",
+    accentGrad:"linear-gradient(135deg,#14532d,#16a34a,#22c55e)",
+    textPrimary:"#0f1a0f",
+    textSecondary:"#1f3d22",
+    textMuted:"#4a7a50",
+    textActive:"#15803d",
+    income:"#15803d",
+    expense:"#dc2626",
+    warning:"#d97706",
+    purple:"#7c3aed",
+    sidebarBg:"rgba(255,255,255,0.96)",
+    sidebarActive:"rgba(22,163,74,0.10)",
+    sidebarBorder:"rgba(22,163,74,0.25)",
+    sidebarShadow:"rgba(22,163,74,0.06)",
+    cardBorderTop:"#16a34a",
+    cardShadow:"rgba(22,163,74,0.08)",
+    cardBackdrop:"none",
+    sidebarBackdrop:"none",
+    mapOpacity:"0",
+    isLight:true,
     chartColors:["#16a34a","#22c55e","#4ade80","#d97706","#dc2626","#7c3aed","#0ea5e9","#f59e0b"],
   },
 
-  // ══════════════════════════════════════════════════════
-  // 🌑 RG DARK — RestauraGlass ESCURO
-  // Exclusivo company_id=17 — modo noturno profundo
-  // Inspirado em glassmorphism oceânico (ref. BoatRich)
-  // ══════════════════════════════════════════════════════
+  // ══ RG DARK — RestauraGlass NOTURNO ══
+  // Gradiente CSS profundo, sem imagem, glassmorphism premium
+  // Inspirado em interfaces de monitoramento modernas
   rg_dark: {
-    id:"rg_dark", name:"RG Night", emoji:"🌑",
-    description:"Restaura Glass — modo noturno profundo",
+    id:"rg_dark", name:"RG Night", emoji:"🌿",
+    description:"Restaura Glass — modo noturno premium",
     isGlassTheme:true, isCleanTheme:true, isRGTheme:true,
-    bgImageAsset:"fundorestaura.jpg", bgImageFallback:"#020c06", bgOverlay:"rgba(1,10,4,0.86)",
-    bgPrimary:"transparent", bgSecondary:"rgba(20,60,30,0.40)", bgCard:"rgba(12,40,20,0.68)", bgCardHover:"rgba(18,55,28,0.80)",
-    bgInput:"rgba(255,255,255,0.07)", bgModal:"rgba(4,18,8,0.97)",
-    border:"rgba(34,197,94,0.12)", borderCard:"rgba(34,197,94,0.18)", borderInput:"rgba(34,197,94,0.28)", borderActive:"rgba(74,222,128,0.65)",
-    primary:"#22c55e", primaryDark:"#16a34a", primaryGrad:"linear-gradient(135deg,#22c55e,#4ade80)",
-    accent:"#4ade80", accentGrad:"linear-gradient(135deg,#16a34a,#22c55e,#4ade80)",
-    textPrimary:"#e2faea", textSecondary:"#a7c4b5", textMuted:"#5a8a70", textActive:"#4ade80",
-    income:"#4ade80", expense:"#f87171", warning:"#fbbf24", purple:"#c084fc",
-    sidebarBg:"rgba(4,18,8,0.88)", sidebarActive:"rgba(34,197,94,0.18)", sidebarBorder:"rgba(34,197,94,0.32)", sidebarShadow:"rgba(34,197,94,0.08)",
-    cardBorderTop:"#22c55e", cardShadow:"rgba(0,0,0,0.75)", cardBackdrop:"blur(28px) saturate(200%)", sidebarBackdrop:"blur(32px) saturate(200%)",
-    mapOpacity:"0", isLight:false,
+    // Gradiente CSS — sem imagem de fundo
+    bgPrimary:"linear-gradient(140deg, #010c05 0%, #021408 35%, #031a0c 65%, #010c05 100%)",
+    bgSecondary:"rgba(20,60,30,0.55)",
+    bgCard:"rgba(8,28,14,0.72)",
+    bgCardHover:"rgba(14,42,22,0.85)",
+    bgInput:"rgba(255,255,255,0.06)",
+    bgModal:"rgba(3,14,7,0.97)",
+    border:"rgba(34,197,94,0.10)",
+    borderCard:"rgba(34,197,94,0.16)",
+    borderInput:"rgba(34,197,94,0.26)",
+    borderActive:"rgba(74,222,128,0.7)",
+    primary:"#22c55e",
+    primaryDark:"#16a34a",
+    primaryGrad:"linear-gradient(135deg,#16a34a,#22c55e,#4ade80)",
+    accent:"#4ade80",
+    accentGrad:"linear-gradient(135deg,#16a34a,#22c55e,#4ade80)",
+    textPrimary:"#e2faea",
+    textSecondary:"#9cbfaa",
+    textMuted:"#4d7a5e",
+    textActive:"#4ade80",
+    income:"#4ade80",
+    expense:"#f87171",
+    warning:"#fbbf24",
+    purple:"#c084fc",
+    sidebarBg:"rgba(2,12,5,0.92)",
+    sidebarActive:"rgba(34,197,94,0.14)",
+    sidebarBorder:"rgba(34,197,94,0.28)",
+    sidebarShadow:"rgba(34,197,94,0.06)",
+    cardBorderTop:"rgba(34,197,94,0.5)",
+    cardShadow:"rgba(0,200,80,0.05)",
+    cardBackdrop:"blur(28px) saturate(200%)",
+    sidebarBackdrop:"blur(32px) saturate(200%)",
+    mapOpacity:"0",
+    isLight:false,
     chartColors:["#22c55e","#4ade80","#86efac","#fbbf24","#f87171","#c084fc","#38bdf8","#fb923c"],
   },
 };
 
 export const DEFAULT_THEME = "blue";
-export const RG_THEMES = ["clean","rg_dark"];

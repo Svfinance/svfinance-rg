@@ -35,7 +35,7 @@ const QTD_SEMANAS = { mensal: 4, quinzenal: 2, semanal: 4, esporadico: 1 };
 
 const novaSemana = (numero) => ({
   numero, int: false, hr: "", checkin_at: "", checkout_at: "",
-  proxima_data: "", observacao: "", x: false,
+  proxima_data: "", observacao: "", x: false, data_semana: "",
 });
 
 const cardInicial = (freq = "semanal") => ({
@@ -80,6 +80,23 @@ function calcProximaData(dias) {
   prox.setDate(hoje.getDate() + diff);
   return prox.toISOString().split("T")[0];
 }
+
+function calcDatasSemanas(mes, ano, dias) {
+  const mapDia = { seg:1, ter:2, qua:3, qui:4, sex:5, sab:6 };
+  const diaFixo = Object.entries(dias || {}).find(([,v]) => v)?.[0];
+  if (!diaFixo || !mes || !ano) return [];
+  const alvo = mapDia[diaFixo] ?? 1;
+  const inicio = new Date(ano, mes - 1, 1);
+  while (inicio.getDay() !== alvo) inicio.setDate(inicio.getDate() + 1);
+  const datas = [];
+  const atual = new Date(inicio);
+  while (atual.getMonth() === mes - 1) {
+    datas.push(atual.toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit" }));
+    atual.setDate(atual.getDate() + 7);
+  }
+  return datas;
+}
+
 
 const STATUS_MAP = {
   open:        { label:"Aberta",       color:"#3b82f6", bg:"rgba(59,130,246,0.12)"  },
@@ -275,7 +292,16 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
                 </div>
                 {/* Dir: número semana + botão remover */}
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 12px" }}>
-                  <span style={{ fontSize:isMobile?"1.2rem":"1.6rem", fontWeight:900, fontFamily:"'Arial Black','Arial Bold',sans-serif", color:"#1a1a1a" }}>{sem.numero}ª semana</span>
+                  {(() => {
+                  const datas = calcDatasSemanas(card.mes, card.ano, card.dias);
+                  const dataCalc = datas[idx] || "";
+                  return (
+                    <div style={{display:"flex",flexDirection:"column"}}>
+                      <span style={{fontSize:isMobile?"1.2rem":"1.5rem",fontWeight:900,fontFamily:"'Arial Black','Arial Bold',sans-serif",color:"#1a1a1a",lineHeight:1.1}}>{sem.numero}ª semana</span>
+                      {dataCalc && <span style={{fontSize:"0.7rem",color:"#1a8a3c",fontWeight:700}}>{dataCalc}</span>}
+                    </div>
+                  );
+                })()}
                   <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                     <label style={{ display:"flex", alignItems:"center", gap:3, fontSize:"0.72rem", cursor:"pointer" }}>
                       <input type="checkbox" checked={!!sem.x} onChange={e=>setSemana(idx,"x",e.target.checked)} style={{ accentColor:"#1a8a3c" }}/> x
@@ -418,7 +444,16 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
           return (
             <div key={idx} style={{background:"rgba(255,255,255,0.85)",border:`1px solid ${RGT.verdeBd}`,borderRadius:10,padding:"12px 14px",marginBottom:10}}>
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8,flexWrap:"wrap"}}>
-                <span style={{fontWeight:900,fontSize:"1.1rem",color:RGT.verde,minWidth:80}}>{sem.numero}ª semana</span>
+                {(() => {
+                const datas = calcDatasSemanas(card.mes, card.ano, card.dias);
+                const dataCalc = datas[idx] || "";
+                return (
+                  <div style={{display:"flex",flexDirection:"column",minWidth:100}}>
+                    <span style={{fontWeight:900,fontSize:"1.1rem",color:RGT.verde,lineHeight:1.1}}>{sem.numero}ª semana</span>
+                    {dataCalc && <span style={{fontSize:"0.7rem",color:RGT.textSub,fontWeight:600}}>{dataCalc}</span>}
+                  </div>
+                );
+              })()}
                 <label style={{display:"flex",alignItems:"center",gap:4,fontSize:"0.78rem",fontWeight:600,cursor:"pointer"}}>
                   <input type="checkbox" checked={!!sem.int} onChange={e=>setSemana(idx,"int",e.target.checked)} style={{width:14,height:14,accentColor:RGT.verde}}/> Int
                 </label>

@@ -328,9 +328,8 @@ export default function Settings() {
         {/* TEMAS */}
         {activeSection==="temas" && (
           <>
-            {/* Sidebar styles — só para não-RG */}
-            {!isRG && (
-              <div style={card}>
+            {/* Sidebar styles */}
+            <div style={card}>
                 <h2 style={{ fontSize:"1rem", fontWeight:700, margin:"0 0 6px", color:theme.textPrimary }}>🗂️ Estilo do Sidebar</h2>
                 <p style={{ color:theme.textMuted, fontSize:"0.82rem", margin:"0 0 24px" }}>Salvo automaticamente.</p>
                 <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16 }}>
@@ -353,7 +352,6 @@ export default function Settings() {
                   })}
                 </div>
               </div>
-            )}
 
             {/* Temas */}
             <div style={card}>
