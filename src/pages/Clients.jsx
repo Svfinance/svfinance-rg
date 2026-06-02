@@ -11,6 +11,10 @@ const token = () => localStorage.getItem("token");
 
 const QR_UNIVERSAL_TOKEN = "sv-checkin-universal";
 
+// ── Restaura Glass ───────────────────────────────────────────────────────────
+const RG_ID = "17";
+const isRG  = () => String(localStorage.getItem("company_id") || "") === RG_ID;
+
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -44,12 +48,13 @@ export default function Clients() {
   const isMobile   = useIsMobile();
   const navigate   = useNavigate();
   const qrCanvasRef = useRef(null);
+  const rg = isRG();
 
   const QR_IMG_URL = `https://quickchart.io/qr?text=${encodeURIComponent(QR_UNIVERSAL_TOKEN)}&size=280&margin=2&ecLevel=H&dark=0a0f1e&light=ffffff`;
 
   const [sidebarOpen,    setSidebarOpen]    = useState(false);
   const [clients,        setClients]        = useState([]);
-  const [pending,        setPending]        = useState([]); // criados offline
+  const [pending,        setPending]        = useState([]);
   const [loading,        setLoading]        = useState(true);
   const [search,         setSearch]         = useState("");
   const [modalOpen,      setModalOpen]      = useState(false);
@@ -63,7 +68,6 @@ export default function Clients() {
   const [cepLoading,     setCepLoading]     = useState(false);
   const [geoStatus,      setGeoStatus]      = useState(null);
 
-  // ── Carrega pendências offline ───────────────────────────────────────────
   async function loadPending() {
     try {
       const muts = await getMutationsByEntity("client");
@@ -75,19 +79,12 @@ export default function Clients() {
     } catch { setPending([]); }
   }
 
-  // ── Fetch ──────────────────────────────────────────────────────────────────
   async function fetchClients() {
     setLoading(true);
-
-    // 1) snapshot offline imediato
     const snap = await getSnapshot("clients");
     if (snap) { setClients(snap); setLoading(false); }
-
     await loadPending();
-
-    // 2) se offline, fica no snapshot
     if (!navigator.onLine) { setLoading(false); return; }
-
     try {
       const res = await fetch(`${API}/clients`, {
         headers: { Authorization: `Bearer ${token()}` }
@@ -97,12 +94,11 @@ export default function Clients() {
       const list = Array.isArray(data) ? data : [];
       setClients(list);
       saveSnapshot("clients", list);
-    } catch { /* mantém snapshot */ }
+    } catch {}
     finally { setLoading(false); }
   }
 
   async function fetchDetail(id) {
-    // pendentes não têm detalhe no servidor
     if (String(id).startsWith("tmp")) {
       const p = pending.find(x => x.id === id);
       if (p) { setDetailClient({ ...p, quotes:[], orders:[] }); setDetailModal(true); }
@@ -125,12 +121,10 @@ export default function Clients() {
     return () => window.removeEventListener("sv_synced", onSynced);
   }, []);
 
-  // ── CEP automático ─────────────────────────────────────────────────────────
   async function buscarCep(cep) {
     const limpo = cep.replace(/\D/g, "");
     if (limpo.length !== 8) return;
     if (!navigator.onLine) { showToast("CEP precisa de internet.", "warn"); return; }
-
     setCepLoading(true);
     setGeoStatus(null);
     try {
@@ -154,7 +148,6 @@ export default function Clients() {
     finally { setCepLoading(false); }
   }
 
-  // ── QR Code universal ──────────────────────────────────────────────────────
   async function abrirQrModal() { setQrModal(true); }
 
   function imprimirQr() {
@@ -197,13 +190,11 @@ export default function Clients() {
     janela.document.close();
   }
 
-  // ── Toast ──────────────────────────────────────────────────────────────────
   function showToast(msg, type = "success") {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   }
 
-  // ── Modal abrir/fechar ─────────────────────────────────────────────────────
   function openCreate() {
     setEditing(null);
     setForm(EMPTY_FORM);
@@ -245,12 +236,9 @@ export default function Clients() {
 
   function closeModal() { setModalOpen(false); setEditing(null); setGeoStatus(null); }
 
-  // ── Submit (com fallback offline na CRIAÇÃO) ───────────────────────────────
   async function handleSubmit(e) {
     e.preventDefault();
     if (!form.name.trim()) { showToast("Nome é obrigatório.", "error"); return; }
-
-    // ── OFFLINE: só criação. Edição precisa de internet. ──
     if (!navigator.onLine) {
       if (editing) { showToast("Edição precisa de internet.", "warn"); return; }
       const ref = tmpId("tmpcli");
@@ -261,11 +249,8 @@ export default function Clients() {
       fetchClients();
       return;
     }
-
-    // ── ONLINE ──
     const url    = editing ? `${API}/clients/${editing.id}` : `${API}/clients`;
     const method = editing ? "PUT" : "POST";
-
     try {
       const res = await fetch(url, {
         method,
@@ -285,7 +270,6 @@ export default function Clients() {
         showToast(err.msg || "Erro.", "error");
       }
     } catch {
-      // rede caiu no meio → salva offline como criação
       if (!editing) {
         const ref = tmpId("tmpcli");
         await enqueueMutation("client", { ...form }, { tmp_ref: ref });
@@ -316,7 +300,6 @@ export default function Clients() {
     } catch { showToast("Erro de conexão.", "error"); }
   }
 
-  // ── Filtro (mescla servidor + pendentes) ───────────────────────────────────
   const allClients = [...pending, ...clients];
   const filtered = allClients.filter(c =>
     (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
@@ -326,7 +309,6 @@ export default function Clients() {
     (c.municipio|| "").toLowerCase().includes(search.toLowerCase())
   );
 
-  // ── Estilos ────────────────────────────────────────────────────────────────
   const inputStyle = {
     background:  theme.bgInput,
     border:      `1px solid ${isGlass ? "rgba(255,255,255,0.4)" : theme.borderInput}`,
@@ -376,7 +358,6 @@ export default function Clients() {
   function focusIn(e)  { e.target.style.borderColor = theme.primary; }
   function focusOut(e) { e.target.style.borderColor = isGlass ? "rgba(255,255,255,0.4)" : theme.borderInput; }
 
-  // ══════════════════════════════════════════════════════════════════════════
   return (
     <PageLayout>
       <style>{`
@@ -529,7 +510,22 @@ export default function Clients() {
                       </span>
                     </td>
                     <td style={{ padding:"12px 16px", verticalAlign:"middle" }} onClick={e => e.stopPropagation()}>
-                      <div style={{ display:"flex", gap:6 }}>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {/* BOTÃO NOVA O.S — exclusivo Restaura Glass */}
+                        {rg && (
+                          <button
+                            onClick={() => navigate(`/orders?client_id=${c.id}&new=1`)}
+                            title="Criar Nova O.S para este cliente"
+                            style={{
+                              background:"#16a34a", color:"#fff", border:"none",
+                              borderRadius:8, padding:isMobile?"5px 8px":"5px 11px",
+                              cursor:"pointer", fontSize:"0.78rem", fontWeight:700,
+                              fontFamily:"inherit", whiteSpace:"nowrap",
+                            }}
+                          >
+                            📋 {!isMobile && "Nova O.S"}
+                          </button>
+                        )}
                         <button style={{ background:isGlass?"rgba(255,255,255,0.25)":`${theme.primary}22`, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":`${theme.primary}44`}`, borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={() => openEdit(c)}>✏️</button>
                         <button style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.2)", borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={() => setDeleteConfirm(c)}>🗑️</button>
                       </div>
@@ -551,26 +547,14 @@ export default function Clients() {
                 <div style={{ fontSize:10, fontWeight:800, letterSpacing:"4px", color:"#4f8ef7", textTransform:"uppercase" }}>SV Finance</div>
                 <div style={{ fontSize:"1rem", fontWeight:700, color:"#e2e8f0" }}>QR Code Universal</div>
               </div>
-              <button
-                onClick={() => setQrModal(false)}
-                style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.12)", color:"#94a3b8", width:36, height:36, borderRadius:10, cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}
-              >✕</button>
+              <button onClick={() => setQrModal(false)} style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.12)", color:"#94a3b8", width:36, height:36, borderRadius:10, cursor:"pointer", fontSize:18, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>✕</button>
             </div>
-
             <div style={{ fontSize:12, color:"#475569", marginBottom:16 }}>
               1 adesivo para todos os clientes — identificação por GPS + O.S
             </div>
-
             <div style={{ background:"#fff", borderRadius:16, padding:16, display:"inline-block", marginBottom:16, boxShadow:"0 8px 30px rgba(0,0,0,0.3)" }}>
-              <img
-                src={QR_IMG_URL}
-                alt="QR Code Universal SV Finance"
-                width={240}
-                height={240}
-                style={{ display:"block", borderRadius:8 }}
-              />
+              <img src={QR_IMG_URL} alt="QR Code Universal SV Finance" width={240} height={240} style={{ display:"block", borderRadius:8 }}/>
             </div>
-
             <div style={{ background:"rgba(79,142,247,0.08)", border:"1px solid rgba(79,142,247,0.2)", borderRadius:12, padding:"12px 16px", marginBottom:20, fontSize:12, color:"#64748b", lineHeight:1.6, textAlign:"left" }}>
               <div style={{ color:"#4f8ef7", fontWeight:700, marginBottom:4 }}>Como funciona:</div>
               <div>1. Imprima este QR Code e cole na vitrine do cliente</div>
@@ -578,14 +562,9 @@ export default function Clients() {
               <div>3. Sistema valida GPS automaticamente</div>
               <div>4. Mesmo adesivo funciona para todos os clientes</div>
             </div>
-
             <div style={{ display:"flex", gap:12, flexDirection:isMobile?"column":"row" }}>
-              <button style={{ flex:1, padding:"12px 0", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, color:"#64748b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={() => setQrModal(false)}>
-                Fechar
-              </button>
-              <button style={{ flex:1, padding:"12px 0", background:"linear-gradient(135deg,#4f8ef7,#6366f1)", border:"none", borderRadius:12, color:"#fff", fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:13, boxShadow:"0 4px 20px rgba(79,142,247,0.3)" }} onClick={imprimirQr}>
-                🖨️ Imprimir adesivo
-              </button>
+              <button style={{ flex:1, padding:"12px 0", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:12, color:"#64748b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13 }} onClick={() => setQrModal(false)}>Fechar</button>
+              <button style={{ flex:1, padding:"12px 0", background:"linear-gradient(135deg,#4f8ef7,#6366f1)", border:"none", borderRadius:12, color:"#fff", fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:13, boxShadow:"0 4px 20px rgba(79,142,247,0.3)" }} onClick={imprimirQr}>🖨️ Imprimir adesivo</button>
             </div>
           </div>
         </div>
@@ -885,6 +864,15 @@ export default function Clients() {
               <button style={{ background:isGlass?"rgba(255,255,255,0.3)":theme.bgCard, color:theme.textSecondary, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderCard}`, borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", width:isMobile?"100%":"auto" }} onClick={() => setDetailModal(false)}>Fechar</button>
               {!detailClient.__pending && (
                 <>
+                  {/* BOTÃO NOVA O.S no detalhe — exclusivo Restaura Glass */}
+                  {rg && (
+                    <button
+                      style={{ background:"#16a34a", color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", width:isMobile?"100%":"auto", fontFamily:"inherit" }}
+                      onClick={() => { setDetailModal(false); navigate(`/orders?client_id=${detailClient.id}&new=1`); }}
+                    >
+                      📋 Nova O.S
+                    </button>
+                  )}
                   <button style={{ background:"rgba(34,197,94,0.12)", color:"#22c55e", border:"1px solid rgba(34,197,94,0.3)", borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", width:isMobile?"100%":"auto" }}
                     onClick={async () => {
                       if (!navigator.geolocation) { showToast("GPS não disponível.", "error"); return; }
