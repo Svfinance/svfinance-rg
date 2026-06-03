@@ -97,6 +97,15 @@ function calcDatasSemanas(mes, ano, dias) {
 }
 
 
+const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const FREQS  = [
+  {value:'all',       label:'Todas'},
+  {value:'mensal',    label:'Mensal'},
+  {value:'quinzenal', label:'Quinzenal'},
+  {value:'semanal',   label:'Semanal'},
+  {value:'esporadico',label:'Esporádico'},
+];
+
 const STATUS_MAP = {
   open:        { label:"Aberta",       color:"#3b82f6", bg:"rgba(59,130,246,0.12)"  },
   in_progress: { label:"Em andamento", color:"#f59e0b", bg:"rgba(245,158,11,0.12)"  },
@@ -126,6 +135,9 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
   const [salvando, setSalvando] = useState(false);
   const [loaded, setLoaded]     = useState(false);
   const [modo, setModo]         = useState("digital"); // "digital" | "fisico"
+  const [showRenovar, setShowRenovar] = useState(false);
+  const [cardRenovar, setCardRenovar] = useState(null);
+  const [renovando, setRenovando]     = useState(false);
 
   useEffect(() => {
     async function carregar() {
@@ -153,6 +165,8 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
   async function salvar() {
     setSalvando(true);
     localStorage.setItem(`sv_rg_card_${order.id}`, JSON.stringify(card));
+    // Atualizar índice de frequências
+    try { const idx=JSON.parse(localStorage.getItem("sv_rg_freq_idx")||"{}"); idx[order.id]=card.frequencia; localStorage.setItem("sv_rg_freq_idx",JSON.stringify(idx)); } catch {}
     if (navigator.onLine) {
       try {
         await fetch(`${API}/limpeza/card/${order.id}`, {
@@ -164,6 +178,39 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
     setSalvando(false); alert("Cartão salvo!");
   }
 
+  async function confirmarRenovacao() {
+    if (!cardRenovar || !navigator.onLine) { alert("Conexão necessária para renovar."); return; }
+    setRenovando(true);
+    try {
+      const mesAtual = new Date().getMonth() + 1;
+      const anoAtual = new Date().getFullYear();
+      // 1. Criar nova O.S para o mesmo cliente
+      const resOS = await fetch(`${API}/orders`, {
+        method:"POST", headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},
+        body: JSON.stringify({ client_id:order.client_id, status:"open", notes:`Renovação ${MESES[card.mes-1]}/${card.ano}` }),
+      });
+      if (!resOS.ok) { alert("Erro ao criar nova O.S."); setRenovando(false); return; }
+      const novaOS = await resOS.json();
+      // 2. Criar card renovado — mantém config, zera execuções
+      const cardNovo = { ...cardRenovar, mes:mesAtual, ano:anoAtual,
+        semanas: cardRenovar.semanas.map((s,i) => ({
+          numero:i+1, int:s.int, hr:s.hr, observacao:"",
+          checkin_at:"", checkout_at:"", proxima_data:"", x:false, data_dia:"",
+        }))
+      };
+      await fetch(`${API}/limpeza/card/${novaOS.id}`, {
+        method:"PUT", headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},
+        body: JSON.stringify({ card:cardNovo }),
+      });
+      localStorage.setItem(`sv_rg_card_${novaOS.id}`, JSON.stringify(cardNovo));
+      // Atualizar índice de frequências
+      try { const idx=JSON.parse(localStorage.getItem("sv_rg_freq_idx")||"{}"); idx[novaOS.id]=cardNovo.frequencia; localStorage.setItem("sv_rg_freq_idx",JSON.stringify(idx)); } catch {}
+      alert(`Cartão renovado para ${MESES[mesAtual-1]}/${anoAtual}!`);
+      setShowRenovar(false);
+    } catch { alert("Erro ao renovar. Tente novamente."); }
+    setRenovando(false);
+  }
+
   async function registrarOcc(tipo, descricao="") {
     const occ = { id:uuid(), tipo, data:new Date().toISOString().split("T")[0],
       hora:new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}),
@@ -173,6 +220,23 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
     localStorage.setItem(`sv_rg_occ_${order.id}`, JSON.stringify(novas));
     if (navigator.onLine) {
       try { await fetch(`${API}/limpeza/occurrence`,{ method:"POST", headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`}, body:JSON.stringify({order_id:order.id,...occ}) }); } catch {}
+    }
+    // Se remarcou com data → preenche data_dia + obs na próxima semana sem check-in
+    if (tipo === "remarcou" && novaData) {
+      const nextIdx = card.semanas.findIndex(s => !s.checkin_at);
+      if (nextIdx >= 0) {
+        const semanas = [...card.semanas];
+        const hrStr = novaHora ? ` às ${novaHora}` : "";
+        const obsNova = `📅 Remarcado para ${fmtDateBR(novaData)}${hrStr}`;
+        semanas[nextIdx] = { ...semanas[nextIdx], data_dia: novaData,
+          observacao: semanas[nextIdx].observacao ? `${semanas[nextIdx].observacao} | ${obsNova}` : obsNova };
+        const novoCard = { ...card, semanas };
+        setCard(novoCard);
+        localStorage.setItem(`sv_rg_card_${order.id}`, JSON.stringify(novoCard));
+        if (navigator.onLine) {
+          try { await fetch(`${API}/limpeza/card/${order.id}`,{method:"PUT",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},body:JSON.stringify({card:novoCard})}); } catch {}
+        }
+      }
     }
     setShowC(false); setNovaData(""); setNovaHora(""); alert("Ocorrência registrada!");
   }
@@ -207,6 +271,11 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
   }
 
   if (!loaded) return <div style={{textAlign:"center",padding:"40px 0",color:RGT.textSub}}>Carregando cartão...</div>;
+
+  // Detectar se o cartão é de mês anterior
+  const mesAtualC  = new Date().getMonth() + 1;
+  const anoAtualC  = new Date().getFullYear();
+  const ehAnterior = loaded && card.semanas?.length > 0 && (card.mes !== mesAtualC || card.ano !== anoAtualC);
 
   // ── ESTILOS BASE ──
   const inp = { border:`1px solid ${RGT.verdeBd}`, borderRadius:6, padding:"5px 8px", background:"#ffffff", color:"#1a1a1a", fontFamily:"inherit", fontSize:"0.85rem", outline:"none", width:"100%", boxSizing:"border-box", colorScheme:"light" };
@@ -381,6 +450,68 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
         <button style={{ ...btnVerde, padding:"6px 14px", fontSize:"0.78rem" }}>📱 Digital</button>
         <button onClick={()=>setModo("fisico")} style={{ ...btnBranco, padding:"6px 14px", fontSize:"0.78rem" }}>🖨️ Cartão Físico</button>
       </div>
+
+      {/* BANNER RENOVAÇÃO — aparece quando cartão é de mês anterior */}
+      {ehAnterior && (
+        <div style={{ background:"rgba(245,158,11,0.10)", border:"1px solid rgba(245,158,11,0.4)", borderRadius:10, padding:"12px 16px", marginBottom:14, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10 }}>
+          <div>
+            <div style={{ fontWeight:700, color:"#b45309", fontSize:"0.88rem" }}>📅 Cartão de {MESES[card.mes-1]}/{card.ano}</div>
+            <div style={{ fontSize:"0.75rem", color:RGT.textSub }}>Este cartão é de um mês anterior. Deseja renovar para {MESES[mesAtualC-1]}/{anoAtualC}?</div>
+          </div>
+          <button onClick={() => { setCardRenovar(card); setShowRenovar(true); }}
+            style={{ background:"#d97706", color:"#fff", border:"none", borderRadius:8, padding:"8px 16px", fontWeight:700, cursor:"pointer", fontSize:"0.82rem", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+            🔄 Renovar para {MESES[mesAtualC-1]}
+          </button>
+        </div>
+      )}
+
+      {/* MODAL RENOVAÇÃO */}
+      {showRenovar && cardRenovar && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1200, backdropFilter:"blur(4px)" }} onClick={() => setShowRenovar(false)}>
+          <div style={{ background:"#fff", border:`1px solid ${RGT.verdeBd}`, borderRadius:16, padding:24, width:"90%", maxWidth:480, maxHeight:"85vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(22,163,74,0.15)" }} onClick={e=>e.stopPropagation()}>
+            <div style={{ fontWeight:800, fontSize:"1.1rem", color:RGT.verde, marginBottom:4 }}>🔄 Renovar Cartão</div>
+            <div style={{ fontSize:"0.82rem", color:RGT.textSub, marginBottom:16 }}>
+              Nova O.S para <strong>{order.client_name}</strong> — {MESES[mesAtualC-1]}/{anoAtualC}<br/>
+              As semanas serão zeradas mas a configuração será mantida. Você pode editar antes de confirmar.
+            </div>
+            {/* Editar configuração antes de renovar */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:14 }}>
+              <div>
+                <span style={{ fontSize:"0.7rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:RGT.verde, display:"block", marginBottom:4 }}>Frequência</span>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                  {[["mensal","Mensal"],["quinzenal","Quinzenal"],["semanal","Semanal"],["esporadico","Esporádico"]].map(([k,l])=>(
+                    <label key={k} style={{ display:"flex", alignItems:"center", gap:4, cursor:"pointer", padding:"4px 10px", borderRadius:20, fontSize:"0.78rem", fontWeight:600, background:cardRenovar.frequencia===k?RGT.verde:"#f4fbf6", color:cardRenovar.frequencia===k?"#fff":"#1a1a1a", border:`1px solid ${cardRenovar.frequencia===k?RGT.verde:RGT.verdeBd}` }}>
+                      <input type="radio" name="freq_ren" value={k} checked={cardRenovar.frequencia===k} onChange={()=>setCardRenovar({...cardRenovar,frequencia:k})} style={{display:"none"}}/>{l}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <span style={{ fontSize:"0.7rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:RGT.verde, display:"block", marginBottom:4 }}>Obs / Contrato</span>
+                <input style={{ border:`1px solid ${RGT.verdeBd}`, borderRadius:6, padding:"6px 10px", background:"#fff", color:"#1a1a1a", fontSize:"0.82rem", outline:"none", width:"100%", boxSizing:"border-box" }}
+                  value={cardRenovar.obs} onChange={e=>setCardRenovar({...cardRenovar,obs:e.target.value})}/>
+              </div>
+            </div>
+            <div style={{ marginBottom:14 }}>
+              <span style={{ fontSize:"0.7rem", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.08em", color:RGT.verde, display:"block", marginBottom:6 }}>Dia fixo</span>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {[["seg","SEG"],["ter","TER"],["qua","QUA"],["qui","QUI"],["sex","SEX"],["sab","SÁB"]].map(([k,l])=>(
+                  <label key={k} style={{ display:"flex", alignItems:"center", gap:4, cursor:"pointer", padding:"5px 10px", borderRadius:20, fontSize:"0.78rem", fontWeight:700, background:cardRenovar.dias?.[k]?RGT.verde:"#f4fbf6", color:cardRenovar.dias?.[k]?"#fff":"#1a1a1a", border:`1px solid ${cardRenovar.dias?.[k]?RGT.verde:RGT.verdeBd}` }}>
+                    <input type="checkbox" checked={!!cardRenovar.dias?.[k]} onChange={e=>setCardRenovar({...cardRenovar,dias:{...cardRenovar.dias,[k]:e.target.checked}})} style={{display:"none"}}/>{l}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button onClick={()=>setShowRenovar(false)} style={{ background:"#fff", color:RGT.verde, border:`2px solid ${RGT.verde}`, borderRadius:8, padding:"9px 20px", fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>Cancelar</button>
+              <button onClick={confirmarRenovacao} disabled={renovando}
+                style={{ background:RGT.verde, color:"#fff", border:"none", borderRadius:8, padding:"9px 20px", fontWeight:700, cursor:"pointer", fontFamily:"inherit", opacity:renovando?0.6:1 }}>
+                {renovando ? "Renovando..." : `✅ Confirmar — ${MESES[mesAtualC-1]}/${anoAtualC}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* HEADER */}
       <div style={{ ...section, display:"flex", alignItems:"center", gap:14, marginBottom:14 }}>
@@ -1071,12 +1202,43 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
 
   useEffect(()=>{
     async function checkOpen(){
-      // Verificar primeiro no localStorage (funciona offline)
       const localKey = `sv_chk_open_${order.id}`;
-      const localChk = localStorage.getItem(localKey);
-      if(localChk){try{setOpenChk(JSON.parse(localChk));}catch{}}
-      if(!navigator.onLine){setLO(false);return;}
-      try{const res=await fetch(`${API}/checkin/open`,{headers:{Authorization:`Bearer ${token()}`}});const data=await res.json();if(data.open&&String(data.order_id)===String(order.id)){setOpenChk(data);localStorage.setItem(localKey,JSON.stringify(data));}else{setOpenChk(null);localStorage.removeItem(localKey);}}catch{}finally{setLO(false);}
+
+      // 1. Verificar localStorage primeiro (garante estado offline e entre sessões)
+      let localData = null;
+      const localRaw = localStorage.getItem(localKey);
+      if(localRaw){
+        try{
+          localData = JSON.parse(localRaw);
+          const ageMs = Date.now() - new Date(localData.checkin_at||0).getTime();
+          if(ageMs < 8*60*60*1000){ // válido por até 8 horas
+            setOpenChk(localData);
+          } else {
+            localStorage.removeItem(localKey); localData = null;
+          }
+        }catch{ localStorage.removeItem(localKey); }
+      }
+
+      if(!navigator.onLine){ setLO(false); return; }
+
+      // 2. Verificar no servidor — servidor tem palavra final quando responde positivamente
+      try{
+        const res=await fetch(`${API}/checkin/open`,{headers:{Authorization:`Bearer ${token()}`}});
+        const data=await res.json();
+        if(data.open && String(data.order_id)===String(order.id)){
+          // Servidor confirma check-in aberto → atualizar localStorage e estado
+          const merged = {...data, checkin_at: data.checkin_at||new Date().toISOString()};
+          setOpenChk(merged);
+          localStorage.setItem(localKey, JSON.stringify(merged));
+        } else if(!localData){
+          // Servidor diz "nenhum" E não há localStorage válido → definitivamente null
+          setOpenChk(null);
+          localStorage.removeItem(localKey);
+        }
+        // Se servidor diz "nenhum" MAS localStorage tem dados recentes →
+        // manter localStorage (pode ser inconsistência temporária da API)
+      }catch{ /* falha na rede — manter o que o localStorage definiu */ }
+      finally{ setLO(false); }
     }
     checkOpen();const interval=setInterval(checkOpen,10000);return()=>clearInterval(interval);
   },[order.id]);
@@ -1101,7 +1263,7 @@ localStorage.setItem(`sv_chk_open_${order.id}`,JSON.stringify({open:true,order_i
       const res=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},body:JSON.stringify(body)});
       const data=await res.json();
       if(!res.ok){if(data.sem_coordenadas){setPinMode(true);setError("Cliente sem localização. Digite o PIN.");}else setError(data.msg||"Erro ao registrar.");return;}
-      if(action==="start"&&data.checkin_id){localStorage.setItem(`sv_chk_open_${order.id}`,JSON.stringify({...data,open:true,order_id:order.id}));}else{localStorage.removeItem(`sv_chk_open_${order.id}`);}setResult({...data,action});setStep("success");onSuccess({...data,action});
+      if(action==="start"&&data.checkin_id){localStorage.setItem(`sv_chk_open_${order.id}`,JSON.stringify({...data,open:true,order_id:order.id,checkin_at:data.checkin_at||new Date().toISOString()}));}else{localStorage.removeItem(`sv_chk_open_${order.id}`);}setResult({...data,action});setStep("success");onSuccess({...data,action});
     }catch(e){
       try{await enqueueCheckin(body);if(action==="start")await setOrderStatusOverlay(order.id,"in_progress");else await setOrderStatusOverlay(order.id,"done");setResult({action,offline:true});setStep("success");setOffMsg("Conexão instável — salvo offline.");onSuccess({action,offline:true});}
       catch{setError("Erro de conexão: "+(e.message||"verifique sua internet."));}
@@ -1236,6 +1398,8 @@ export default function Orders() {
 
   // Para check-in por semana dentro do cartão RG
   const [checkinSemana, setCheckinSemana]= useState(null); // { order, semanaIdx, action }
+  const [filterFreq,    setFilterFreq]   = useState("all");
+  const [freqIndex,     setFreqIndex]    = useState({});
 
   const pollingRef = useRef(null);
 
@@ -1295,6 +1459,8 @@ export default function Orders() {
   }, [searchParams]);
 
   useEffect(()=>{
+    // Carregar índice de frequências do localStorage
+    try { const idx=JSON.parse(localStorage.getItem("sv_rg_freq_idx")||"{}"); setFreqIndex(idx); } catch {}
     fetchAll();
     pollingRef.current=setInterval(fetchOrders,15000);
     const onOnline=()=>{syncNow().then(()=>fetchOrders());};
@@ -1364,7 +1530,9 @@ export default function Orders() {
 
   const filtered=orders.filter(o=>{
     const st=effectiveStatus(o);
-    return (filterStatus==="all"||st===filterStatus)&&
+    const freqOk = filterFreq==="all" || freqIndex[String(o.id)]===filterFreq;
+    return freqOk &&
+      (filterStatus==="all"||st===filterStatus)&&
       (o.number.toLowerCase().includes(search.toLowerCase())||o.client_name.toLowerCase().includes(search.toLowerCase()));
   });
   const countBy=(s)=>orders.filter(o=>effectiveStatus(o)===s).length;
@@ -1529,6 +1697,18 @@ export default function Orders() {
               </button>
             ))}
           </div>
+          {/* Filtro de frequência — exclusivo RG */}
+          {rg && (
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:6}}>
+              {FREQS.map(f=>(
+                <button key={f.value}
+                  style={{background:filterFreq===f.value?RGT.verde:"rgba(255,255,255,0.8)",color:filterFreq===f.value?"#fff":RGT.textSub,border:`1px solid ${filterFreq===f.value?RGT.verde:RGT.verdeBd}`,borderRadius:8,padding:"5px 12px",fontSize:"0.78rem",cursor:"pointer",fontWeight:600,fontFamily:"inherit"}}
+                  onClick={()=>setFilterFreq(f.value)}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="table3d-os">
