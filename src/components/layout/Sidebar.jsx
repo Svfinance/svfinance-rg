@@ -30,7 +30,7 @@ function useIsMobile() {
 // Detecta Restaura Glass
 // ─────────────────────────────────────────────────────────────────────────────
 function isRestauraGlass() {
-  return String(localStorage.getItem("company_id")) === "17";
+  return String(localStorage.getItem("company_id")) === "20";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
