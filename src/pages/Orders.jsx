@@ -698,8 +698,8 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
         <div style={{ background: "#fff", border: "2px solid #1a8a3c", borderRadius: 10, overflow: "hidden", marginBottom: 14 }}>
 
           {/* Linha 1: frequência + cabeçalho RG */}
-          <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", borderBottom: "1px solid rgba(26,138,60,0.3)" }}>
-            <div style={{ borderRight: isMobile ? "none" : "1px solid rgba(26,138,60,0.3)", borderBottom: isMobile ? "1px solid rgba(26,138,60,0.3)" : "none", padding: "10px 12px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr", borderBottom:"1px solid rgba(26,138,60,0.3)" }}>
+            <div style={{ padding:"10px 12px" }}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 8 }}>
                 {[["mensal","Mensal"],["quinzenal","Quinzenal"],["semanal","Semanal"],["esporadico","Esporádico"]].map(([k, l]) => (
                   <label key={k} style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
@@ -712,17 +712,19 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
                 <input style={{ ...fB, flex: 1 }} value={card.obs} onChange={e => setCard({ ...card, obs: e.target.value })} placeholder="nº contrato..." />
               </div>
             </div>
-            <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", justifyContent: "center" }}>
-              <div style={{ fontSize: "1rem", fontWeight: 900, color: "#1a8a3c" }}>RestauraGlass<sup style={{ fontSize: "0.5rem" }}>®</sup></div>
-              <div style={{ fontSize: "0.55rem", color: "#555", letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 8 }}>Especialista em limpeza de vidros</div>
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#1a8a3c" }}>Mês:</span>
-                  <input style={{ ...fB, width: 44 }} type="number" min="1" max="12" value={card.mes} onChange={e => setCard({ ...card, mes: parseInt(e.target.value) || 1 })} />
+            <div style={{ padding:"8px 12px", background:"rgba(26,138,60,0.04)", borderTop:"1px solid rgba(26,138,60,0.15)", display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:"0.8rem", fontWeight:900, color:"#1a8a3c" }}>RestauraGlass<sup style={{fontSize:"0.45rem"}}>®</sup></span>
+                <span style={{ fontSize:"0.6rem", color:"#555", textTransform:"uppercase", letterSpacing:"0.06em" }}>Especialista em limpeza de vidros</span>
+              </div>
+              <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+                  <span style={{ fontSize:"0.72rem", fontWeight:700, color:"#1a8a3c" }}>Mês:</span>
+                  <input style={{ ...fB, width:44 }} type="number" min="1" max="12" value={card.mes} onChange={e=>setCard({...card,mes:parseInt(e.target.value)||1})}/>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "#1a8a3c" }}>Ano:</span>
-                  <input style={{ ...fB, width: 60 }} type="number" value={card.ano} onChange={e => setCard({ ...card, ano: parseInt(e.target.value) || 2026 })} />
+                <div style={{ display:"flex", alignItems:"center", gap:3 }}>
+                  <span style={{ fontSize:"0.72rem", fontWeight:700, color:"#1a8a3c" }}>Ano:</span>
+                  <input style={{ ...fB, width:60 }} type="number" value={card.ano} onChange={e=>setCard({...card,ano:parseInt(e.target.value)||2026})}/>
                 </div>
               </div>
             </div>
@@ -1069,8 +1071,12 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
 
   useEffect(()=>{
     async function checkOpen(){
-      if(!navigator.onLine){setOpenChk(null);setLO(false);return;}
-      try{const res=await fetch(`${API}/checkin/open`,{headers:{Authorization:`Bearer ${token()}`}});const data=await res.json();if(data.open&&String(data.order_id)===String(order.id))setOpenChk(data);else setOpenChk(null);}catch{}finally{setLO(false);}
+      // Verificar primeiro no localStorage (funciona offline)
+      const localKey = `sv_chk_open_${order.id}`;
+      const localChk = localStorage.getItem(localKey);
+      if(localChk){try{setOpenChk(JSON.parse(localChk));}catch{}}
+      if(!navigator.onLine){setLO(false);return;}
+      try{const res=await fetch(`${API}/checkin/open`,{headers:{Authorization:`Bearer ${token()}`}});const data=await res.json();if(data.open&&String(data.order_id)===String(order.id)){setOpenChk(data);localStorage.setItem(localKey,JSON.stringify(data));}else{setOpenChk(null);localStorage.removeItem(localKey);}}catch{}finally{setLO(false);}
     }
     checkOpen();const interval=setInterval(checkOpen,10000);return()=>clearInterval(interval);
   },[order.id]);
@@ -1086,7 +1092,8 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
     setSending(true);setError("");setOffMsg("");
     const body=buildBody();
     if(!navigator.onLine){
-      try{await enqueueCheckin(body);if(action==="start")await setOrderStatusOverlay(order.id,"in_progress");else await setOrderStatusOverlay(order.id,"done");setResult({action,offline:true});setStep("success");setOffMsg("Sem internet — registro salvo e será sincronizado.");onSuccess(result);}
+      try{await enqueueCheckin(body);if(action==="start"){await setOrderStatusOverlay(order.id,"in_progress");// Salvar check-in aberto no localStorage para detectar estado offline
+localStorage.setItem(`sv_chk_open_${order.id}`,JSON.stringify({open:true,order_id:order.id,checkin_id:body.local_id,checkin_at:new Date().toISOString(),offline:true}));}else{await setOrderStatusOverlay(order.id,"done");localStorage.removeItem(`sv_chk_open_${order.id}`);}setResult({action,offline:true});setStep("success");setOffMsg("Sem internet — registro salvo e será sincronizado.");onSuccess(result);}
       catch{setError("Não foi possível salvar offline.");}finally{setSending(false);}return;
     }
     try{
@@ -1094,7 +1101,7 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
       const res=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},body:JSON.stringify(body)});
       const data=await res.json();
       if(!res.ok){if(data.sem_coordenadas){setPinMode(true);setError("Cliente sem localização. Digite o PIN.");}else setError(data.msg||"Erro ao registrar.");return;}
-      setResult({...data,action});setStep("success");onSuccess({...data,action});
+      if(action==="start"&&data.checkin_id){localStorage.setItem(`sv_chk_open_${order.id}`,JSON.stringify({...data,open:true,order_id:order.id}));}else{localStorage.removeItem(`sv_chk_open_${order.id}`);}setResult({...data,action});setStep("success");onSuccess({...data,action});
     }catch(e){
       try{await enqueueCheckin(body);if(action==="start")await setOrderStatusOverlay(order.id,"in_progress");else await setOrderStatusOverlay(order.id,"done");setResult({action,offline:true});setStep("success");setOffMsg("Conexão instável — salvo offline.");onSuccess({action,offline:true});}
       catch{setError("Erro de conexão: "+(e.message||"verifique sua internet."));}
