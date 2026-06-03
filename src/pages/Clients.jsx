@@ -67,6 +67,7 @@ export default function Clients() {
   const [cepLoading,     setCepLoading]     = useState(false);
   const [geoStatus,      setGeoStatus]      = useState(null);
   const [criarCartaoApos,setCriarCartaoApos]= useState(false);
+  const [filterFreqCli, setFilterFreqCli] = useState('all');
 
   async function loadPending() {
     try {
@@ -305,13 +306,12 @@ export default function Clients() {
   }
 
   const allClients = [...pending, ...clients];
-  const filtered = allClients.filter(c =>
-    (c.name || "").toLowerCase().includes(search.toLowerCase()) ||
-    (c.email    || "").toLowerCase().includes(search.toLowerCase()) ||
-    (c.phone    || "").includes(search) ||
-    (c.document || "").includes(search) ||
-    (c.municipio|| "").toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = allClients.filter(c => {
+    const q = search.toLowerCase();
+    const matchSearch = (c.name||"").toLowerCase().includes(q) || (c.email||"").toLowerCase().includes(q) || (c.phone||"").includes(search) || (c.document||"").includes(search) || (c.municipio||"").toLowerCase().includes(q);
+    const matchFreq   = filterFreqCli === "all" || (c.contrato_tipo||"avulso") === filterFreqCli;
+    return matchSearch && matchFreq;
+  });
 
   const inputStyle = {
     background:  theme.bgInput,
@@ -456,8 +456,8 @@ export default function Clients() {
           ))}
         </div>
 
-        {/* BUSCA */}
-        <div style={{ marginBottom:20 }}>
+        {/* BUSCA + FILTROS */}
+        <div style={{ marginBottom:20, display:"flex", flexDirection:"column", gap:10 }}>
           <input
             style={{ ...inputStyle, width:isMobile?"100%":"360px" }}
             type="text"
@@ -465,6 +465,22 @@ export default function Clients() {
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
+          {/* Filtro por frequência — exclusivo RG */}
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {[
+              {v:"all",       l:"Todas"},
+              {v:"semanal",   l:"🔵 Semanal"},
+              {v:"quinzenal", l:"🟢 Quinzenal"},
+              {v:"mensal",    l:"🟡 Mensal"},
+              {v:"esporadico",l:"🔸 Esporádico"},
+              {v:"avulso",    l:"⚪ Avulso"},
+            ].map(({v,l}) => (
+              <button key={v}
+                style={{ background:filterFreqCli===v?"#16a34a":"#fff", color:filterFreqCli===v?"#fff":"#374151", border:`1px solid ${filterFreqCli===v?"#16a34a":"rgba(22,163,74,0.25)"}`, borderRadius:8, padding:"6px 14px", fontSize:"0.8rem", cursor:"pointer", fontFamily:"inherit", fontWeight:600 }}
+                onClick={() => setFilterFreqCli(v)}>{l}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* TABELA */}
