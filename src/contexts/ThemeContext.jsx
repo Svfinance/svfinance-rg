@@ -3,17 +3,20 @@ import { THEMES, DEFAULT_THEME, RG_COMPANY_ID, RG_THEMES } from "../themes/theme
 
 const ThemeContext = createContext(null);
 
+function getInitialTheme() {
+  const cid = localStorage.getItem("company_id") || "";
+  // RG sempre começa com clean — cobre reload com sessão ativa
+  if (String(cid) === RG_COMPANY_ID) {
+    localStorage.setItem("sv_theme", "clean");
+    return "clean";
+  }
+  // Proteção: se o tema salvo foi rg_dark (removido), volta para blue
+  const saved = localStorage.getItem("sv_theme") || DEFAULT_THEME;
+  return THEMES[saved] ? saved : DEFAULT_THEME;
+}
+
 export function ThemeProvider({ children }) {
-  const [themeId, setThemeId] = useState(() => {
-    const cid = localStorage.getItem("company_id") || "";
-    // Usuário RG sempre começa com o tema clean
-    if (String(cid) === RG_COMPANY_ID) {
-      localStorage.setItem("sv_theme", "clean");
-      return "clean";
-    }
-    const saved = localStorage.getItem("sv_theme") || DEFAULT_THEME;
-    return THEMES[saved] ? saved : DEFAULT_THEME;
-  });
+  const [themeId, setThemeId] = useState(getInitialTheme);
 
   const theme = THEMES[themeId] || THEMES[DEFAULT_THEME];
 
@@ -25,6 +28,21 @@ export function ThemeProvider({ children }) {
     setThemeId(id);
     localStorage.setItem("sv_theme", id);
   }
+
+  useEffect(() => {
+    function aplicarTemaRG() {
+      const cid = localStorage.getItem("company_id") || "";
+      if (String(cid) === RG_COMPANY_ID && themeId !== "clean") {
+        setThemeId("clean");
+        localStorage.setItem("sv_theme", "clean");
+      }
+    }
+    // Verificar imediatamente — cobre reload com sessão ativa
+    aplicarTemaRG();
+    // Ouvir evento disparado pelo Login.jsx após autenticação bem-sucedida
+    window.addEventListener("sv_login", aplicarTemaRG);
+    return () => window.removeEventListener("sv_login", aplicarTemaRG);
+  }, [themeId]);
 
   useEffect(() => {
     document.body.style.background = theme.bgPrimary;

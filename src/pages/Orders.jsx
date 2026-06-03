@@ -773,7 +773,7 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
             const dataCalc = datas[idx] || "";
             return (
               <div key={idx} style={{ borderBottom: idx < card.semanas.length - 1 ? "1px solid rgba(26,138,60,0.25)" : "none" }}>
-                <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "180px 1fr", minHeight: 48 }}>
+                <div style={{ display: isMobile ? "flex" : "grid", flexDirection: isMobile ? "column" : undefined, gridTemplateColumns: isMobile ? undefined : "180px 1fr", minHeight: isMobile ? "auto" : 48 }}>
                   {/* Esquerda: controles */}
                   <div style={{ borderRight: isMobile ? "none" : "1px solid rgba(26,138,60,0.2)", borderBottom: isMobile ? "1px solid rgba(26,138,60,0.15)" : "none", padding: "6px 10px", display: "flex", flexDirection: "column", gap: 5 }}>
                     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -788,7 +788,7 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
                       style={{ ...fB, fontSize: "0.72rem", width: "100%" }} />
                   </div>
                   {/* Direita: número semana + botão remover */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: isMobile ? "8px 12px" : "0 14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", borderTop: isMobile ? "1px solid rgba(26,138,60,0.15)" : "none" }}>
                     <div style={{ display: "flex", flexDirection: "column" }}>
                       <span style={{ fontSize: isMobile ? "1.3rem" : "1.6rem", fontWeight: 900, fontFamily: "'Arial Black','Arial Bold',sans-serif", color: "#1a1a1a", lineHeight: 1.1 }}>{sem.numero}ª semana</span>
                       {dataCalc && <span style={{ fontSize: "0.7rem", color: "#1a8a3c", fontWeight: 700 }}>{dataCalc}</span>}
@@ -826,7 +826,7 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
           <button onClick={addSemana} style={{ ...btnB, padding: "9px 8px", fontSize: "0.8rem" }}>+ Semana</button>
           <button onClick={onCancel}  style={{ ...btnB, padding: "9px 8px", fontSize: "0.8rem" }}>Cancelar</button>
           <button onClick={handleCriar} disabled={criando || !clienteSel} style={{ ...btnV, padding: "9px 8px", fontSize: "0.8rem", opacity: criando || !clienteSel ? 0.6 : 1 }}>
-            {criando ? "Criando..." : "✅ Criar O.S"}
+            {criando ? "Criando..." : "✅ Criar Cartão"}
           </button>
         </div>
       </div>
@@ -931,7 +931,7 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
       <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexDirection: isMobile ? "column" : "row" }}>
         <button onClick={onCancel} style={btnB}>Cancelar</button>
         <button onClick={handleCriar} disabled={criando || !clienteSel} style={{ ...btnV, opacity: criando || !clienteSel ? 0.6 : 1 }}>
-          {criando ? "Criando..." : "✅ Criar Ordem de Serviço"}
+          {criando ? "Criando..." : "✅ Criar Cartão"}
         </button>
       </div>
     </div>
@@ -1319,7 +1319,7 @@ export default function Orders() {
           }catch{}
           localStorage.setItem(`sv_rg_card_${data.id}`,JSON.stringify(cardData));
         }
-        cacheInvalidate("sv_orders");showToast("O.S criada!");setView("list");fetchAll();
+        cacheInvalidate("sv_orders");showToast("Cartão criado!");setView("list");fetchAll();
       }else{const err=await res.json();showToast(err.msg||"Erro ao criar O.S.","error");}
     }catch{showToast("Erro de conexão.","error");}
   }
@@ -1485,13 +1485,13 @@ export default function Orders() {
           <div style={{display:"flex",alignItems:"center",gap:14}}>
             {rg?<LogoRG size={isMobile?44:56}/>:<img src={logoGif} alt="logo" style={{width:isMobile?44:60,height:isMobile?44:60,objectFit:"contain"}}/>}
             <div>
-              <h1 style={{fontSize:isMobile?"20px":"1.75rem",fontWeight:700,margin:0,color:rg?RGT.verde:theme.textPrimary}}>{rg?"Ordens de Serviço":"Pedidos / O.S"}</h1>
-              <p style={{color:rg?RGT.textSub:theme.textMuted,margin:"4px 0 0",fontSize:"0.85rem"}}>{rg?"Restaura Glass · Limpeza de vidros":"Gerencie suas ordens de serviço"}</p>
+              <h1 style={{fontSize:isMobile?"20px":"1.75rem",fontWeight:700,margin:0,color:rg?RGT.verde:theme.textPrimary}}>{rg?"Cartões":"Pedidos / O.S"}</h1>
+              <p style={{color:rg?RGT.textSub:theme.textMuted,margin:"4px 0 0",fontSize:"0.85rem"}}>{rg?"Restaura Glass · Cartões de serviço":"Gerencie suas ordens de serviço"}</p>
             </div>
           </div>
           <button style={rg?{background:RGT.verde,color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontWeight:700,cursor:"pointer",fontSize:"0.9rem"}:{...btnPrimary,whiteSpace:"nowrap"}}
             onClick={()=>{setEditing(null);setForm(EMPTY_FORM);setItems([]);setView("form");}}>
-            + Nova O.S
+            {rg ? "+ Novo Cartão" : "+ Nova O.S"}
           </button>
         </div>
 

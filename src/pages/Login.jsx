@@ -116,22 +116,11 @@ export default function Login() {
 
   useEffect(() => {
     if (localStorage.getItem("token")) { navigate("/dashboard"); return }
-
-    // ─────────────────────────────────────────────────────────
-    // CORREÇÃO 1: O email_service.py gera links assim:
-    //   verify: APP_URL + /verify-email?token=TOKEN
-    //   reset:  APP_URL + /reset-password?token=TOKEN
-    //
-    // Ambos usam o parâmetro "token" — não "reset".
-    // Diferenciamos pelo pathname atual.
-    // ─────────────────────────────────────────────────────────
     const token    = searchParams.get("token")
     const pathname = window.location.pathname
-
     if (token && pathname.includes("verify-email")) {
       handleVerifyEmail(token)
     } else if (token && pathname.includes("reset-password")) {
-      // Token de reset válido — vai para a tela de redefinição
       setScreen("reset-password")
     }
   }, [])
@@ -156,7 +145,7 @@ export default function Login() {
 
   function goTo(s) { resetForm(); setScreen(s) }
 
-  // ── LOGIN ──
+  // ── LOGIN ──────────────────────────────────────────────────────────────────
   const handleLogin = async (e) => {
     e.preventDefault()
     setLoading(true); setError("")
@@ -164,6 +153,8 @@ export default function Login() {
       const { ok, data } = await loginUser(email, password)
       if (ok) {
         if (data?.nicho) updateNicho(data.nicho)
+        // ← Dispara evento para forçar tema correto (ex: clean para Restaura Glass)
+        window.dispatchEvent(new Event("sv_login"))
         navigate("/dashboard")
       } else if (data.email_unverified) {
         setUnverifiedEmail(data.email || email)
@@ -252,22 +243,17 @@ export default function Login() {
   }
 
   // ── REDEFINIR SENHA ──
-  // CORREÇÃO 2: O parâmetro na URL é "token", não "reset"
   async function handleResetPassword(e) {
     e.preventDefault()
     if (password !== confirmPassword) { setError("As senhas não coincidem"); return }
     if (password.length < 6) { setError("Senha mínimo 6 caracteres"); return }
     setLoading(true); setError("")
-
-    // ← CORRIGIDO: era searchParams.get("reset"), agora é "token"
     const resetToken = searchParams.get("token")
-
     if (!resetToken) {
       setError("Token inválido. Solicite um novo link de recuperação.")
       setLoading(false)
       return
     }
-
     try {
       const res  = await fetch(`${API}/reset-password`, {
         method:"POST",

@@ -67,6 +67,7 @@ export default function Clients() {
   const [toast,          setToast]          = useState(null);
   const [cepLoading,     setCepLoading]     = useState(false);
   const [geoStatus,      setGeoStatus]      = useState(null);
+  const [criarCartaoApos,setCriarCartaoApos]= useState(false);
 
   async function loadPending() {
     try {
@@ -234,7 +235,7 @@ export default function Clients() {
     setModalOpen(true);
   }
 
-  function closeModal() { setModalOpen(false); setEditing(null); setGeoStatus(null); }
+  function closeModal() { setModalOpen(false); setEditing(null); setGeoStatus(null); setCriarCartaoApos(false); }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -260,11 +261,15 @@ export default function Clients() {
       if (res.ok) {
         const data   = await res.json();
         const geoMsg = data.geo_msg || "";
+        const clienteId = data.id || editing?.id;
         showToast(`${editing ? "Cliente atualizado!" : "Cliente criado!"} ${geoMsg}`);
         sessionStorage.removeItem("sv_clients");
         sessionStorage.removeItem("sv_orders");
+        const irParaCartao = criarCartaoApos && clienteId;
+        setCriarCartaoApos(false);
         closeModal();
         fetchClients();
+        if (irParaCartao) navigate(`/orders?client_id=${clienteId}&new=1`);
       } else {
         const err = await res.json();
         showToast(err.msg || "Erro.", "error");
@@ -523,7 +528,7 @@ export default function Clients() {
                               fontFamily:"inherit", whiteSpace:"nowrap",
                             }}
                           >
-                            📋 {!isMobile && "Nova O.S"}
+                            📋 {!isMobile && "Novo Cartão"}
                           </button>
                         )}
                         <button style={{ background:isGlass?"rgba(255,255,255,0.25)":`${theme.primary}22`, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":`${theme.primary}44`}`, borderRadius:8, padding:"5px 9px", cursor:"pointer", fontSize:"0.9rem" }} onClick={() => openEdit(c)}>✏️</button>
@@ -757,8 +762,16 @@ export default function Clients() {
 
               </div>
 
-              <div style={{ display:"flex", justifyContent:"flex-end", gap:12, flexDirection:isMobile?"column":"row", marginTop:16 }}>
+              <div style={{ display:"flex", justifyContent:"flex-end", gap:12, flexDirection:isMobile?"column":"row", marginTop:16, flexWrap:"wrap" }}>
                 <button type="button" style={{ background:isGlass?"rgba(255,255,255,0.3)":theme.bgCard, color:theme.textSecondary, border:`1px solid ${isGlass?"rgba(255,255,255,0.5)":theme.borderCard}`, borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", width:isMobile?"100%":"auto" }} onClick={closeModal}>Cancelar</button>
+                {/* Botão Criar Cartão — exclusivo Restaura Glass */}
+                {rg && (
+                  <button type="submit"
+                    onClick={() => setCriarCartaoApos(true)}
+                    style={{ background:"rgba(22,163,74,0.12)", color:"#16a34a", border:"2px solid #16a34a", borderRadius:10, padding:"10px 20px", fontWeight:700, cursor:"pointer", width:isMobile?"100%":"auto", fontFamily:"inherit" }}>
+                    {editing ? "💾 Salvar e Criar Cartão" : "📋 Criar Cliente e Cartão"}
+                  </button>
+                )}
                 <button type="submit" style={{ background:theme.primaryGrad, color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", boxShadow:`0 4px 15px ${theme.primary}44`, width:isMobile?"100%":"auto" }}>{editing?"Salvar Alterações":"Criar Cliente"}</button>
               </div>
             </form>
@@ -870,7 +883,7 @@ export default function Clients() {
                       style={{ background:"#16a34a", color:"#fff", border:"none", borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", width:isMobile?"100%":"auto", fontFamily:"inherit" }}
                       onClick={() => { setDetailModal(false); navigate(`/orders?client_id=${detailClient.id}&new=1`); }}
                     >
-                      📋 Nova O.S
+                      📋 Novo Cartão
                     </button>
                   )}
                   <button style={{ background:"rgba(34,197,94,0.12)", color:"#22c55e", border:"1px solid rgba(34,197,94,0.3)", borderRadius:10, padding:"10px 20px", fontWeight:600, cursor:"pointer", width:isMobile?"100%":"auto" }}
