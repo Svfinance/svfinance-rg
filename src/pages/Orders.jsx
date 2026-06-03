@@ -13,8 +13,7 @@ const token = () => localStorage.getItem("token");
 const QR_TOKEN = "sv-checkin-universal";
 
 // ── ISOLAMENTO RESTAURA GLASS ────────────────────────────────────────────────
-const RG_ID = "17";
-const isRG = () => String(localStorage.getItem("company_id") || "") === RG_ID;
+// Frontend restauraglass.svfinance.com.br — sempre Restaura Glass
 
 // ── TEMA RESTAURA GLASS ──────────────────────────────────────────────────────
 const RGT = {
@@ -1207,7 +1206,7 @@ export default function Orders() {
   const isMobile   = useIsMobile();
   const navigate      = useNavigate();
   const [searchParams] = useSearchParams();
-  const rg         = isRG();
+  const rg         = true; // Este frontend é exclusivamente Restaura Glass
 
   const [sidebarOpen,   setSidebarOpen]  = useState(false);
   const [orders,        setOrders]       = useState([]);

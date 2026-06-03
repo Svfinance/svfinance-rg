@@ -1,18 +1,14 @@
-// Adicionar este script em public/cache-bust.js
-// e referenciar no index.html ANTES dos outros scripts:
-// <script src="/cache-bust.js"></script>
-
-(function() {
+// public/cache-bust.js
+(function () {
   var VERSION = "rg-v3";
   if (localStorage.getItem("sv_tv") !== VERSION) {
-    // Limpar sv_theme para forçar o tema padrão
     localStorage.removeItem("sv_theme");
-    // Não limpa token, company_id etc — só o tema
+    localStorage.removeItem("sv_tv");
+    localStorage.setItem("sv_tv", VERSION);
   }
-  // Forçar atualização do Service Worker se existir
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function(regs) {
-      regs.forEach(function(reg) { reg.update(); });
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      regs.forEach(function (reg) { reg.update(); });
     });
   }
 })();

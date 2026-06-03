@@ -12,8 +12,7 @@ const token = () => localStorage.getItem("token");
 const QR_UNIVERSAL_TOKEN = "sv-checkin-universal";
 
 // ── Restaura Glass ───────────────────────────────────────────────────────────
-const RG_ID = "17";
-const isRG  = () => String(localStorage.getItem("company_id") || "") === RG_ID;
+// Frontend restauraglass.svfinance.com.br — sempre Restaura Glass
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
@@ -48,7 +47,7 @@ export default function Clients() {
   const isMobile   = useIsMobile();
   const navigate   = useNavigate();
   const qrCanvasRef = useRef(null);
-  const rg = isRG();
+  const rg = true; // Este frontend é exclusivamente Restaura Glass
 
   const QR_IMG_URL = `https://quickchart.io/qr?text=${encodeURIComponent(QR_UNIVERSAL_TOKEN)}&size=280&margin=2&ecLevel=H&dark=0a0f1e&light=ffffff`;
 
