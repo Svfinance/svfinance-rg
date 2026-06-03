@@ -4,7 +4,7 @@ import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
 import { getSidebarStyle, setSidebarStyleLS } from "../components/layout/Sidebar";
-import { RG_COMPANY_ID, RG_THEMES } from "../themes/themes";
+import { RG_THEMES } from "../themes/themes";
 
 const API   = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
@@ -28,11 +28,11 @@ const REGIME_OPTIONS = [
 
 export default function Settings() {
   const { theme, themeId, changeTheme, themes } = useTheme();
-  const isGlass  = themeId === "glass" || themeId === "gray" || themeId === "clean" || themeId === "rg_dark";
+  const isGlass  = themeId === "glass" || themeId === "gray";
   const isMobile = useIsMobile();
   const role     = localStorage.getItem("role") || "viewer";
   const isAdmin  = role === "admin";
-  const isRG     = isRGUser();
+  const isRG     = true; // Este frontend é exclusivamente Restaura Glass
 
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [activeSection, setActiveSection]   = useState("empresa");

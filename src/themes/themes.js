@@ -1,7 +1,5 @@
 export const RG_COMPANY_ID = "17";
-export const isRGUser = () =>
-  String(typeof localStorage !== "undefined" ? localStorage.getItem("company_id") || "" : "") === RG_COMPANY_ID;
-export const RG_THEMES = ["clean"];
+export const RG_THEMES     = ["clean"];
 
 export const THEMES = {
 
@@ -88,8 +86,8 @@ export const THEMES = {
     chartColors:["#d4af37","#f0d060","#4ade80","#f87171","#e879f9","#38bdf8","#fb923c","#a3e635"],
   },
 
-  // ══ CLEAN — RestauraGlass ══
-  // Único tema da Restaura Glass — fundo branco profissional
+  // ── CLEAN — tema padrão do frontend finance-control-solucoes (Restaura Glass)
+  // DEFAULT_THEME aponta para este tema — qualquer usuário, qualquer dispositivo
   clean: {
     id:"clean", name:"Clean & Vidro", emoji:"🧼",
     description:"Restaura Glass — identidade verde profissional",
@@ -109,7 +107,6 @@ export const THEMES = {
     primaryGrad:"linear-gradient(135deg,#16a34a,#22c55e)",
     accent:"#15803d",
     accentGrad:"linear-gradient(135deg,#14532d,#16a34a,#22c55e)",
-    // texto preto nos inputs para boa leitura
     textPrimary:"#111827",
     textSecondary:"#374151",
     textMuted:"#9ca3af",
@@ -132,4 +129,6 @@ export const THEMES = {
   },
 };
 
-export const DEFAULT_THEME = "blue";
+// ── DEFAULT_THEME = "clean" — este frontend é exclusivamente Restaura Glass
+// Qualquer usuário que acessar solucoes.svfinance.com.br verá o tema branco
+export const DEFAULT_THEME = "clean";
