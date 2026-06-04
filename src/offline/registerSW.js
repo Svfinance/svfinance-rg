@@ -1,34 +1,40 @@
-// Registra o Service Worker e detecta nova versão disponível.
-// Dispara evento "sv-update-ready" quando há atualização esperando.
-
+// src/offline/registerSW.js
 export function registerSW() {
-  if (!("serviceWorker" in navigator)) return;
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+      try {
+        const registration = await navigator.serviceWorker.register('/sw.js', {
+          updateViaCache: 'none',
+        })
 
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/sw.js").then((reg) => {
-      // Detecta atualização
-      reg.addEventListener("updatefound", () => {
-        const sw = reg.installing;
-        if (!sw) return;
-        sw.addEventListener("statechange", () => {
-          if (sw.state === "installed" && navigator.serviceWorker.controller) {
-            // Há uma nova versão esperando
-            window.dispatchEvent(new CustomEvent("sv-update-ready", { detail: { reg } }));
-          }
-        });
-      });
-    }).catch(() => {});
+        setInterval(() => registration.update(), 60 * 1000)
 
-    // Quando o novo SW assume, recarrega
-    let refreshing = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (refreshing) return;
-      refreshing = true;
-      window.location.reload();
-    });
-  });
+        registration.addEventListener('updatefound', () => {
+          const newSW = registration.installing
+          if (!newSW) return
+          newSW.addEventListener('statechange', () => {
+            if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+              // Avisa o OfflineBar que tem versão nova
+              window.dispatchEvent(new CustomEvent('sv-update-ready', { detail: { reg: registration } }))
+            }
+          })
+        })
+
+        let refreshing = false
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (!refreshing) { refreshing = true; window.location.reload() }
+        })
+
+      } catch (err) {
+        console.warn('[SW] Registro falhou:', err)
+      }
+    })
+  }
 }
 
-export function applyUpdate(reg) {
-  if (reg?.waiting) reg.waiting.postMessage("SKIP_WAITING");
+// Chamado pelo OfflineBar quando usuário clica "Recarregar"
+export function applyUpdate(registration) {
+  if (registration?.waiting) {
+    registration.waiting.postMessage('SKIP_WAITING')
+  }
 }
