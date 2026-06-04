@@ -141,6 +141,98 @@ function NotificationBell({ alerts, theme, isGlass }) {
   );
 }
 
+// Renderizado APENAS quando company_id === "17" (isRestauraGlass)
+function RGBackground() {
+  return (
+    <>
+      <style>{`
+        .rg-bg-wrapper {
+          position: fixed;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          overflow: hidden;
+        }
+        .rg-bg-gradient {
+          position: absolute;
+          inset: 0;
+          background:
+            radial-gradient(ellipse 80% 60% at 50% 30%,
+              rgba(43,81,2,0.08) 0%,
+              rgba(43,81,2,0.03) 50%,
+              transparent 100%),
+            radial-gradient(ellipse 60% 80% at 80% 80%,
+              rgba(43,81,2,0.06) 0%,
+              transparent 70%);
+        }
+        .rg-bg-logo {
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          transform: translate(-50%, -52%);
+          width: min(520px, 75vw);
+          opacity: 0.045;
+          filter: grayscale(0%) saturate(0.8) brightness(0.6);
+          user-select: none;
+          -webkit-user-select: none;
+        }
+        .rg-bg-logo-corner {
+          position: absolute;
+          bottom: 32px;
+          right: 40px;
+          width: 140px;
+          opacity: 0.06;
+          filter: grayscale(20%) saturate(0.7);
+          user-select: none;
+          -webkit-user-select: none;
+        }
+        .rg-bg-topline {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 2px;
+          background: linear-gradient(
+            90deg,
+            transparent 0%,
+            rgba(43,81,2,0.4) 30%,
+            rgba(43,81,2,0.6) 50%,
+            rgba(43,81,2,0.4) 70%,
+            transparent 100%
+          );
+        }
+        @media (max-width: 768px) {
+          .rg-bg-logo {
+            width: min(320px, 90vw);
+            opacity: 0.035;
+          }
+          .rg-bg-logo-corner {
+            display: none;
+          }
+        }
+      `}</style>
+      <div className="rg-bg-wrapper">
+        <div className="rg-bg-gradient" />
+        <div className="rg-bg-topline" />
+        <img
+          className="rg-bg-logo"
+          src="/logos/restauraglass.png"
+          alt=""
+          aria-hidden="true"
+          draggable="false"
+        />
+        <img
+          className="rg-bg-logo-corner"
+          src="/logos/restauraglass.png"
+          alt=""
+          aria-hidden="true"
+          draggable="false"
+        />
+      </div>
+    </>
+  );
+}
+
 export default function PageLayout({ children, style }) {
   const { theme, themeId } = useTheme();
   const alerts = useAlerts();
@@ -151,6 +243,10 @@ export default function PageLayout({ children, style }) {
   const [sidebarStyle, setSidebarStyle] = useState(getSidebarStyle());
   const isHorizontal = sidebarStyle === "horizontal";
   const TOPBAR_H = 54;
+
+  // Detecta se é conta Restaura Glass (company_id === "17")
+  const isRestauraGlass = localStorage.getItem("company_id") === "17";
+
   useEffect(() => {
     const fn = () => setSidebarStyle(getSidebarStyle());
     window.addEventListener("sv_sidebar_style_changed", fn);
@@ -160,7 +256,6 @@ export default function PageLayout({ children, style }) {
   return (
     <div style={{
       display:"flex", minHeight:"100vh",
-      // rg_dark: gradiente CSS direto; imagem: usar fallback; clean: branco
       background: isImgTheme
         ? theme.bgImageFallback || "#020d05"
         : (themeId==="rg_dark" ? "linear-gradient(140deg,#010c05 0%,#021408 35%,#031a0c 65%,#010c05 100%)" : theme.bgPrimary),
@@ -193,7 +288,8 @@ export default function PageLayout({ children, style }) {
         <div style={{position:"fixed",inset:0,background:"radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,0.4) 100%)",pointerEvents:"none",zIndex:0}}/>
       )}
 
-      {/* SEM MAPA SVG — removido conforme solicitado */}
+      {/* Marca d'água Restaura Glass — apenas company_id === "17" */}
+      {isRestauraGlass && <RGBackground />}
 
       <NotificationBell alerts={alerts} theme={theme} isGlass={isGlass}/>
       {children}

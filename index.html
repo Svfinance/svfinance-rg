@@ -4,26 +4,60 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- ✅ Cache bust — deve ser o PRIMEIRO script, antes do React -->
+    <!-- ═══════════════════════════════════════════════════════════════
+         CACHE BUST — primeiro script, antes de tudo
+         Resolve tema errado em PWAs já instalados (Android/iOS)
+    ════════════════════════════════════════════════════════════════ -->
     <script src="/cache-bust.js"></script>
 
-    <!-- ✅ Fontes -->
+    <!-- ═══════════════════════════════════════════════════════════════
+         DETECÇÃO DE HOSTNAME — manifest e meta dinâmicos por domínio
+         restauraglass.svfinance.com.br → identidade Restaura Glass
+         qualquer outro → identidade SV Finance genérica
+    ════════════════════════════════════════════════════════════════ -->
+    <script>
+      (function () {
+        var isRG = location.hostname === 'restauraglass.svfinance.com.br';
+
+        // Manifest
+        var manifestLink = document.createElement('link');
+        manifestLink.rel = 'manifest';
+        manifestLink.href = isRG ? '/manifest-rg.webmanifest' : '/manifest.webmanifest';
+        document.head.appendChild(manifestLink);
+
+        // Theme color
+        var themeMeta = document.createElement('meta');
+        themeMeta.name = 'theme-color';
+        themeMeta.content = isRG ? '#2B5102' : '#0f172a';
+        document.head.appendChild(themeMeta);
+
+        // Apple touch icon
+        var appleIcon = document.createElement('link');
+        appleIcon.rel = 'apple-touch-icon';
+        appleIcon.href = isRG ? '/icons/rg/apple-touch-icon.png' : '/icons/icon-192.png';
+        document.head.appendChild(appleIcon);
+
+        // Title
+        document.title = isRG ? 'Restaura Glass' : 'SV Finance';
+
+        // Apple web app title
+        var appleTitleMeta = document.createElement('meta');
+        appleTitleMeta.name = 'apple-mobile-web-app-title';
+        appleTitleMeta.content = isRG ? 'Restaura Glass' : 'SV Finance';
+        document.head.appendChild(appleTitleMeta);
+      })();
+    </script>
+
+    <!-- Fontes -->
     <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:wght@300;400&display=swap" rel="stylesheet">
 
-    <!-- ✅ Favicon -->
+    <!-- Favicon genérico -->
     <link rel="icon" type="image/gif" href="/logo.gif" />
-    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 
-    <!-- ✅ PWA / Mobile -->
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#0f172a" />
+    <!-- PWA meta tags -->
     <meta name="description" content="SV Finance Control — Gerencie suas finanças com inteligência" />
-    <meta name="apple-mobile-web-app-title" content="SV Finance" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
-
-    <!-- ✅ Título -->
-    <title>SV Finance</title>
   </head>
   <body>
     <div id="root"></div>
