@@ -3,7 +3,18 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useNicho } from "../../contexts/NichoContext";
 import { logoutUser } from "../../services/api";
-import { isRG } from "../../utils/isRG";
+
+// isRG embutido — evita erro de import dinâmico no Vite
+function _isRGHost() {
+  if (typeof window === "undefined") return false;
+  const h = window.location.hostname;
+  return (
+    h === "restauraglass.svfinance.com.br" ||
+    h === "solucoes.svfinance.com.br"      ||
+    h === "localhost"                       ||
+    h === "127.0.0.1"
+  );
+}
 
 const STYLE_KEY    = "sv_sidebar_style";
 const AUTOHIDE_KEY = "sv_sidebar_autohide";
@@ -28,11 +39,10 @@ function useIsMobile() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Detecta Restaura Glass — POR HOSTNAME (não por company_id)
-// Garante que os grupos aparecem já no primeiro acesso, antes do login.
-// ─────────────────────────────────────────────────────────────────────────────
+// Detecta Restaura Glass — POR HOSTNAME, embutido no arquivo
+// Não depende de import externo — evita erro de módulo no Vite
 function isRestauraGlass() {
-  return isRG();
+  return _isRGHost();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -331,15 +341,17 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
       {autoHide && !visible && <div style={{ position:"fixed",top:0,left:0,right:0,height:8,zIndex:201,pointerEvents:"all" }} onMouseEnter={showBar}/>}
       <div onMouseEnter={showBar} onMouseLeave={startHide} style={{
         position:"fixed",top:0,left:0,right:0,zIndex:200,height:54,
-        background:"rgba(12,16,32,0.90)", backdropFilter:"blur(28px) saturate(180%)", WebkitBackdropFilter:"blur(28px) saturate(180%)",
-        borderBottom:"1px solid rgba(255,255,255,0.08)", boxShadow:"0 4px 32px rgba(0,0,0,0.4)",
+        background: isRG ? "rgba(255,255,255,0.95)" : "rgba(12,16,32,0.90)",
+        backdropFilter:"blur(28px) saturate(180%)", WebkitBackdropFilter:"blur(28px) saturate(180%)",
+        borderBottom: isRG ? "2px solid rgba(26,138,60,0.3)" : "1px solid rgba(255,255,255,0.08)",
+        boxShadow: isRG ? "0 4px 24px rgba(26,138,60,0.12)" : "0 4px 32px rgba(0,0,0,0.4)",
         display:"flex",alignItems:"center",
         transform:visible?"translateY(0)":"translateY(-100%)",
         transition:"transform 0.3s cubic-bezier(0.4,0,0.2,1)",
         pointerEvents:visible?"all":"none",
       }}>
-        <span style={{ fontWeight:700,fontSize:14,color:"rgba(255,255,255,0.92)",padding:"0 16px",whiteSpace:"nowrap",letterSpacing:0.5,flexShrink:0 }}>SV Finance</span>
-        {canL && <button onClick={()=>scrollNav(-1)} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",padding:"0 4px",flexShrink:0 }}>‹</button>}
+        <span style={{ fontWeight:700,fontSize:14,color:isRG?"#1a8a3c":"rgba(255,255,255,0.92)",padding:"0 16px",whiteSpace:"nowrap",letterSpacing:0.5,flexShrink:0 }}>{isRG?"RestauraGlass":"SV Finance"}</span>
+        {canL && <button onClick={()=>scrollNav(-1)} style={{ background:"none",border:"none",color:isRG?"rgba(26,138,60,0.5)":"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",padding:"0 4px",flexShrink:0 }}>‹</button>}
         <div ref={scrollRef} onScroll={checkScroll} style={{ display:"flex",alignItems:"center",flex:1,overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none" }}>
           <div style={{ display:"flex",alignItems:"center",gap:2,minWidth:"max-content",padding:"0 4px" }}>
             {items.map((group, idx) => {
@@ -349,13 +361,13 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
                   <div data-navitem={idx} onClick={e=>handleGroupClick(idx,e.currentTarget,group.items)} style={{
                     display:"flex",alignItems:"center",gap:6,padding:"6px 11px",borderRadius:8,cursor:"pointer",
                     whiteSpace:"nowrap",userSelect:"none",
-                    color:openIdx===idx?theme.primary:theme.textMuted,
-                    background:openIdx===idx?`${theme.primary}22`:"transparent",
-                    border:openIdx===idx?`1px solid ${theme.primary}`:"1px solid transparent",
+                    color:openIdx===idx?(isRG?"#1a8a3c":theme.primary):(isRG?"#4a5568":theme.textMuted),
+                    background:openIdx===idx?(isRG?"rgba(26,138,60,0.1)":`${theme.primary}22`):"transparent",
+                    border:openIdx===idx?`1px solid ${isRG?"#1a8a3c":theme.primary}`:"1px solid transparent",
                     fontWeight:openIdx===idx?600:400,fontSize:13,transition:"all 0.18s",
                   }}
-                    onMouseEnter={e=>{ if(openIdx!==idx){e.currentTarget.style.background="rgba(255,255,255,0.1)";e.currentTarget.style.color="#fff";} }}
-                    onMouseLeave={e=>{ if(openIdx!==idx){e.currentTarget.style.background="transparent";e.currentTarget.style.color=theme.textMuted;} }}>
+                    onMouseEnter={e=>{ if(openIdx!==idx){e.currentTarget.style.background=isRG?"rgba(26,138,60,0.08)":"rgba(255,255,255,0.1)";e.currentTarget.style.color=isRG?"#1a8a3c":"#fff";} }}
+                    onMouseLeave={e=>{ if(openIdx!==idx){e.currentTarget.style.background="transparent";e.currentTarget.style.color=isRG?"#4a5568":theme.textMuted;} }}>
                     <span style={{ fontSize:15 }}>{group.icon}</span>
                     <span>{group.label}</span>
                     <span style={{ fontSize:8,opacity:0.6,marginLeft:1,transform:openIdx===idx?"rotate(180deg)":"rotate(0)",transition:"transform 0.2s",display:"inline-block" }}>▼</span>
@@ -395,10 +407,10 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
             })}
           </div>
         </div>
-        {canR && <button onClick={()=>scrollNav(1)} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",padding:"0 4px",flexShrink:0 }}>›</button>}
+        {canR && <button onClick={()=>scrollNav(1)} style={{ background:"none",border:"none",color:isRG?"rgba(26,138,60,0.5)":"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",padding:"0 4px",flexShrink:0 }}>›</button>}
         <div style={{ display:"flex",alignItems:"center",gap:6,padding:"0 12px",flexShrink:0 }}>
-          <button onClick={toggleAH} style={{ background:"transparent",border:"none",color:autoHide?theme.primary:"rgba(255,255,255,0.4)",fontSize:16,cursor:"pointer",padding:"4px 6px",borderRadius:6 }}>{autoHide?"📌":"👁"}</button>
-          <button onClick={()=>{logoutUser();navigate("/");}} style={{ background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:8,color:"#f87171",padding:"5px 12px",cursor:"pointer",fontWeight:600,fontSize:12 }}>Sair</button>
+          <button onClick={toggleAH} style={{ background:"transparent",border:"none",color:autoHide?(isRG?"#1a8a3c":theme.primary):isRG?"rgba(26,138,60,0.4)":"rgba(255,255,255,0.4)",fontSize:16,cursor:"pointer",padding:"4px 6px",borderRadius:6 }}>{autoHide?"📌":"👁"}</button>
+          <button onClick={()=>{logoutUser();navigate("/");}} style={{ background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:8,color:"#ef4444",padding:"5px 12px",cursor:"pointer",fontWeight:600,fontSize:12 }}>Sair</button>
         </div>
       </div>
       <style>{`@keyframes dropIn{from{opacity:0;transform:translateY(-10px) scale(0.96)}to{opacity:1;transform:translateY(0) scale(1)}}`}</style>

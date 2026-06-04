@@ -336,9 +336,9 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
           {/* Semanas */}
           {card.semanas.map((sem, idx) => (
             <div key={idx} style={{ borderBottom:idx<card.semanas.length-1?"1px solid rgba(26,138,60,0.3)":undefined }}>
-              <div style={{ display:"grid", gridTemplateColumns:"160px 1fr", minHeight:52 }}>
+              <div style={{ display:isMobile?"flex":"grid", flexDirection:isMobile?"column":undefined, gridTemplateColumns:isMobile?undefined:"160px 1fr", minHeight:isMobile?"auto":52 }}>
                 {/* Esq: int + hr + checkin */}
-                <div style={{ borderRight:"1px solid rgba(26,138,60,0.3)", padding:"6px 10px", display:"flex", flexDirection:"column", justifyContent:"center", gap:4 }}>
+                <div style={{ borderRight:isMobile?"none":"1px solid rgba(26,138,60,0.3)", borderBottom:isMobile?"1px solid rgba(26,138,60,0.2)":"none", padding:"8px 10px", display:"flex", flexDirection:"column", gap:4 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                     <label style={{ display:"flex", alignItems:"center", gap:3, fontSize:"0.72rem", fontWeight:700, color:"#1a1a1a", cursor:"pointer" }}>
                       <input type="checkbox" checked={!!sem.int} onChange={e=>setSemana(idx,"int",e.target.checked)} style={{ accentColor:"#1a8a3c" }}/>
@@ -362,7 +362,7 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
                   }
                 </div>
                 {/* Dir: número semana + botão remover */}
-                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"0 12px" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:isMobile?"8px 12px":"0 12px", borderTop:isMobile?"1px solid rgba(26,138,60,0.15)":"none" }}>
                   {(() => {
                   const datas = calcDatasSemanas(card.mes, card.ano, card.dias);
                   const dataCalc = datas[idx] || "";
