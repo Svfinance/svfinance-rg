@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useTheme } from "../../contexts/ThemeContext";
 import { useNicho } from "../../contexts/NichoContext";
 import { logoutUser } from "../../services/api";
+import { isRG } from "../../utils/isRG";
 
 const STYLE_KEY    = "sv_sidebar_style";
 const AUTOHIDE_KEY = "sv_sidebar_autohide";
@@ -27,10 +28,11 @@ function useIsMobile() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Detecta Restaura Glass
+// Detecta Restaura Glass — POR HOSTNAME (não por company_id)
+// Garante que os grupos aparecem já no primeiro acesso, antes do login.
 // ─────────────────────────────────────────────────────────────────────────────
 function isRestauraGlass() {
-  return String(localStorage.getItem("company_id")) === "20";
+  return isRG();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -316,7 +318,7 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
   const startHide = () => { if (!autoHide) return; hideTimer.current = setTimeout(() => { setVisible(false); setOpenIdx(null); }, 800); };
   const toggleAH  = () => { const n=!autoHide; setAutoHideState(n); setAutoHideLS(n); setVisible(!n); };
   const scrollNav = (d) => { scrollRef.current?.scrollBy({ left:d*160, behavior:"smooth" }); setTimeout(checkScroll, 350); };
-  
+
   const handleGroupClick = (idx, el, groupItems) => {
     setOpenIdx(openIdx===idx?null:idx);
     setAnchorEl(el);
@@ -343,7 +345,6 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
             {items.map((group, idx) => {
               const isGroup = isRG;
               return isGroup ? (
-                // GRUPO: dropdown ao hover
                 <div key={group.id} style={{ position:"relative",flexShrink:0 }}>
                   <div data-navitem={idx} onClick={e=>handleGroupClick(idx,e.currentTarget,group.items)} style={{
                     display:"flex",alignItems:"center",gap:6,padding:"6px 11px",borderRadius:8,cursor:"pointer",
@@ -364,7 +365,6 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
                   )}
                 </div>
               ) : (
-                // FLAT: items diretos
                 group.items.map(item => {
                   const active  = isActive(item.to) && !item.nfe;
                   const hasChild= item.children?.length > 0;
@@ -469,8 +469,7 @@ function SidebarDock({ menuItems, groups, theme, isGlass, convex = true, mobile 
     window.addEventListener("touchmove",mv,{passive:false}); window.addEventListener("touchend",up);
   };
 
-  // Flattening groups em lista única com indicador de grupo
-  const allItems = isRG ? 
+  const allItems = isRG ?
     groups.flatMap(g => [
       { id:`__group_${g.id}__`, icon:g.icon, label:g.label, isGroupHeader:true, groupId:g.id },
       ...g.items
@@ -515,7 +514,6 @@ function SidebarDock({ menuItems, groups, theme, isGlass, convex = true, mobile 
 
       {finalItems.map((item, i) => {
         if (item.isGroupHeader) {
-          // Header do grupo — não aparece como bolinha, apenas label
           return null;
         }
 
@@ -697,7 +695,6 @@ function SidebarMobile({ menuItems, groups, theme, isGlass, isRG }) {
       <div style={{ position:"fixed", top:0, left:0, right:0, zIndex:200, height:50, background:bg, backdropFilter:backdrop, WebkitBackdropFilter:backdrop, borderBottom:`1px solid ${border}`, display:"flex", alignItems:"center", gap:4, padding:"0 8px", overflowX:"auto", scrollbarWidth:"none" }}>
         <button onClick={()=>setShowStyles(s=>!s)} style={{ background:"transparent", border:"none", color:theme.textMuted, fontSize:16, cursor:"pointer", flexShrink:0, padding:"4px 6px", borderRadius:6 }}>⚙</button>
         {isRG ? (
-          // Grupos com header e items
           items.map(group => (
             <div key={group.id} style={{ display:"flex", alignItems:"center", gap:2, flexShrink:0 }}>
               <div onClick={() => toggleGroup(group.id)} style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 9px", borderRadius:8, textDecoration:"none", whiteSpace:"nowrap", flexShrink:0, color:theme.textMuted, background:"transparent", fontSize:12, fontWeight:400, cursor:"pointer" }}>
@@ -713,7 +710,6 @@ function SidebarMobile({ menuItems, groups, theme, isGlass, isRG }) {
             </div>
           ))
         ) : (
-          // Items flat
           menuItems.map(item => (
             <Link key={item.nfe?"__nfe__":item.to} to={item.to} style={{ display:"flex", alignItems:"center", gap:4, padding:"5px 9px", borderRadius:8, textDecoration:"none", whiteSpace:"nowrap", flexShrink:0, color:item.nfe?"#d4af37":isActive(item.to)?"#fff":theme.textMuted, background:item.nfe?"rgba(212,175,55,0.12)":isActive(item.to)?theme.primary:"transparent", fontSize:12, fontWeight:item.nfe||isActive(item.to)?600:400, border:item.nfe?"1px solid rgba(212,175,55,0.3)":"none" }}>
               <span style={{ fontSize:14 }}>{item.icon}</span>
@@ -754,7 +750,6 @@ function SidebarMobile({ menuItems, groups, theme, isGlass, isRG }) {
         {showStyles && <StylePicker styles={MOBILE_STYLES} current={mStyle} onSelect={setMStyle} theme={theme} isGlass={isGlass} border={border} inline/>}
         <div style={{ flex:1,padding:"12px",display:"flex",flexDirection:"column",gap:4,overflowY:"auto" }}>
           {isRG ? (
-            // Grupos com header colapsável
             items.map(group => (
               <div key={group.id}>
                 <div onClick={() => toggleGroup(group.id)} style={{
@@ -786,7 +781,6 @@ function SidebarMobile({ menuItems, groups, theme, isGlass, isRG }) {
               </div>
             ))
           ) : (
-            // Items flat
             menuItems.map(item => (
               <Link key={item.nfe?"__nfe__":item.to} to={item.to} onClick={()=>setOpen(false)} style={{
                 display:"flex",alignItems:"center",gap:14,padding:"14px 16px",
@@ -822,7 +816,7 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
   const isMobile  = useIsMobile();
   const menuItems = useMenuItems();
   const groups    = useMenuItemsGrouped();
-  const isRG      = isRestauraGlass();
+  const isRGval   = isRestauraGlass();
   const [style, setStyle] = useState(getSidebarStyle());
 
   useEffect(() => {
@@ -831,9 +825,9 @@ export default function Sidebar({ sidebarOpen, setSidebarOpen }) {
     return () => window.removeEventListener("sv_sidebar_style_changed", fn);
   }, []);
 
-  if (isMobile) return <SidebarMobile menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} isRG={isRG}/>;
-  if (style==="horizontal")   return <SidebarHorizontal menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} isRG={isRG}/>;
-  if (style==="dock")         return <SidebarDock menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} convex={true} isRG={isRG}/>;
-  if (style==="dock_concave") return <SidebarDock menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} convex={false} isRG={isRG}/>;
-  return <SidebarVertical menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} isRG={isRG}/>;
+  if (isMobile) return <SidebarMobile menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} isRG={isRGval}/>;
+  if (style==="horizontal")   return <SidebarHorizontal menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} isRG={isRGval}/>;
+  if (style==="dock")         return <SidebarDock menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} convex={true} isRG={isRGval}/>;
+  if (style==="dock_concave") return <SidebarDock menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} convex={false} isRG={isRGval}/>;
+  return <SidebarVertical menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} isRG={isRGval}/>;
 }
