@@ -245,7 +245,8 @@ export default function PageLayout({ children, style }) {
   const TOPBAR_H = 54;
 
   // Detecta se é conta Restaura Glass (company_id === "17")
-  const isRestauraGlass = localStorage.getItem("company_id") === "17";
+  const h = window.location.hostname;
+const isRestauraGlass = h === "restauraglass.svfinance.com.br" || h === "solucoes.svfinance.com.br" || h === "localhost" || h === "127.0.0.1";
 
   useEffect(() => {
     const fn = () => setSidebarStyle(getSidebarStyle());
