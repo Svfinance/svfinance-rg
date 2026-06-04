@@ -5,6 +5,7 @@ import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
 import { getSidebarStyle, setSidebarStyleLS } from "../components/layout/Sidebar";
 import { RG_THEMES } from "../themes/themes";
+import { isRG } from "../utils/isRG";
 
 const API   = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
@@ -32,7 +33,7 @@ export default function Settings() {
   const isMobile = useIsMobile();
   const role     = localStorage.getItem("role") || "viewer";
   const isAdmin  = role === "admin";
-  const isRG     = true; // Este frontend é exclusivamente Restaura Glass
+  const rg = isRG();
 
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [activeSection, setActiveSection]   = useState("empresa");

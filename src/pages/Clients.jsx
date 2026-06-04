@@ -5,6 +5,7 @@ import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
 import { enqueueMutation, getMutationsByEntity, tmpId, saveSnapshot, getSnapshot } from "../offline/offlineDB";
+import { isRG } from "../utils/isRG";
 
 const API   = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
@@ -47,7 +48,7 @@ export default function Clients() {
   const isMobile   = useIsMobile();
   const navigate   = useNavigate();
   const qrCanvasRef = useRef(null);
-  const rg = true; // Este frontend é exclusivamente Restaura Glass
+  const rg = isRG();
 
   const QR_IMG_URL = `https://quickchart.io/qr?text=${encodeURIComponent(QR_UNIVERSAL_TOKEN)}&size=280&margin=2&ecLevel=H&dark=0a0f1e&light=ffffff`;
 

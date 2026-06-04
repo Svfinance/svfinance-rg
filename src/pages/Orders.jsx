@@ -7,6 +7,7 @@ import logoGif from "../assets/video.gif";
 import { BrowserMultiFormatReader } from "@zxing/browser";
 import { enqueueCheckin, uuid, setOrderStatusOverlay, getOrderOverlays } from "../offline/offlineDB";
 import { syncNow } from "../offline/syncEngine";
+import { isRG } from "../utils/isRG";
 
 const API = "https://api.svfinance.com.br/api";
 const token = () => localStorage.getItem("token");
@@ -1375,7 +1376,7 @@ export default function Orders() {
   const isMobile   = useIsMobile();
   const navigate      = useNavigate();
   const [searchParams] = useSearchParams();
-  const rg         = true; // Este frontend é exclusivamente Restaura Glass
+  const rg = isRG();
 
   const [sidebarOpen,   setSidebarOpen]  = useState(false);
   const [orders,        setOrders]       = useState([]);
