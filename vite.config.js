@@ -29,7 +29,8 @@ export default defineConfig({
             },
           },
         ],
-        cleanupOutdatedCaches: true,
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+cleanupOutdatedCaches: true,
         navigateFallback: '/index.html',
       },
       manifest: {
