@@ -6,18 +6,19 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',       // atualiza silenciosamente, sem perguntar
-      injectRegister: null,             // você registra manualmente no main.jsx
-      filename: 'sw.js',               // nome do SW gerado
+      registerType: 'autoUpdate',
+      injectRegister: null,
+      filename: 'sw.js',
       includeAssets: [
-        'logos/restauraglass.png',
-        'icons/rg/*.png',
+        'logo/restauraglass.png',
+        'icons/rg/icon-192.png',
+        'icons/rg/icon-512.png',
+        'icons/rg/icon-maskable-512.png',
+        'icons/rg/apple-touch-icon.png',
         'favicon.ico',
       ],
       workbox: {
-        // Cacheia todos os assets gerados pelo Vite (com hash automático)
         globPatterns: ['**/*.{js,css,html,png,svg,webp,ico,webmanifest}'],
-        // Stale-while-revalidate para a API
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/api\.svfinance\.com\.br\/.*/i,
@@ -28,25 +29,24 @@ export default defineConfig({
             },
           },
         ],
-        // Limpa caches antigos automaticamente
         cleanupOutdatedCaches: true,
-        // SPA fallback
         navigateFallback: '/index.html',
       },
-      // Seu manifest RG — plugin injeta no index.html automaticamente
       manifest: {
         name: 'Restaura Glass',
         short_name: 'Restaura Glass',
-        description: 'Gestão de serviços Restaura Glass',
-        theme_color: '#16a34a',
-        background_color: '#ffffff',
+        description: 'Sistema de gestão Restaura Glass — Especialista em Limpeza de Vidros',
+        theme_color: '#2B5102',
+        background_color: '#2B5102',
         display: 'standalone',
-        start_url: '/',
+        start_url: '/dashboard',
+        orientation: 'portrait-primary',
+        lang: 'pt-BR',
+        categories: ['business', 'productivity'],
         icons: [
-          { src: '/icons/rg/icon-192.png',      sizes: '192x192', type: 'image/png' },
-          { src: '/icons/rg/icon-512.png',      sizes: '512x512', type: 'image/png' },
-          { src: '/icons/rg/icon-maskable.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
-          { src: '/icons/rg/apple-touch.png',   sizes: '180x180', type: 'image/png', purpose: 'apple touch icon' },
+          { src: '/icons/rg/icon-192.png',         sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icons/rg/icon-512.png',         sizes: '512x512', type: 'image/png', purpose: 'any' },
+          { src: '/icons/rg/icon-maskable-512.png',sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
     }),
