@@ -40,7 +40,6 @@ function useIsMobile() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Detecta Restaura Glass — POR HOSTNAME, embutido no arquivo
-// Não depende de import externo — evita erro de módulo no Vite
 function isRestauraGlass() {
   return _isRGHost();
 }
@@ -49,9 +48,9 @@ function isRestauraGlass() {
 // Menu estruturado em grupos (APENAS para Restaura Glass)
 // ─────────────────────────────────────────────────────────────────────────────
 function useMenuItemsGrouped() {
-  const role        = localStorage.getItem("role")         || "viewer";
-  const plan        = localStorage.getItem("sv_plan")      || "free";
-  const canNFe      = role === "admin" && (plan === "pro" || plan === "business");
+  const role   = localStorage.getItem("role")    || "viewer";
+  const plan   = localStorage.getItem("sv_plan") || "free";
+  const canNFe = role === "admin" && (plan === "pro" || plan === "business");
 
   return [
     {
@@ -60,10 +59,12 @@ function useMenuItemsGrouped() {
       icon: "⚙️",
       collapsed: localStorage.getItem("sv_group_operacional") === "true",
       items: [
-        { to:"/clients",             icon:"👥", label:"Clientes",               roles:["admin","financial","seller","encarregado"] },
-        { to:"/orders",              icon:"📋", label:"Ordens de Serviço",     roles:["admin","financial","seller","stock","viewer","encarregado"] },
+        { to:"/home",                icon:"🏠", label:"Início",                roles:["admin","financial","seller","stock","viewer","encarregado"] },
+        { to:"/clients",             icon:"👥", label:"Clientes",              roles:["admin","financial","seller","encarregado"] },
+        { to:"/orders",              icon:"📋", label:"Ordens de Serviço",    roles:["admin","financial","seller","stock","viewer","encarregado"] },
         { to:"/autorizacao-checkin", icon:"🔑", label:"Autorização Check-in", roles:["admin","encarregado"] },
-        { to:"/team",                icon:"👤", label:"Equipe",                roles:["admin"] },
+        { to:"/team",                icon:"👤", label:"Equipe",               roles:["admin"] },
+        { to:"/settings",            icon:"⚙️", label:"Configurações",        roles:["admin"] },
       ]
     },
     {
@@ -72,18 +73,18 @@ function useMenuItemsGrouped() {
       icon: "💰",
       collapsed: localStorage.getItem("sv_group_financeiro") === "true",
       items: [
-        { to:"/transactions", icon:"💰", label:"Transações",        roles:["admin","financial"], children:[
+        { to:"/transactions", icon:"💰", label:"Transações",         roles:["admin","financial"], children:[
           { to:"/transactions", label:"Todas as transações" },
           { to:"/bills",        label:"Contas a pagar/receber" },
         ]},
-        { to:"/analytics",    icon:"📊", label:"Analytics",         roles:["admin","financial"] },
-        { to:"/products",     icon:"📦", label:"Produtos",          roles:["admin","financial","stock","seller"] },
-        { to:"/quotes",       icon:"🧾", label:"Orçamentos",        roles:["admin","financial"] },
-        { to:"/sales",        icon:"🛒", label:"Vendas",            roles:["admin","financial"] },
+        { to:"/analytics",     icon:"📊", label:"Analytics",          roles:["admin","financial"] },
+        { to:"/products",      icon:"📦", label:"Produtos",           roles:["admin","financial","stock","seller"] },
+        { to:"/quotes",        icon:"🧾", label:"Orçamentos",         roles:["admin","financial"] },
+        { to:"/sales",         icon:"🛒", label:"Vendas",             roles:["admin","financial"] },
         ...(canNFe ? [{ to:"/sales", icon:"🧾", label:"Emitir NF-e", roles:["admin"], nfe:true }] : []),
-        { to:"/commissions",  icon:"💸", label:"Comissões",         roles:["admin","financial","seller","encarregado"] },
-        { to:"/import-export", icon:"📂", label:"Importar/Exportar", roles:["admin","financial"] },
-        { to:"/goals",        icon:"🎯", label:"Metas",             roles:["admin","financial"] },
+        { to:"/commissions",   icon:"💸", label:"Comissões",          roles:["admin","financial","seller","encarregado"] },
+        { to:"/import-export", icon:"📂", label:"Importar/Exportar",  roles:["admin","financial"] },
+        { to:"/goals",         icon:"🎯", label:"Metas",              roles:["admin","financial"] },
       ]
     },
     {
@@ -117,7 +118,8 @@ function useMenuItems() {
     { to:"/goals",        icon:"🎯", label:"Metas"         },
     { to:"/settings",     icon:"⚙️", label:"Configurações" },
   ] : [
-    { to:"/dashboard",           icon:"🏠", label:"Dashboard",          roles:null,                                                          module:"dashboard"    },
+    { to:"/home",                icon:"🏠", label:"Início",             roles:null,                                                          module:"dashboard"    },
+    { to:"/dashboard",           icon:"📊", label:"Dashboard",          roles:null,                                                          module:"dashboard"    },
     { to:"/clients",             icon:"👥", label:label("clients"),     roles:["admin","financial","seller","encarregado"],                  module:"clients"      },
     { to:"/transactions",        icon:"💰", label:"Transações",         roles:["admin","financial"],                                         module:"transactions", children:[
       { to:"/transactions", label:"Todas as transações" },
@@ -230,7 +232,9 @@ function SidebarVertical({ menuItems, groups, theme, isGlass, sidebarOpen, setSi
       onMouseEnter={() => setSidebarOpen(true)}
       onMouseLeave={() => setSidebarOpen(false)}>
       <div style={{ flexShrink:0, marginBottom:20, opacity:sidebarOpen?1:0, transition:"0.3s" }}>
-        <h2 style={{ whiteSpace:"nowrap", margin:0, fontWeight:600, letterSpacing:1, color:theme.textPrimary }}>SV Finance</h2>
+        <h2 style={{ whiteSpace:"nowrap", margin:0, fontWeight:600, letterSpacing:1, color:theme.textPrimary }}>
+          {isRG ? "Restaura Glass" : "SV Finance"}
+        </h2>
       </div>
       <div style={{ flex:1, overflowY:"auto", overflowX:"hidden", minHeight:0 }}>
         {items.map(group => (
@@ -251,29 +255,31 @@ function SidebarVertical({ menuItems, groups, theme, isGlass, sidebarOpen, setSi
             )}
             {(!isRG || expandedGroups[group.id]) && (
               <div style={{ paddingLeft:isRG?8:0 }}>
-                {group.items.map(item => {
-                  const active   = isActive(item.to) && !item.nfe;
-                  const activeBg = isGlass ? "rgba(255,255,255,0.35)" : theme.sidebarActive;
-                  return (
-                    <div key={item.nfe ? "__nfe__" : item.to} style={{
-                      padding:12, cursor:"pointer", borderRadius:10, transition:"all 0.2s", marginBottom:6,
-                      background: item.nfe
-                        ? `linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05))`
-                        : active ? activeBg : "transparent",
-                      border: item.nfe
-                        ? "1px solid rgba(212,175,55,0.4)"
-                        : active ? `1px solid ${isGlass?"rgba(255,255,255,0.55)":theme.sidebarBorder}` : "1px solid transparent",
-                    }}
-                      onMouseEnter={e=>{ if(!active&&!item.nfe) e.currentTarget.style.background=isGlass?"rgba(255,255,255,0.2)":`${theme.primary}11`; }}
-                      onMouseLeave={e=>{ if(!active&&!item.nfe) e.currentTarget.style.background="transparent"; }}>
-                      <Link to={item.to} style={{ textDecoration:"none", color: item.nfe?"#d4af37":theme.textPrimary, display:"flex", alignItems:"center", gap:12, width:"100%" }}>
-                        <span style={{ fontSize:18, minWidth:24, textAlign:"center" }}>{item.icon}</span>
-                        <span style={{ opacity:sidebarOpen?1:0, transition:"0.3s", whiteSpace:"nowrap", fontWeight:active||item.nfe?600:400 }}>{item.label}</span>
-                        {item.nfe && sidebarOpen && <span style={{ marginLeft:"auto", fontSize:9, background:"#d4af37", color:"#000", borderRadius:4, padding:"1px 5px", fontWeight:700 }}>NF-e</span>}
-                      </Link>
-                    </div>
-                  );
-                })}
+                {group.items
+                  .filter(item => !item.roles || item.roles.includes(localStorage.getItem("role") || "viewer"))
+                  .map(item => {
+                    const active   = isActive(item.to) && !item.nfe;
+                    const activeBg = isGlass ? "rgba(255,255,255,0.35)" : theme.sidebarActive;
+                    return (
+                      <div key={item.nfe ? "__nfe__" : item.to} style={{
+                        padding:12, cursor:"pointer", borderRadius:10, transition:"all 0.2s", marginBottom:6,
+                        background: item.nfe
+                          ? `linear-gradient(135deg, rgba(212,175,55,0.15), rgba(212,175,55,0.05))`
+                          : active ? activeBg : "transparent",
+                        border: item.nfe
+                          ? "1px solid rgba(212,175,55,0.4)"
+                          : active ? `1px solid ${isGlass?"rgba(255,255,255,0.55)":theme.sidebarBorder}` : "1px solid transparent",
+                      }}
+                        onMouseEnter={e=>{ if(!active&&!item.nfe) e.currentTarget.style.background=isGlass?"rgba(255,255,255,0.2)":`${theme.primary}11`; }}
+                        onMouseLeave={e=>{ if(!active&&!item.nfe) e.currentTarget.style.background="transparent"; }}>
+                        <Link to={item.to} style={{ textDecoration:"none", color: item.nfe?"#d4af37":theme.textPrimary, display:"flex", alignItems:"center", gap:12, width:"100%" }}>
+                          <span style={{ fontSize:18, minWidth:24, textAlign:"center" }}>{item.icon}</span>
+                          <span style={{ opacity:sidebarOpen?1:0, transition:"0.3s", whiteSpace:"nowrap", fontWeight:active||item.nfe?600:400 }}>{item.label}</span>
+                          {item.nfe && sidebarOpen && <span style={{ marginLeft:"auto", fontSize:9, background:"#d4af37", color:"#000", borderRadius:4, padding:"1px 5px", fontWeight:700 }}>NF-e</span>}
+                        </Link>
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </div>
@@ -329,12 +335,15 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
   const toggleAH  = () => { const n=!autoHide; setAutoHideState(n); setAutoHideLS(n); setVisible(!n); };
   const scrollNav = (d) => { scrollRef.current?.scrollBy({ left:d*160, behavior:"smooth" }); setTimeout(checkScroll, 350); };
 
-  const handleGroupClick = (idx, el, groupItems) => {
+  const handleGroupClick = (idx, el) => {
     setOpenIdx(openIdx===idx?null:idx);
     setAnchorEl(el);
   };
 
-  const items = isRG ? groups : [{ id: "flat", items: menuItems, label: "", icon: "" }];
+  const role   = localStorage.getItem("role") || "viewer";
+  const items  = isRG
+    ? groups.map(g => ({ ...g, items: g.items.filter(i => !i.roles || i.roles.includes(role)) }))
+    : [{ id: "flat", items: menuItems, label: "", icon: "" }];
 
   return (
     <>
@@ -350,7 +359,9 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
         transition:"transform 0.3s cubic-bezier(0.4,0,0.2,1)",
         pointerEvents:visible?"all":"none",
       }}>
-        <span style={{ fontWeight:700,fontSize:14,color:isRG?"#1a8a3c":"rgba(255,255,255,0.92)",padding:"0 16px",whiteSpace:"nowrap",letterSpacing:0.5,flexShrink:0 }}>{isRG?"RestauraGlass":"SV Finance"}</span>
+        <span style={{ fontWeight:700,fontSize:14,color:isRG?"#1a8a3c":"rgba(255,255,255,0.92)",padding:"0 16px",whiteSpace:"nowrap",letterSpacing:0.5,flexShrink:0 }}>
+          {isRG ? "Restaura Glass" : "SV Finance"}
+        </span>
         {canL && <button onClick={()=>scrollNav(-1)} style={{ background:"none",border:"none",color:isRG?"rgba(26,138,60,0.5)":"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",padding:"0 4px",flexShrink:0 }}>‹</button>}
         <div ref={scrollRef} onScroll={checkScroll} style={{ display:"flex",alignItems:"center",flex:1,overflowX:"auto",scrollbarWidth:"none",msOverflowStyle:"none" }}>
           <div style={{ display:"flex",alignItems:"center",gap:2,minWidth:"max-content",padding:"0 4px" }}>
@@ -358,7 +369,7 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
               const isGroup = isRG;
               return isGroup ? (
                 <div key={group.id} style={{ position:"relative",flexShrink:0 }}>
-                  <div data-navitem={idx} onClick={e=>handleGroupClick(idx,e.currentTarget,group.items)} style={{
+                  <div data-navitem={idx} onClick={e=>handleGroupClick(idx,e.currentTarget)} style={{
                     display:"flex",alignItems:"center",gap:6,padding:"6px 11px",borderRadius:8,cursor:"pointer",
                     whiteSpace:"nowrap",userSelect:"none",
                     color:openIdx===idx?(isRG?"#1a8a3c":theme.primary):(isRG?"#4a5568":theme.textMuted),
@@ -377,13 +388,13 @@ function SidebarHorizontal({ menuItems, groups, theme, isGlass, isRG }) {
                   )}
                 </div>
               ) : (
-                group.items.map(item => {
+                group.items.map((item, itemIdx) => {
                   const active  = isActive(item.to) && !item.nfe;
                   const hasChild= item.children?.length > 0;
-                  const isOpen  = openIdx===idx;
+                  const isOpen  = openIdx===itemIdx;
                   return (
                     <div key={item.nfe?"__nfe__":item.to} style={{ position:"relative",flexShrink:0 }}>
-                      <div data-navitem={idx} onClick={e=>{ if(hasChild){ setOpenIdx(openIdx===idx?null:idx); setAnchorEl(e.currentTarget); }else{ navigate(item.to); setOpenIdx(null); } }} style={{
+                      <div data-navitem={itemIdx} onClick={e=>{ if(hasChild){ setOpenIdx(openIdx===itemIdx?null:itemIdx); setAnchorEl(e.currentTarget); }else{ navigate(item.to); setOpenIdx(null); } }} style={{
                         display:"flex",alignItems:"center",gap:6,padding:"6px 11px",borderRadius:8,cursor:"pointer",
                         whiteSpace:"nowrap",userSelect:"none",
                         color: item.nfe ? "#d4af37" : active?"#fff":"rgba(255,255,255,0.65)",
@@ -481,12 +492,13 @@ function SidebarDock({ menuItems, groups, theme, isGlass, convex = true, mobile 
     window.addEventListener("touchmove",mv,{passive:false}); window.addEventListener("touchend",up);
   };
 
-  const allItems = isRG ?
-    groups.flatMap(g => [
-      { id:`__group_${g.id}__`, icon:g.icon, label:g.label, isGroupHeader:true, groupId:g.id },
-      ...g.items
-    ]) :
-    menuItems;
+  const role     = localStorage.getItem("role") || "viewer";
+  const allItems = isRG
+    ? groups.flatMap(g => [
+        { id:`__group_${g.id}__`, icon:g.icon, label:g.label, isGroupHeader:true, groupId:g.id },
+        ...g.items.filter(i => !i.roles || i.roles.includes(role))
+      ])
+    : menuItems;
 
   const R       = mobile ? 30 : 26;
   const SPACING = R * 2 + (mobile ? 12 : 10);
@@ -525,9 +537,7 @@ function SidebarDock({ menuItems, groups, theme, isGlass, convex = true, mobile 
       </div>
 
       {finalItems.map((item, i) => {
-        if (item.isGroupHeader) {
-          return null;
-        }
+        if (item.isGroupHeader) return null;
 
         let cy;
         const orderedI = isBottomZ ? n-1-i : i;
@@ -688,11 +698,14 @@ function SidebarMobile({ menuItems, groups, theme, isGlass, isRG }) {
     });
   };
 
+  const role     = localStorage.getItem("role") || "viewer";
   const backdrop = isGlass?"blur(24px)":"blur(18px)";
   const border   = isGlass?"rgba(255,255,255,0.4)":theme.borderCard;
   const bg       = isGlass?"rgba(255,255,255,0.22)":theme.bgSecondary;
 
-  const items = isRG ? groups : [{ id: "flat", items: menuItems }];
+  const items = isRG
+    ? groups.map(g => ({ ...g, items: g.items.filter(i => !i.roles || i.roles.includes(role)) }))
+    : [{ id: "flat", items: menuItems }];
 
   if (mStyle==="dock") return (
     <>
@@ -753,7 +766,9 @@ function SidebarMobile({ menuItems, groups, theme, isGlass, isRG }) {
       {open && <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:150,backdropFilter:"blur(2px)" }} onClick={()=>setOpen(false)}/>}
       <div style={panelStyle()}>
         <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"18px 18px 14px",borderBottom:`1px solid ${border}`,flexShrink:0 }}>
-          <span style={{ fontSize:16,fontWeight:700,color:theme.textPrimary,letterSpacing:1 }}>SV Finance</span>
+          <span style={{ fontSize:16,fontWeight:700,color:theme.textPrimary,letterSpacing:1 }}>
+            {isRG ? "Restaura Glass" : "SV Finance"}
+          </span>
           <div style={{ display:"flex",gap:8 }}>
             <button onClick={()=>setShowStyles(s=>!s)} style={{ background:showStyles?`${theme.primary}22`:"transparent",border:`1px solid ${showStyles?theme.primary:border}`,color:showStyles?theme.primary:theme.textMuted,borderRadius:8,width:34,height:34,cursor:"pointer",fontSize:14 }}>⚙</button>
             <button onClick={()=>setOpen(false)} style={{ background:`${theme.primary}22`,border:"none",color:theme.textPrimary,borderRadius:8,width:34,height:34,cursor:"pointer",fontSize:16 }}>✕</button>

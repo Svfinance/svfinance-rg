@@ -5,6 +5,7 @@ import { PlanProvider }   from "./contexts/PlanContext"
 import { NichoProvider }  from "./contexts/NichoContext"
 
 import Login          from "./pages/Login"
+import HomePage       from "./pages/HomePage"
 import Dashboard      from "./pages/Dashboard"
 import Analytics      from "./pages/Analytics"
 import Transactions   from "./pages/Transactions"
@@ -41,6 +42,13 @@ function App() {
 
               {/* Checkin — rota pública mas com auth interna */}
               <Route path="/checkin/:clientId" element={<CheckinScanner />} />
+
+              {/* Página inicial RG (Home) */}
+              <Route path="/home" element={
+                <ProtectedRoute>
+                  <HomePage />
+                </ProtectedRoute>
+              } />
 
               {/* Rotas protegidas — qualquer role autenticado */}
               <Route path="/dashboard"    element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
