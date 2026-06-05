@@ -6,8 +6,6 @@ import fundoRestaura   from "../../assets/fundorestaura.jpg";
 import { useState, useEffect, useRef } from "react";
 import { getSidebarStyle } from "./Sidebar";
 
-// fundorestaura.jpg só para o tema escuro (rg_dark)
-// clean usa fundo branco (bgPrimary CSS, sem imagem)
 const BG_IMAGES = {
   glass:   fundoGlassEGelo,
   gray:    fundoCinzaPrata,
@@ -16,7 +14,6 @@ const BG_IMAGES = {
 
 const API = "https://api.svfinance.com.br/api";
 
-// ─── Detecta RG por hostname ───────────────────────────────────────────────
 function _isRGHost() {
   if (typeof window === "undefined") return false;
   const h = window.location.hostname;
@@ -28,10 +25,11 @@ function _isRGHost() {
   );
 }
 
-// ─── Logo girando no eixo Y — aparece em todas as páginas RG ──────────────
+// ─── Logo girando no topo — igual à HomePage, mas fixa no topo de todas ───
+// NÃO aparece na /home (controlado pelo PageLayout via prop)
 function RGSpinningLogo({ isHorizontal }) {
   const TOPBAR_H = 54;
-  // Tamanho responsivo: menor em mobile, maior em desktop
+  const top = isHorizontal ? TOPBAR_H + 8 : 12;
   return (
     <>
       <style>{`
@@ -39,46 +37,40 @@ function RGSpinningLogo({ isHorizontal }) {
           0%   { transform: rotateY(0deg); }
           100% { transform: rotateY(360deg); }
         }
-        .rg-spinning-logo {
+        .rg-spinning-logo-top {
           position: fixed;
-          /* centro da tela, ajustando para o topbar quando horizontal */
-          top: calc(50% + ${isHorizontal ? TOPBAR_H / 2 : 0}px);
+          top: ${top}px;
           left: 50%;
-          transform-origin: center center;
-          animation: rgSpinY 10s linear infinite;
+          margin-left: -32px;
+          width: 64px;
+          height: 64px;
+          animation: rgSpinY 8s linear infinite;
           z-index: 1;
           pointer-events: none;
           user-select: none;
           -webkit-user-select: none;
-          /* translação aplicada via margin negativo para não interferir no transform da animação */
-          margin-top: -40px;
-          margin-left: -40px;
-          width: 80px;
-          height: 80px;
-          opacity: 0.13;
-          filter: drop-shadow(0 2px 8px rgba(43,81,2,0.18));
+          opacity: 0.72;
+          filter: drop-shadow(0 2px 12px rgba(43,81,2,0.22));
         }
         @media (min-width: 769px) {
-          .rg-spinning-logo {
-            width: 96px;
-            height: 96px;
-            margin-top: -48px;
-            margin-left: -48px;
-            opacity: 0.11;
+          .rg-spinning-logo-top {
+            width: 80px;
+            height: 80px;
+            margin-left: -40px;
+            opacity: 0.78;
           }
         }
         @media (min-width: 1200px) {
-          .rg-spinning-logo {
-            width: 112px;
-            height: 112px;
-            margin-top: -56px;
-            margin-left: -56px;
-            opacity: 0.10;
+          .rg-spinning-logo-top {
+            width: 96px;
+            height: 96px;
+            margin-left: -48px;
+            opacity: 0.80;
           }
         }
       `}</style>
       <img
-        className="rg-spinning-logo"
+        className="rg-spinning-logo-top"
         src="/logo/restauraglass.png"
         alt=""
         aria-hidden="true"
@@ -88,7 +80,7 @@ function RGSpinningLogo({ isHorizontal }) {
   );
 }
 
-// ─── Marca d'água de fundo ─────────────────────────────────────────────────
+// ─── Marca d'água de fundo — mais nítida ──────────────────────────────────
 function RGBackground() {
   return (
     <>
@@ -118,8 +110,8 @@ function RGBackground() {
           left: 50%;
           transform: translate(-50%, -52%);
           width: min(520px, 75vw);
-          opacity: 0.045;
-          filter: grayscale(0%) saturate(0.8) brightness(0.6);
+          opacity: 0.10;
+          filter: grayscale(0%) saturate(1) brightness(0.75);
           user-select: none;
           -webkit-user-select: none;
         }
@@ -128,8 +120,8 @@ function RGBackground() {
           bottom: 32px;
           right: 40px;
           width: 140px;
-          opacity: 0.06;
-          filter: grayscale(20%) saturate(0.7);
+          opacity: 0.12;
+          filter: grayscale(10%) saturate(0.9);
           user-select: none;
           -webkit-user-select: none;
         }
@@ -151,7 +143,7 @@ function RGBackground() {
         @media (max-width: 768px) {
           .rg-bg-logo {
             width: min(320px, 90vw);
-            opacity: 0.035;
+            opacity: 0.08;
           }
           .rg-bg-logo-corner {
             display: none;
@@ -309,7 +301,7 @@ function NotificationBell({ alerts, theme, isGlass }) {
 }
 
 // ─── PageLayout principal ──────────────────────────────────────────────────
-export default function PageLayout({ children, style }) {
+export default function PageLayout({ children, style, hideLogo = false }) {
   const { theme, themeId } = useTheme();
   const alerts = useAlerts();
   const bgImage    = BG_IMAGES[themeId] || null;
@@ -350,8 +342,6 @@ export default function PageLayout({ children, style }) {
         ::-webkit-scrollbar-track{background:transparent;}
         ::-webkit-scrollbar-thumb{background:${isGlass?"rgba(0,0,0,0.2)":"rgba(255,255,255,0.1)"};border-radius:3px;}
         ::-webkit-scrollbar-thumb:hover{background:${isGlass?"rgba(0,0,0,0.35)":"rgba(255,255,255,0.2)"};}
-
-        /* ── Cards transparentes no tema RG clean ──────────────────────── */
         ${isRG && isClean ? `
           .sv-card, [class*="card"], [data-card] {
             background: rgba(255,255,255,0.55) !important;
@@ -362,21 +352,17 @@ export default function PageLayout({ children, style }) {
         ` : ""}
       `}</style>
 
-      {/* Overlay para temas com imagem */}
       {isImgTheme && theme.bgOverlay && (
         <div style={{position:"fixed",inset:0,background:theme.bgOverlay,pointerEvents:"none",zIndex:0}}/>
       )}
-
-      {/* Overlay para rg_dark sem imagem — vinheta suave */}
       {themeId==="rg_dark" && !isImgTheme && (
         <div style={{position:"fixed",inset:0,background:"radial-gradient(ellipse at center,transparent 40%,rgba(0,0,0,0.4) 100%)",pointerEvents:"none",zIndex:0}}/>
       )}
 
-      {/* Marca d'água Restaura Glass — fundo */}
       {isRG && <RGBackground />}
 
-      {/* Logo girando no eixo Y — todas as páginas RG */}
-      {isRG && <RGSpinningLogo isHorizontal={isHorizontal} />}
+      {/* Logo giratória no topo — em todas as páginas RG exceto /home */}
+      {isRG && !hideLogo && <RGSpinningLogo isHorizontal={isHorizontal} />}
 
       <NotificationBell alerts={alerts} theme={theme} isGlass={isGlass}/>
       {children}

@@ -5,6 +5,7 @@ import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import { getSidebarStyle } from "../components/layout/Sidebar";
 
+
 function getSaudacao() {
   const h = new Date().getHours();
   if (h >= 5  && h < 12) return { texto: "Bom dia",   emoji: "☀️" };
@@ -50,7 +51,8 @@ export default function HomePage() {
   ].filter(a => a.roles.includes(role));
 
   return (
-    <PageLayout>
+    
+    <PageLayout hideLogo>
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
 
       <main style={{

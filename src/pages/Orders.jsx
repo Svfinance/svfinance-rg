@@ -24,7 +24,7 @@ const RGT = {
   cardBg:      "rgba(255,255,255,0.78)",
   cardBlur:    "blur(22px) saturate(180%)",
   cardShadow:  "0 8px 32px rgba(26,138,60,0.13), 0 2px 8px rgba(0,0,0,0.07)",
-  pageBg:      "linear-gradient(140deg,#f0faf4 0%,#ffffff 55%,#e8f5ed 100%)",
+  pageBg:      "transparent",
   text:        "#1a1a1a",
   textSub:     "#4a5568",
   radius:      14,
