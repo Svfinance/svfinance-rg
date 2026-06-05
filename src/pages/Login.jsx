@@ -115,7 +115,7 @@ export default function Login() {
   const [success, setSuccess]                   = useState("")
 
   useEffect(() => {
-    if (localStorage.getItem("token")) { navigate("/dashboard"); return }
+    if (localStorage.getItem("token")) { navigate("/home"); return }
     const token    = searchParams.get("token")
     const pathname = window.location.pathname
     if (token && pathname.includes("verify-email")) {
@@ -155,7 +155,7 @@ export default function Login() {
         if (data?.nicho) updateNicho(data.nicho)
         // ← Dispara evento para forçar tema correto (ex: clean para Restaura Glass)
         window.dispatchEvent(new Event("sv_login"))
-        navigate("/dashboard")
+        navigate("/home")
       } else if (data.email_unverified) {
         setUnverifiedEmail(data.email || email)
         setScreen("verify-pending")
