@@ -336,7 +336,7 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
           {/* Semanas */}
           {card.semanas.map((sem, idx) => (
             <div key={idx} style={{ borderBottom:idx<card.semanas.length-1?"1px solid rgba(26,138,60,0.3)":undefined }}>
-              <div style={{ display:isMobile?"flex":"grid", flexDirection:isMobile?"column":undefined, gridTemplateColumns:isMobile?undefined:"160px 1fr", minHeight:isMobile?"auto":52 }}>
+              <div style={{ display:"flex", flexDirection:"column", minHeight:isMobile?"auto":52 }}>
                 {/* Esq: int + hr + checkin */}
                 <div style={{ borderRight:isMobile?"none":"1px solid rgba(26,138,60,0.3)", borderBottom:isMobile?"1px solid rgba(26,138,60,0.2)":"none", padding:"8px 10px", display:"flex", flexDirection:"column", gap:4 }}>
                   <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -906,7 +906,7 @@ function RestauraGlassCardForm({ clients, onSubmit, onCancel, isMobile }) {
             const dataCalc = datas[idx] || "";
             return (
               <div key={idx} style={{ borderBottom: idx < card.semanas.length - 1 ? "1px solid rgba(26,138,60,0.25)" : "none" }}>
-                <div style={{ display: isMobile ? "flex" : "grid", flexDirection: isMobile ? "column" : undefined, gridTemplateColumns: isMobile ? undefined : "180px 1fr", minHeight: isMobile ? "auto" : 48 }}>
+                <div style={{ display: "flex", flexDirection: "column", minHeight: isMobile ? "auto" : 48 }}>
                   {/* Esquerda: controles */}
                   <div style={{ borderRight: isMobile ? "none" : "1px solid rgba(26,138,60,0.2)", borderBottom: isMobile ? "1px solid rgba(26,138,60,0.15)" : "none", padding: "6px 10px", display: "flex", flexDirection: "column", gap: 5 }}>
                     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -1110,7 +1110,20 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
 
   function goMode(m){stopCamera();setNum("");setNumErr("");setPin(["","","",""]);setPinErr("");setCamMode(m);}
   function submitNum(){const v=numInput.trim();if(!v){setNumErr("Digite o código.");return;}if(String(v)===String(clientCode))onDetected(QR_TOKEN);else setNumErr("Código incorreto.");}
-  function submitPin(){const v=pin.join("");if(v.length<4){setPinErr("Digite 4 dígitos.");return;}if(String(v)===String(clientCode).slice(-4).padStart(4,"0"))onDetected(QR_TOKEN);else setPinErr("PIN incorreto.");}
+  async function submitPin(){
+  const v=pin.join("");
+  if(v.length<4){setPinErr("Digite o PIN completo.");return;}
+  try{
+    const res=await fetch(`${API}/checkin/pin/validate`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},
+      body:JSON.stringify({client_id:clientCode,pin:v}),
+    });
+    const data=await res.json();
+    if(data.ok){stopCamera();onDetected(QR_TOKEN);}
+    else setPinErr(data.msg||"PIN inválido.");
+  }catch{setPinErr("Erro de conexão. Tente outro método.");}
+}
   function handlePinDigit(idx,v){const d=v.replace(/\D/g,"").slice(-1);const n=[...pin];n[idx]=d;setPin(n);setPinErr("");if(d&&idx<3)pinRefs[idx+1].current?.focus();}
   function handlePinKey(idx,e){if(e.key==="Backspace"&&!pin[idx]&&idx>0)pinRefs[idx-1].current?.focus();}
 
@@ -1158,7 +1171,7 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
       </>)}
       {mode==="pin"&&(<>
         <div style={S.sub}>Digite o PIN de 4 dígitos</div>
-        <div style={S.pinRow}>{pin.map((d,idx)=><input key={idx} ref={pinRefs[idx]} style={{...S.pinBox,borderColor:pinErr?"rgba(239,68,68,0.4)":(d?"rgba(79,142,247,0.4)":"rgba(255,255,255,0.12)")}} type="password" inputMode="numeric" maxLength={1} value={d} onChange={e=>handlePinDigit(idx,e.target.value)} onKeyDown={e=>handlePinKey(idx,e)} autoFocus={idx===0}/>)}</div>
+        <input style={{...S.inp,letterSpacing:"8px",fontSize:22}} type="password" inputMode="numeric" maxLength={6} placeholder="••••••" value={pin.join("")} onChange={e=>{const v=e.target.value.replace(/\D/g,"").slice(0,6);setPin(v.split(""));setPinErr("");}} autoFocus/>
         {pinErr&&<div style={S.err}>{pinErr}</div>}
         <button style={S.btnGrn} onClick={submitPin} disabled={pin.join("").length<4}>Validar PIN</button>
       </>)}

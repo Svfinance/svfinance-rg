@@ -710,7 +710,6 @@ function SidebarMobile({ menuItems, groups, theme, isGlass, isRG }) {
   if (mStyle==="dock") return (
     <>
       <SidebarDock menuItems={menuItems} groups={groups} theme={theme} isGlass={isGlass} convex={true} mobile={true} isRG={isRG}/>
-      <button onClick={()=>setShowStyles(s=>!s)} style={{ position:"fixed", top:14, right:14, zIndex:600, width:40, height:40, borderRadius:12, background:showStyles?`${theme.primary}22`:isGlass?"rgba(255,255,255,0.35)":"rgba(15,20,42,0.9)", backdropFilter:backdrop, WebkitBackdropFilter:backdrop, border:`1px solid ${showStyles?theme.primary:border}`, color:showStyles?theme.primary:theme.textMuted, fontSize:16, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 4px 16px rgba(0,0,0,0.4)" }}>⚙</button>
       {showStyles && (<><div style={{ position:"fixed",inset:0,zIndex:595 }} onClick={()=>setShowStyles(false)}/><StylePicker styles={MOBILE_STYLES} current={mStyle} onSelect={setMStyle} theme={theme} isGlass={isGlass} border={border}/></>)}
     </>
   );
