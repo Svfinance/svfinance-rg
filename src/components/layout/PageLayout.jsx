@@ -1,5 +1,6 @@
 // src/components/layout/PageLayout.jsx
 import { useTheme } from "../../contexts/ThemeContext";
+import { useNavigate } from "react-router-dom";
 import fundoGlassEGelo from "../../assets/fundoglassegelo.jpg";
 import fundoCinzaPrata from "../../assets/fundocinzaprata.jpg";
 import fundoRestaura   from "../../assets/fundorestaura.jpg";
@@ -25,11 +26,75 @@ function _isRGHost() {
   );
 }
 
-// ─── Logo girando no topo — igual à HomePage, mas fixa no topo de todas ───
-// NÃO aparece na /home (controlado pelo PageLayout via prop)
+// ─── Logo clicável fixa — volta para /home ─────────────────────────────────
+function RGHomeLogo({ isHorizontal }) {
+  const navigate  = useNavigate();
+  const TOPBAR_H  = 54;
+  const topOffset = isHorizontal ? TOPBAR_H + 8 : 12;
+
+  return (
+    <>
+      <style>{`
+        .rg-home-logo-btn {
+          position: fixed;
+          top: ${topOffset}px;
+          left: 12px;
+          z-index: 300;
+          background: rgba(255,255,255,0.82);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          border: 1.5px solid rgba(43,81,2,0.18);
+          border-radius: 12px;
+          padding: 5px 8px;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          box-shadow: 0 2px 12px rgba(43,81,2,0.10);
+          transition: all 0.2s ease;
+          user-select: none;
+          outline: none;
+        }
+        .rg-home-logo-btn:hover {
+          background: rgba(255,255,255,0.97);
+          border-color: rgba(43,81,2,0.38);
+          box-shadow: 0 4px 20px rgba(43,81,2,0.18);
+          transform: translateY(-1px);
+        }
+        .rg-home-logo-btn img {
+          width: 28px;
+          height: 28px;
+          object-fit: contain;
+          border-radius: 6px;
+        }
+        .rg-home-logo-btn span {
+          font-size: 12px;
+          font-weight: 700;
+          color: #2B5102;
+          white-space: nowrap;
+          letter-spacing: 0.3px;
+        }
+        @media (max-width: 768px) {
+          .rg-home-logo-btn span { display: none; }
+          .rg-home-logo-btn { padding: 5px 6px; border-radius: 10px; }
+        }
+      `}</style>
+      <button
+        className="rg-home-logo-btn"
+        onClick={() => navigate("/home")}
+        title="Voltar para o Início"
+        aria-label="Início Restaura Glass"
+      >
+        <img src="/logo/restauraglass.png" alt="Restaura Glass" draggable="false" />
+        <span>Início</span>
+      </button>
+    </>
+  );
+}
+
+// ─── Logo girando no eixo Y ────────────────────────────────────────────────
 function RGSpinningLogo({ isHorizontal }) {
   const TOPBAR_H = 54;
-  const top = isHorizontal ? TOPBAR_H + 8 : 12;
   return (
     <>
       <style>{`
@@ -37,142 +102,57 @@ function RGSpinningLogo({ isHorizontal }) {
           0%   { transform: rotateY(0deg); }
           100% { transform: rotateY(360deg); }
         }
-        .rg-spinning-logo-top {
+        .rg-spinning-logo {
           position: fixed;
-          top: ${top}px;
+          top: calc(50% + ${isHorizontal ? TOPBAR_H / 2 : 0}px);
           left: 50%;
-          margin-left: -32px;
-          width: 64px;
-          height: 64px;
-          animation: rgSpinY 8s linear infinite;
+          animation: rgSpinY 10s linear infinite;
           z-index: 1;
           pointer-events: none;
           user-select: none;
           -webkit-user-select: none;
-          opacity: 0.72;
-          filter: drop-shadow(0 2px 12px rgba(43,81,2,0.22));
+          margin-top: -40px;
+          margin-left: -40px;
+          width: 80px;
+          height: 80px;
+          opacity: 0.13;
+          filter: drop-shadow(0 2px 8px rgba(43,81,2,0.18));
         }
         @media (min-width: 769px) {
-          .rg-spinning-logo-top {
-            width: 80px;
-            height: 80px;
-            margin-left: -40px;
-            opacity: 0.78;
-          }
+          .rg-spinning-logo { width: 96px; height: 96px; margin-top: -48px; margin-left: -48px; opacity: 0.11; }
         }
         @media (min-width: 1200px) {
-          .rg-spinning-logo-top {
-            width: 96px;
-            height: 96px;
-            margin-left: -48px;
-            opacity: 0.80;
-          }
+          .rg-spinning-logo { width: 112px; height: 112px; margin-top: -56px; margin-left: -56px; opacity: 0.10; }
         }
       `}</style>
-      <img
-        className="rg-spinning-logo-top"
-        src="/logo/restauraglass.png"
-        alt=""
-        aria-hidden="true"
-        draggable="false"
-      />
+      <img className="rg-spinning-logo" src="/logo/restauraglass.png" alt="" aria-hidden="true" draggable="false" />
     </>
   );
 }
 
-// ─── Marca d'água de fundo — mais nítida ──────────────────────────────────
+// ─── Marca d'água de fundo ─────────────────────────────────────────────────
 function RGBackground() {
   return (
     <>
       <style>{`
-        .rg-bg-wrapper {
-          position: fixed;
-          inset: 0;
-          z-index: 0;
-          pointer-events: none;
-          overflow: hidden;
-        }
-        .rg-bg-gradient {
-          position: absolute;
-          inset: 0;
-          background:
-            radial-gradient(ellipse 80% 60% at 50% 30%,
-              rgba(43,81,2,0.08) 0%,
-              rgba(43,81,2,0.03) 50%,
-              transparent 100%),
-            radial-gradient(ellipse 60% 80% at 80% 80%,
-              rgba(43,81,2,0.06) 0%,
-              transparent 70%);
-        }
-        .rg-bg-logo {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -52%);
-          width: min(520px, 75vw);
-          opacity: 0.10;
-          filter: grayscale(0%) saturate(1) brightness(0.75);
-          user-select: none;
-          -webkit-user-select: none;
-        }
-        .rg-bg-logo-corner {
-          position: absolute;
-          bottom: 32px;
-          right: 40px;
-          width: 140px;
-          opacity: 0.12;
-          filter: grayscale(10%) saturate(0.9);
-          user-select: none;
-          -webkit-user-select: none;
-        }
-        .rg-bg-topline {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          height: 2px;
-          background: linear-gradient(
-            90deg,
-            transparent 0%,
-            rgba(43,81,2,0.4) 30%,
-            rgba(43,81,2,0.6) 50%,
-            rgba(43,81,2,0.4) 70%,
-            transparent 100%
-          );
-        }
-        @media (max-width: 768px) {
-          .rg-bg-logo {
-            width: min(320px, 90vw);
-            opacity: 0.08;
-          }
-          .rg-bg-logo-corner {
-            display: none;
-          }
-        }
+        .rg-bg-wrapper { position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden; }
+        .rg-bg-gradient { position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 50% 30%,rgba(43,81,2,0.08) 0%,rgba(43,81,2,0.03) 50%,transparent 100%),radial-gradient(ellipse 60% 80% at 80% 80%,rgba(43,81,2,0.06) 0%,transparent 70%); }
+        .rg-bg-logo { position:absolute;top:50%;left:50%;transform:translate(-50%,-52%);width:min(520px,75vw);opacity:0.045;filter:grayscale(0%) saturate(0.8) brightness(0.6);user-select:none;-webkit-user-select:none; }
+        .rg-bg-logo-corner { position:absolute;bottom:32px;right:40px;width:140px;opacity:0.06;filter:grayscale(20%) saturate(0.7);user-select:none;-webkit-user-select:none; }
+        .rg-bg-topline { position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 0%,rgba(43,81,2,0.4) 30%,rgba(43,81,2,0.6) 50%,rgba(43,81,2,0.4) 70%,transparent 100%); }
+        @media (max-width:768px) { .rg-bg-logo{width:min(320px,90vw);opacity:0.035;} .rg-bg-logo-corner{display:none;} }
       `}</style>
       <div className="rg-bg-wrapper">
         <div className="rg-bg-gradient" />
         <div className="rg-bg-topline" />
-        <img
-          className="rg-bg-logo"
-          src="/logo/restauraglass.png"
-          alt=""
-          aria-hidden="true"
-          draggable="false"
-        />
-        <img
-          className="rg-bg-logo-corner"
-          src="/logo/restauraglass.png"
-          alt=""
-          aria-hidden="true"
-          draggable="false"
-        />
+        <img className="rg-bg-logo"        src="/logo/restauraglass.png" alt="" aria-hidden="true" draggable="false" />
+        <img className="rg-bg-logo-corner" src="/logo/restauraglass.png" alt="" aria-hidden="true" draggable="false" />
       </div>
     </>
   );
 }
 
-// ─── Alertas ───────────────────────────────────────────────────────────────
+// ─── Alertas ──────────────────────────────────────────────────────────────
 function useAlerts() {
   const [alerts, setAlerts] = useState([]);
   useEffect(() => {
@@ -227,7 +207,7 @@ function useAlerts() {
   return alerts;
 }
 
-// ─── Sino de notificações ──────────────────────────────────────────────────
+// ─── Sino de notificações ─────────────────────────────────────────────────
 function NotificationBell({ alerts, theme, isGlass }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -241,11 +221,8 @@ function NotificationBell({ alerts, theme, isGlass }) {
     const fn = e => { if(ref.current&&!ref.current.contains(e.target))setOpen(false); };
     document.addEventListener("mousedown",fn); return()=>document.removeEventListener("mousedown",fn);
   }, []);
-  const startDrag = (mx,my) => {
-    dragging.current=true; didDrag.current=false;
-    dragStart.current={mx,my,bx:pos.x,by:pos.y};
-  };
-  const moveDrag = (mx,my) => {
+  const startDrag = (mx,my) => { dragging.current=true; didDrag.current=false; dragStart.current={mx,my,bx:pos.x,by:pos.y}; };
+  const moveDrag  = (mx,my) => {
     if(!dragging.current)return;
     const dx=mx-dragStart.current.mx,dy=my-dragStart.current.my;
     if(Math.abs(dx)>3||Math.abs(dy)>3)didDrag.current=true;
@@ -300,10 +277,10 @@ function NotificationBell({ alerts, theme, isGlass }) {
   );
 }
 
-// ─── PageLayout principal ──────────────────────────────────────────────────
-export default function PageLayout({ children, style, hideLogo = false }) {
+// ─── PageLayout principal ─────────────────────────────────────────────────
+export default function PageLayout({ children, style }) {
   const { theme, themeId } = useTheme();
-  const alerts = useAlerts();
+  const alerts     = useAlerts();
   const bgImage    = BG_IMAGES[themeId] || null;
   const isImgTheme = !!bgImage;
   const isGlass    = themeId==="glass" || themeId==="gray" || themeId==="rg_dark";
@@ -311,7 +288,7 @@ export default function PageLayout({ children, style, hideLogo = false }) {
   const isRG       = _isRGHost();
   const [sidebarStyle, setSidebarStyle] = useState(getSidebarStyle());
   const isHorizontal = sidebarStyle === "horizontal";
-  const TOPBAR_H = 54;
+  const TOPBAR_H     = 54;
 
   useEffect(() => {
     const fn = () => setSidebarStyle(getSidebarStyle());
@@ -343,11 +320,11 @@ export default function PageLayout({ children, style, hideLogo = false }) {
         ::-webkit-scrollbar-thumb{background:${isGlass?"rgba(0,0,0,0.2)":"rgba(255,255,255,0.1)"};border-radius:3px;}
         ::-webkit-scrollbar-thumb:hover{background:${isGlass?"rgba(0,0,0,0.35)":"rgba(255,255,255,0.2)"};}
         ${isRG && isClean ? `
-          .sv-card, [class*="card"], [data-card] {
-            background: rgba(255,255,255,0.55) !important;
-            backdrop-filter: blur(14px) !important;
-            -webkit-backdrop-filter: blur(14px) !important;
-            border: 1px solid rgba(43,81,2,0.15) !important;
+          .sv-card,[class*="card"],[data-card]{
+            background:rgba(255,255,255,0.55)!important;
+            backdrop-filter:blur(14px)!important;
+            -webkit-backdrop-filter:blur(14px)!important;
+            border:1px solid rgba(43,81,2,0.15)!important;
           }
         ` : ""}
       `}</style>
@@ -360,9 +337,8 @@ export default function PageLayout({ children, style, hideLogo = false }) {
       )}
 
       {isRG && <RGBackground />}
-
-      {/* Logo giratória no topo — em todas as páginas RG exceto /home */}
-      {isRG && !hideLogo && <RGSpinningLogo isHorizontal={isHorizontal} />}
+      {isRG && <RGSpinningLogo isHorizontal={isHorizontal} />}
+      {isRG && <RGHomeLogo isHorizontal={isHorizontal} />}
 
       <NotificationBell alerts={alerts} theme={theme} isGlass={isGlass}/>
       {children}
