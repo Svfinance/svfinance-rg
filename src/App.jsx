@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { ThemeProvider }  from "./contexts/ThemeContext"
 import { PlanProvider }   from "./contexts/PlanContext"
 import { NichoProvider }  from "./contexts/NichoContext"
@@ -51,7 +51,7 @@ function App() {
               } />
 
               {/* Rotas protegidas — qualquer role autenticado */}
-              <Route path="/dashboard"    element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/dashboard" element={<ProtectedRoute><Navigate to="/home" /></ProtectedRoute>} />
               <Route path="/clients"      element={<ProtectedRoute><Clients /></ProtectedRoute>} />
               <Route path="/products"     element={<ProtectedRoute><Products /></ProtectedRoute>} />
               <Route path="/quotes"       element={<ProtectedRoute><Quotes /></ProtectedRoute>} />
