@@ -1203,205 +1203,417 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
 }
 
 // ── CHECKIN MODAL ─────────────────────────────────────────────────────────────
+// Substitui o componente CheckinModal inteiro no Orders.jsx
+// Bugs corrigidos:
+// 1. Botão "Finalizar" mostrava tela de iniciar (localStorage não era lido antes da API)
+// 2. Mensagem de erro sumia rápido após leitura do QR
+// 3. Erro errado quando já tem checkin aberto de outro usuário
+
 function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
-  const [step,setStep]     = useState("select_action");
-  const [action,setAction] = useState(null);
-  const [openChk,setOpenChk]=useState(null);
-  const [location,setLoc]  = useState(null);
-  const [notes,setNotes]   = useState("");
-  const [sending,setSending]=useState(false);
-  const [error,setError]   = useState("");
-  const [result,setResult] = useState(null);
-  const [loadingOpen,setLO]=useState(true);
-  const [pinMode,setPinMode]=useState(false);
-  const [pinValue,setPinVal]=useState("");
-  const [offlineMsg,setOffMsg]=useState("");
+  const [step,     setStep]    = useState("select_action");
+  const [action,   setAction]  = useState(null);
+  const [openChk,  setOpenChk] = useState(null);
+  const [location, setLoc]     = useState(null);
+  const [notes,    setNotes]   = useState("");
+  const [sending,  setSending] = useState(false);
+  const [error,    setError]   = useState("");
+  const [result,   setResult]  = useState(null);
+  const [loadingOpen, setLO]   = useState(true);
+  const [pinMode,  setPinMode] = useState(false);
+  const [pinValue, setPinVal]  = useState("");
+  const [offlineMsg, setOffMsg]= useState("");
 
-  const now=new Date();
-  const horaFmt=now.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
-  const dataFmt=now.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"long"});
+  const now     = new Date();
+  const horaFmt = now.toLocaleTimeString("pt-BR", { hour:"2-digit", minute:"2-digit" });
+  const dataFmt = now.toLocaleDateString("pt-BR", { weekday:"long", day:"2-digit", month:"long" });
 
-  useEffect(()=>{
-    if(!navigator.geolocation)return;
-    const id=navigator.geolocation.watchPosition(p=>setLoc({lat:p.coords.latitude,lon:p.coords.longitude}),()=>{},{timeout:15000,enableHighAccuracy:true,maximumAge:0});
-    return()=>navigator.geolocation.clearWatch(id);
-  },[]);
+  // GPS
+  useEffect(() => {
+    if (!navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      p => setLoc({ lat: p.coords.latitude, lon: p.coords.longitude }),
+      () => {},
+      { timeout:15000, enableHighAccuracy:true, maximumAge:0 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
 
-  useEffect(()=>{
-    async function checkOpen(){
-      const localKey = `sv_chk_open_${order.id}`;
+  // Verificar check-in aberto — localStorage tem prioridade, API confirma
+  useEffect(() => {
+    const localKey = `sv_chk_open_${order.id}`;
 
-      // 1. Verificar localStorage primeiro (garante estado offline e entre sessões)
-      let localData = null;
+    async function checkOpen() {
+      // 1. Lê localStorage PRIMEIRO — estado local é fonte de verdade offline
       const localRaw = localStorage.getItem(localKey);
-      if(localRaw){
-        try{
-          localData = JSON.parse(localRaw);
-          const ageMs = Date.now() - new Date(localData.checkin_at||0).getTime();
-          if(ageMs < 8*60*60*1000){ // válido por até 8 horas
+      if (localRaw) {
+        try {
+          const localData = JSON.parse(localRaw);
+          const ageMs = Date.now() - new Date(localData.checkin_at || 0).getTime();
+          if (ageMs < 8 * 60 * 60 * 1000) {
+            // válido por 8h — já seta e libera o loading imediatamente
             setOpenChk(localData);
+            setLO(false);
           } else {
-            localStorage.removeItem(localKey); localData = null;
+            localStorage.removeItem(localKey);
           }
-        }catch{ localStorage.removeItem(localKey); }
-      }
-
-      if(!navigator.onLine){ setLO(false); return; }
-
-      // 2. Verificar no servidor — servidor tem palavra final quando responde positivamente
-      try{
-        const res=await fetch(`${API}/checkin/open`,{headers:{Authorization:`Bearer ${token()}`}});
-        const data=await res.json();
-        if(data.open && String(data.order_id)===String(order.id)){
-          // Servidor confirma check-in aberto → atualizar localStorage e estado
-          const merged = {...data, checkin_at: data.checkin_at||new Date().toISOString()};
-          setOpenChk(merged);
-          localStorage.setItem(localKey, JSON.stringify(merged));
-        } else if(!localData){
-          // Servidor diz "nenhum" E não há localStorage válido → definitivamente null
-          setOpenChk(null);
+        } catch {
           localStorage.removeItem(localKey);
         }
-        // Se servidor diz "nenhum" MAS localStorage tem dados recentes →
-        // manter localStorage (pode ser inconsistência temporária da API)
-      }catch{ /* falha na rede — manter o que o localStorage definiu */ }
-      finally{ setLO(false); }
-    }
-    checkOpen();const interval=setInterval(checkOpen,10000);return()=>clearInterval(interval);
-  },[order.id]);
+      } else {
+        // Sem localStorage — mostra loading enquanto consulta API
+        setLO(true);
+      }
 
-  function onQRDetected(text){
-    if(text.trim()!==QR_TOKEN){
+      if (!navigator.onLine) { setLO(false); return; }
+
+      // 2. Consulta API — pode confirmar ou negar o que o localStorage diz
+      try {
+        const res  = await fetch(`${API}/checkin/open`, { headers: { Authorization: `Bearer ${token()}` } });
+        const data = await res.json();
+
+        if (data.open && String(data.order_id) === String(order.id)) {
+          // API confirma checkin aberto para ESTA OS
+          const merged = { ...data, checkin_at: data.checkin_at || new Date().toISOString() };
+          setOpenChk(merged);
+          localStorage.setItem(localKey, JSON.stringify(merged));
+        } else if (data.open && String(data.order_id) !== String(order.id)) {
+          // API diz que há checkin aberto mas é de OUTRA OS — não afeta esta
+          // mantém o que o localStorage disse
+        } else {
+          // API diz sem checkin aberto
+          // Só limpa se o localStorage também não tinha nada (evita falso negativo)
+          const localRaw2 = localStorage.getItem(localKey);
+          if (!localRaw2) {
+            setOpenChk(null);
+          }
+          // Se localStorage tem dados mas API diz não — pode ser delay de sync
+          // Mantém localStorage por segurança
+        }
+      } catch {
+        // Falha de rede — mantém o que o localStorage definiu
+      } finally {
+        setLO(false);
+      }
+    }
+
+    checkOpen();
+    const interval = setInterval(checkOpen, 10000);
+    return () => clearInterval(interval);
+  }, [order.id]);
+
+  // QR detectado — erro fica fixo na tela, não some com mudança de step
+  function onQRDetected(text) {
+    if (text.trim() !== QR_TOKEN) {
+      // Muda step PRIMEIRO, depois seta erro com delay para garantir render
       setStep("select_action");
-      setTimeout(()=>setError("❌ QR Code inválido. Use o adesivo oficial SV Finance."),50);
+      setTimeout(() => setError("❌ QR Code inválido. Use o adesivo oficial SV Finance."), 50);
       return;
     }
     setError("");
     setStep("confirming");
   }
-  function buildBody(){
-    const base={lat:location?.lat||null,lon:location?.lon||null,notes:notes||null,qr_token:QR_TOKEN,pin:pinMode?pinValue:null,local_id:uuid()};
-    if(action==="start")return{...base,kind:"start",client_id:order.client_id,order_id:order.id};
-    return{...base,kind:"finish",checkin_id:openChk?.checkin_id,order_id:order.id};
+
+  function buildBody() {
+    const base = {
+      lat:      location?.lat || null,
+      lon:      location?.lon || null,
+      notes:    notes || null,
+      qr_token: QR_TOKEN,
+      pin:      pinMode ? pinValue : null,
+      local_id: uuid(),
+    };
+    if (action === "start") return { ...base, kind:"start", client_id:order.client_id, order_id:order.id };
+    return { ...base, kind:"finish", checkin_id:openChk?.checkin_id, order_id:order.id };
   }
 
-  async function confirmar(){
-    setSending(true);setError("");setOffMsg("");
-    const body=buildBody();
-    if(!navigator.onLine){
-      try{await enqueueCheckin(body);if(action==="start"){await setOrderStatusOverlay(order.id,"in_progress");// Salvar check-in aberto no localStorage para detectar estado offline
-localStorage.setItem(`sv_chk_open_${order.id}`,JSON.stringify({open:true,order_id:order.id,checkin_id:body.local_id,checkin_at:new Date().toISOString(),offline:true}));}else{await setOrderStatusOverlay(order.id,"done");localStorage.removeItem(`sv_chk_open_${order.id}`);}setResult({action,offline:true});setStep("success");setOffMsg("Sem internet — registro salvo e será sincronizado.");onSuccess(result);}
-      catch{setError("Não foi possível salvar offline.");}finally{setSending(false);}return;
+  async function confirmar() {
+    setSending(true); setError(""); setOffMsg("");
+    const body = buildBody();
+    const localKey = `sv_chk_open_${order.id}`;
+
+    // Offline
+    if (!navigator.onLine) {
+      try {
+        await enqueueCheckin(body);
+        if (action === "start") {
+          await setOrderStatusOverlay(order.id, "in_progress");
+          localStorage.setItem(localKey, JSON.stringify({
+            open: true, order_id: order.id,
+            checkin_id: body.local_id,
+            checkin_at: new Date().toISOString(),
+            offline: true,
+          }));
+        } else {
+          await setOrderStatusOverlay(order.id, "done");
+          localStorage.removeItem(localKey);
+        }
+        const r = { action, offline: true };
+        setResult(r);
+        setStep("success");
+        setOffMsg("Sem internet — registro salvo e será sincronizado.");
+        onSuccess(r);
+      } catch {
+        setError("Não foi possível salvar offline.");
+      } finally {
+        setSending(false);
+      }
+      return;
     }
-    try{
-      const endpoint=action==="start"?`${API}/checkin/${order.client_id}/start`:`${API}/checkin/${openChk.checkin_id}/finish`;
-      const res=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},body:JSON.stringify(body)});
-      const data=await res.json();
-      if(!res.ok){if(data.sem_coordenadas){setPinMode(true);setError("Cliente sem localização. Digite o PIN.");}else setError(data.msg||"Erro ao registrar.");return;}
-      if(action==="start"&&data.checkin_id){localStorage.setItem(`sv_chk_open_${order.id}`,JSON.stringify({...data,open:true,order_id:order.id,checkin_at:data.checkin_at||new Date().toISOString()}));}else{localStorage.removeItem(`sv_chk_open_${order.id}`);}setResult({...data,action});setStep("success");onSuccess({...data,action});
-    }catch(e){
-      try{await enqueueCheckin(body);if(action==="start")await setOrderStatusOverlay(order.id,"in_progress");else await setOrderStatusOverlay(order.id,"done");setResult({action,offline:true});setStep("success");setOffMsg("Conexão instável — salvo offline.");onSuccess({action,offline:true});}
-      catch{setError("Erro de conexão: "+(e.message||"verifique sua internet."));}
-    }finally{setSending(false);}
+
+    // Online
+    try {
+      const endpoint = action === "start"
+        ? `${API}/checkin/${order.client_id}/start`
+        : `${API}/checkin/${openChk?.checkin_id}/finish`;
+
+      const res  = await fetch(endpoint, {
+        method:  "POST",
+        headers: { "Content-Type":"application/json", Authorization:`Bearer ${token()}` },
+        body:    JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.sem_coordenadas) {
+          setPinMode(true);
+          setError("Cliente sem localização cadastrada. Digite o PIN do encarregado.");
+        } else {
+          // Erro fixo — não some
+          setError(data.msg || "Erro ao registrar. Tente novamente.");
+        }
+        return;
+      }
+
+      // Sucesso
+      if (action === "start" && data.checkin_id) {
+        localStorage.setItem(localKey, JSON.stringify({
+          ...data, open: true, order_id: order.id,
+          checkin_at: data.checkin_at || new Date().toISOString(),
+        }));
+      } else {
+        localStorage.removeItem(localKey);
+      }
+
+      const r = { ...data, action };
+      setResult(r);
+      setStep("success");
+      onSuccess(r);
+
+    } catch (e) {
+      // Falha de rede — tenta salvar offline
+      try {
+        await enqueueCheckin(body);
+        if (action === "start") await setOrderStatusOverlay(order.id, "in_progress");
+        else await setOrderStatusOverlay(order.id, "done");
+        const r = { action, offline: true };
+        setResult(r);
+        setStep("success");
+        setOffMsg("Conexão instável — salvo offline.");
+        onSuccess(r);
+      } catch {
+        setError("Erro de conexão: " + (e.message || "verifique sua internet."));
+      }
+    } finally {
+      setSending(false);
+    }
   }
 
-  const S={
-    overlay:{position:"fixed",inset:0,background:"rgba(0,0,0,0.75)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1100,backdropFilter:"blur(6px)"},
-    card:{width:"100%",maxWidth:440,maxHeight:"92vh",overflowY:"auto",background:"#0a0f1e",border:"1px solid rgba(79,142,247,0.15)",borderRadius:24,padding:isMobile?"20px 16px":28,boxShadow:"0 24px 80px rgba(0,0,0,0.7)"},
-    osBox:{background:"rgba(79,142,247,0.06)",border:"1px solid rgba(79,142,247,0.15)",borderRadius:12,padding:"10px 14px",marginBottom:16,textAlign:"center"},
-    osNum:{color:"#4f8ef7",fontWeight:700,fontSize:"1rem"},
-    osClient:{color:"#475569",fontSize:11,marginTop:2},
-    btnBlue:{width:"100%",padding:"13px 0",background:"linear-gradient(135deg,#4f8ef7,#6366f1)",border:"none",borderRadius:12,color:"#fff",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14,marginBottom:10,boxShadow:"0 4px 20px rgba(79,142,247,0.3)"},
-    btnGreen:{width:"100%",padding:"13px 0",background:"linear-gradient(135deg,#22c55e,#16a34a)",border:"none",borderRadius:12,color:"#fff",fontWeight:700,cursor:"pointer",fontFamily:"inherit",fontSize:14,marginBottom:10},
-    btnGhost:{width:"100%",padding:"11px 0",background:"transparent",border:"1px solid rgba(255,255,255,0.08)",borderRadius:12,color:"#64748b",fontWeight:600,cursor:"pointer",fontFamily:"inherit",fontSize:13,marginBottom:8},
-    err:{background:"rgba(239,68,68,0.08)",border:"1px solid rgba(239,68,68,0.25)",color:"#f87171",padding:"10px 14px",borderRadius:10,fontSize:13,marginBottom:14},
-    textarea:{width:"100%",padding:"11px 13px",background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,color:"#e2e8f0",fontSize:14,fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:14,resize:"none"},
-    pinInput:{width:"100%",padding:"12px 14px",background:"rgba(255,255,255,0.05)",border:"1px solid rgba(245,158,11,0.4)",borderRadius:10,color:"#e2e8f0",fontSize:20,fontFamily:"inherit",outline:"none",boxSizing:"border-box",textAlign:"center",letterSpacing:"6px",marginBottom:12},
-    time:{textAlign:"center",marginBottom:14},
-    title:{fontWeight:700,fontSize:"1rem",color:"#e2e8f0"},
-    close:{background:"rgba(255,255,255,0.05)",border:"1px solid rgba(255,255,255,0.08)",color:"#64748b",width:32,height:32,borderRadius:8,cursor:"pointer",fontSize:14},
+  const S = {
+    overlay:  { position:"fixed", inset:0, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:1100, backdropFilter:"blur(6px)" },
+    card:     { width:"100%", maxWidth:440, maxHeight:"92vh", overflowY:"auto", background:"#0a0f1e", border:"1px solid rgba(79,142,247,0.15)", borderRadius:24, padding:isMobile?"20px 16px":28, boxShadow:"0 24px 80px rgba(0,0,0,0.7)" },
+    osBox:    { background:"rgba(79,142,247,0.06)", border:"1px solid rgba(79,142,247,0.15)", borderRadius:12, padding:"10px 14px", marginBottom:16, textAlign:"center" },
+    osNum:    { color:"#4f8ef7", fontWeight:700, fontSize:"1rem" },
+    osClient: { color:"#475569", fontSize:11, marginTop:2 },
+    btnBlue:  { width:"100%", padding:"13px 0", background:"linear-gradient(135deg,#4f8ef7,#6366f1)", border:"none", borderRadius:12, color:"#fff", fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:14, marginBottom:10, boxShadow:"0 4px 20px rgba(79,142,247,0.3)" },
+    btnGreen: { width:"100%", padding:"13px 0", background:"linear-gradient(135deg,#22c55e,#16a34a)", border:"none", borderRadius:12, color:"#fff", fontWeight:700, cursor:"pointer", fontFamily:"inherit", fontSize:14, marginBottom:10 },
+    btnGhost: { width:"100%", padding:"11px 0", background:"transparent", border:"1px solid rgba(255,255,255,0.08)", borderRadius:12, color:"#64748b", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:13, marginBottom:8 },
+    err:      { background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)", color:"#f87171", padding:"10px 14px", borderRadius:10, fontSize:13, marginBottom:14 },
+    textarea: { width:"100%", padding:"11px 13px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", borderRadius:10, color:"#e2e8f0", fontSize:14, fontFamily:"inherit", outline:"none", boxSizing:"border-box", marginBottom:14, resize:"none" },
+    pinInput: { width:"100%", padding:"12px 14px", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(245,158,11,0.4)", borderRadius:10, color:"#e2e8f0", fontSize:20, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"center", letterSpacing:"6px", marginBottom:12 },
+    time:     { textAlign:"center", marginBottom:14 },
+    title:    { fontWeight:700, fontSize:"1rem", color:"#e2e8f0" },
+    close:    { background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.08)", color:"#64748b", width:32, height:32, borderRadius:8, cursor:"pointer", fontSize:14 },
   };
 
-  if(loadingOpen)return(<div style={S.overlay}><div style={S.card}><div style={{textAlign:"center",padding:"40px 0",color:"#475569"}}>Verificando check-in aberto...</div></div></div>);
+  if (loadingOpen) return (
+    <div style={S.overlay}>
+      <div style={S.card}>
+        <div style={{ textAlign:"center", padding:"40px 0", color:"#475569" }}>Verificando check-in aberto...</div>
+      </div>
+    </div>
+  );
 
-  return(
+  return (
     <div style={S.overlay} onClick={onClose}>
-      <div style={S.card} onClick={e=>e.stopPropagation()}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
+      <div style={S.card} onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <div style={S.title}>📍 Registro de Serviço</div>
           <button style={S.close} onClick={onClose}>✕</button>
         </div>
+
+        {/* OS info */}
         <div style={S.osBox}>
           <div style={S.osNum}>{order.number}</div>
           <div style={S.osClient}>{order.client_name}</div>
         </div>
 
-        {step==="select_action"&&(<>
+        {/* SELECT ACTION */}
+        {step === "select_action" && (<>
           <div style={S.time}>
-            <div style={{fontSize:"1.8rem",fontWeight:700,color:"#e2e8f0",letterSpacing:"-1px"}}>{horaFmt}</div>
-            <div style={{fontSize:12,color:"#475569",textTransform:"capitalize"}}>{dataFmt}</div>
+            <div style={{ fontSize:"1.8rem", fontWeight:700, color:"#e2e8f0", letterSpacing:"-1px" }}>{horaFmt}</div>
+            <div style={{ fontSize:12, color:"#475569", textTransform:"capitalize" }}>{dataFmt}</div>
           </div>
-          {!navigator.onLine&&<div style={{background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.25)",color:"#f59e0b",padding:"8px 12px",borderRadius:8,fontSize:12,marginBottom:12,textAlign:"center"}}>📴 Offline — registro será sincronizado depois.</div>}
-          {error&&<div style={S.err}>⚠️ {error}</div>}
-          {openChk?(<>
-            <div style={{background:"rgba(245,158,11,0.06)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:12,padding:14,marginBottom:14,textAlign:"center"}}>
-              <div style={{color:"#f59e0b",fontWeight:700,fontSize:13}}>⏱️ Serviço em andamento</div>
-              <div style={{color:"#64748b",fontSize:12,marginTop:4}}>Entrada às {openChk.checkin_at?.slice(11,16)}</div>
+
+          {!navigator.onLine && (
+            <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)", color:"#f59e0b", padding:"8px 12px", borderRadius:8, fontSize:12, marginBottom:12, textAlign:"center" }}>
+              📴 Offline — registro será sincronizado depois.
             </div>
-            <button style={S.btnGreen} onClick={()=>{setAction("finish");setStep("scanning");}}>✅ Finalizar serviço — Escanear QR</button>
-          </>):(
-            <button style={S.btnBlue} onClick={()=>{setAction("start");setStep("scanning");}}>📍 Iniciar serviço — Escanear QR</button>
+          )}
+
+          {/* Erro fixo — permanece na tela até o usuário agir */}
+          {error && (
+            <div style={{ ...S.err, display:"flex", flexDirection:"column", gap:8 }}>
+              <div>{error}</div>
+              <button
+                style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, color:"#f87171", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:12, padding:"6px 0" }}
+                onClick={() => setError("")}
+              >✕ Fechar</button>
+            </div>
+          )}
+
+          {openChk ? (<>
+            <div style={{ background:"rgba(245,158,11,0.06)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:12, padding:14, marginBottom:14, textAlign:"center" }}>
+              <div style={{ color:"#f59e0b", fontWeight:700, fontSize:13 }}>⏱️ Serviço em andamento</div>
+              <div style={{ color:"#64748b", fontSize:12, marginTop:4 }}>Entrada às {openChk.checkin_at?.slice(11,16)}</div>
+            </div>
+            <button style={S.btnGreen} onClick={() => { setAction("finish"); setStep("scanning"); }}>
+              ✅ Finalizar serviço — Escanear QR
+            </button>
+          </>) : (
+            <button style={S.btnBlue} onClick={() => { setAction("start"); setStep("scanning"); }}>
+              📍 Iniciar serviço — Escanear QR
+            </button>
           )}
           <button style={S.btnGhost} onClick={onClose}>← Fechar</button>
         </>)}
 
-        {step==="scanning"&&<QRScanner action={action} clientCode={order.client_id} onDetected={onQRDetected} onCancel={()=>setStep("select_action")}/>}
+        {/* SCANNING */}
+        {step === "scanning" && (
+          <QRScanner
+            action={action}
+            clientCode={order.client_id}
+            onDetected={onQRDetected}
+            onCancel={() => setStep("select_action")}
+          />
+        )}
 
-        {step==="confirming"&&(<>
+        {/* CONFIRMING */}
+        {step === "confirming" && (<>
           <div style={S.time}>
-            <span style={{display:"inline-block",padding:"4px 14px",borderRadius:20,fontSize:10,fontWeight:800,letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:8,background:action==="start"?"rgba(79,142,247,0.15)":"rgba(34,197,94,0.15)",color:action==="start"?"#4f8ef7":"#22c55e"}}>
-              {action==="start"?"📍 CHECK-IN · ENTRADA":"✅ CHECK-OUT · SAÍDA"}
+            <span style={{ display:"inline-block", padding:"4px 14px", borderRadius:20, fontSize:10, fontWeight:800, letterSpacing:"1.5px", textTransform:"uppercase", marginBottom:8,
+              background: action==="start" ? "rgba(79,142,247,0.15)" : "rgba(34,197,94,0.15)",
+              color:      action==="start" ? "#4f8ef7"               : "#22c55e" }}>
+              {action === "start" ? "📍 CHECK-IN · ENTRADA" : "✅ CHECK-OUT · SAÍDA"}
             </span>
-            <div style={{fontSize:"1.8rem",fontWeight:700,color:"#e2e8f0",letterSpacing:"-1px"}}>{horaFmt}</div>
-            <div style={{fontSize:12,color:"#475569",textTransform:"capitalize"}}>{dataFmt}</div>
+            <div style={{ fontSize:"1.8rem", fontWeight:700, color:"#e2e8f0", letterSpacing:"-1px" }}>{horaFmt}</div>
+            <div style={{ fontSize:12, color:"#475569", textTransform:"capitalize" }}>{dataFmt}</div>
           </div>
-          {action==="finish"&&openChk&&<div style={{background:"rgba(34,197,94,0.06)",border:"1px solid rgba(34,197,94,0.15)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#4ade80",textAlign:"center"}}>Entrada às {openChk.checkin_at?.slice(11,16)}</div>}
-          <textarea style={S.textarea} rows={2} placeholder={action==="start"?"Observação de entrada (opcional)":"Observação de saída (opcional)"} value={notes} onChange={e=>setNotes(e.target.value)}/>
-          {pinMode&&<div style={{marginBottom:14}}><div style={{color:"#f59e0b",fontSize:12,fontWeight:600,marginBottom:6,textAlign:"center"}}>🔑 PIN do encarregado</div><input style={S.pinInput} type="number" inputMode="numeric" placeholder="000000" value={pinValue} onChange={e=>setPinVal(e.target.value.slice(0,6))} autoFocus/></div>}
+
+          {action === "finish" && openChk && (
+            <div style={{ background:"rgba(34,197,94,0.06)", border:"1px solid rgba(34,197,94,0.15)", borderRadius:10, padding:"10px 14px", marginBottom:14, fontSize:12, color:"#4ade80", textAlign:"center" }}>
+              Entrada às {openChk.checkin_at?.slice(11,16)}
+            </div>
+          )}
+
+          <textarea style={S.textarea} rows={2}
+            placeholder={action === "start" ? "Observação de entrada (opcional)" : "Observação de saída (opcional)"}
+            value={notes} onChange={e => setNotes(e.target.value)}
+          />
+
+          {pinMode && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ color:"#f59e0b", fontSize:12, fontWeight:600, marginBottom:6, textAlign:"center" }}>🔑 PIN do encarregado</div>
+              <input style={S.pinInput} type="number" inputMode="numeric" placeholder="000000"
+                value={pinValue} onChange={e => setPinVal(e.target.value.slice(0,6))} autoFocus/>
+            </div>
+          )}
+
+          {/* Endereço do cliente (não coordenadas) */}
           {order.client_address && (
-            <div style={{fontSize:12,marginBottom:8,padding:"8px 12px",borderRadius:8,background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.08)",color:"#94a3b8"}}>
+            <div style={{ fontSize:12, marginBottom:8, padding:"8px 12px", borderRadius:8, background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)", color:"#94a3b8" }}>
               📍 {order.client_address}
             </div>
           )}
-          <div style={{fontSize:12,marginBottom:14,padding:"8px 12px",borderRadius:8,background:location?"rgba(34,197,94,0.08)":"rgba(245,158,11,0.08)",border:`1px solid ${location?"rgba(34,197,94,0.2)":"rgba(245,158,11,0.2)"}`,color:location?"#4ade80":"#f59e0b"}}>
-            {location?"📡 GPS ativo — localização capturada":"⏳ Aguardando GPS..."}
+
+          {/* Status GPS */}
+          <div style={{ fontSize:12, marginBottom:14, padding:"8px 12px", borderRadius:8,
+            background: location ? "rgba(34,197,94,0.08)" : "rgba(245,158,11,0.08)",
+            border: `1px solid ${location ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)"}`,
+            color: location ? "#4ade80" : "#f59e0b" }}>
+            {location ? "📡 GPS ativo — localização capturada" : "⏳ Aguardando GPS..."}
           </div>
-          {error&&<div style={{background:"rgba(239,68,68,0.1)",border:"1px solid rgba(239,68,68,0.3)",color:"#f87171",padding:"12px 16px",borderRadius:10,fontSize:13,marginBottom:14}}><div style={{fontWeight:700,marginBottom:4}}>⚠️ Atenção</div><div>{error}</div>{!pinMode&&<button style={{marginTop:10,width:"100%",padding:"8px 0",background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.3)",borderRadius:8,color:"#f87171",fontWeight:600,cursor:"pointer",fontFamily:"inherit",fontSize:12}} onClick={()=>{setError("");setStep("scanning");}}>← Tentar novamente</button>}</div>}
-          {(!error||pinMode)&&(<>
-            <button style={{...(action==="start"?S.btnBlue:S.btnGreen),opacity:(sending||!location)?0.6:1,cursor:(sending||!location)?"not-allowed":"pointer"}} onClick={confirmar} disabled={sending||!location||(pinMode&&pinValue.length<4)}>
-              {sending?"Registrando...":!location?"Aguardando GPS...":pinMode?"✓ Validar PIN":action==="start"?"✓ Confirmar entrada":"✓ Confirmar saída"}
+
+          {/* Erro fixo no step confirming */}
+          {error && (
+            <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", color:"#f87171", padding:"12px 16px", borderRadius:10, fontSize:13, marginBottom:14 }}>
+              <div style={{ fontWeight:700, marginBottom:4 }}>⚠️ Atenção</div>
+              <div>{error}</div>
+              {!pinMode && (
+                <button style={{ marginTop:10, width:"100%", padding:"8px 0", background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, color:"#f87171", fontWeight:600, cursor:"pointer", fontFamily:"inherit", fontSize:12 }}
+                  onClick={() => { setError(""); setStep("scanning"); }}>
+                  ← Tentar escanear novamente
+                </button>
+              )}
+            </div>
+          )}
+
+          {(!error || pinMode) && (<>
+            <button
+              style={{ ...(action==="start" ? S.btnBlue : S.btnGreen), opacity:(sending||!location)?0.6:1, cursor:(sending||!location)?"not-allowed":"pointer" }}
+              onClick={confirmar}
+              disabled={sending || !location || (pinMode && pinValue.length < 4)}
+            >
+              {sending       ? "Registrando..."
+               : !location  ? "Aguardando GPS..."
+               : pinMode    ? "✓ Validar PIN e confirmar"
+               : action === "start" ? "✓ Confirmar entrada" : "✓ Confirmar saída"}
             </button>
-            {!pinMode&&<button style={S.btnGhost} onClick={()=>setStep("scanning")} disabled={sending}>← Escanear novamente</button>}
+            {!pinMode && (
+              <button style={S.btnGhost} onClick={() => setStep("scanning")} disabled={sending}>
+                ← Escanear novamente
+              </button>
+            )}
           </>)}
         </>)}
 
-        {step==="success"&&(
-          <div style={{textAlign:"center",padding:"16px 0"}}>
-            <div style={{fontSize:52,marginBottom:12}}>{result?.offline?"⏳":result?.action==="start"?"📍":"✅"}</div>
-            <div style={{fontSize:"1.1rem",fontWeight:700,marginBottom:6,color:result?.offline?"#f59e0b":result?.action==="start"?"#4f8ef7":"#22c55e"}}>
-              {result?.offline?"Registro salvo!":result?.action==="start"?"Check-in registrado!":"Serviço concluído!"}
+        {/* SUCCESS */}
+        {step === "success" && (
+          <div style={{ textAlign:"center", padding:"16px 0" }}>
+            <div style={{ fontSize:52, marginBottom:12 }}>
+              {result?.offline ? "⏳" : result?.action === "start" ? "📍" : "✅"}
             </div>
-            {offlineMsg&&<div style={{background:"rgba(245,158,11,0.08)",border:"1px solid rgba(245,158,11,0.2)",borderRadius:10,padding:"10px 14px",margin:"12px auto",fontSize:12,color:"#f59e0b"}}>{offlineMsg}</div>}
-            {!result?.offline&&result?.action==="finish"&&result?.duration_str&&(
-              <div style={{background:"rgba(34,197,94,0.08)",border:"1px solid rgba(34,197,94,0.15)",borderRadius:14,padding:"14px 20px",margin:"14px auto",display:"inline-block"}}>
-                <div style={{color:"#475569",fontSize:11,marginBottom:2}}>Duração</div>
-                <div style={{color:"#22c55e",fontSize:"1.7rem",fontWeight:800}}>{result.duration_str}</div>
+            <div style={{ fontSize:"1.1rem", fontWeight:700, marginBottom:6,
+              color: result?.offline ? "#f59e0b" : result?.action === "start" ? "#4f8ef7" : "#22c55e" }}>
+              {result?.offline ? "Registro salvo!" : result?.action === "start" ? "Check-in registrado!" : "Serviço concluído!"}
+            </div>
+            {offlineMsg && (
+              <div style={{ background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.2)", borderRadius:10, padding:"10px 14px", margin:"12px auto", fontSize:12, color:"#f59e0b" }}>
+                {offlineMsg}
               </div>
             )}
-            <div style={{color:"#475569",fontSize:12,marginTop:8}}>{dataFmt} às {horaFmt}</div>
-            <button style={S.btnGhost} onClick={onClose}>Fechar</button>
+            {!result?.offline && result?.action === "finish" && result?.duration_str && (
+              <div style={{ background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.15)", borderRadius:14, padding:"14px 20px", margin:"14px auto", display:"inline-block" }}>
+                <div style={{ color:"#475569", fontSize:11, marginBottom:2 }}>Duração do serviço</div>
+                <div style={{ color:"#22c55e", fontSize:"1.7rem", fontWeight:800 }}>{result.duration_str}</div>
+              </div>
+            )}
+            <div style={{ color:"#475569", fontSize:12, marginTop:8 }}>{dataFmt} às {horaFmt}</div>
+            <button style={{ ...S.btnGhost, marginTop:20 }} onClick={onClose}>Fechar</button>
           </div>
         )}
+
       </div>
     </div>
   );
