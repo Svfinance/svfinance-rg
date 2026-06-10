@@ -365,11 +365,17 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:isMobile?"8px 12px":"0 12px", borderTop:isMobile?"1px solid rgba(26,138,60,0.15)":"none" }}>
                   {(() => {
                   const datas = calcDatasSemanas(card.mes, card.ano, card.dias);
-                  const dataCalc = datas[idx] || "";
+                  const dataManual = sem.data_dia ? fmtDateBR(sem.data_dia) : "";
+                  const dataCalc   = datas[idx] || "";
+                  const dataExibir = dataManual || dataCalc;
                   return (
                     <div style={{display:"flex",flexDirection:"column"}}>
                       <span style={{fontSize:isMobile?"1.2rem":"1.5rem",fontWeight:900,fontFamily:"'Arial Black','Arial Bold',sans-serif",color:"#1a1a1a",lineHeight:1.1}}>{sem.numero}ª semana</span>
-                      {dataCalc && <span style={{fontSize:"0.7rem",color:"#1a8a3c",fontWeight:700}}>{dataCalc}</span>}
+                      {dataExibir && (
+                        <span style={{fontSize:"0.7rem",color:dataManual?"#1a8a3c":"#1a8a3c",fontWeight:700}}>
+                          {dataExibir}{dataManual ? " ✏️" : ""}
+                        </span>
+                      )}
                     </div>
                   );
                 })()}
@@ -579,11 +585,18 @@ function RestauraGlassCard({ order, theme, isMobile, onCheckinClick }) {
               <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:8,flexWrap:"wrap"}}>
                 {(() => {
                 const datas = calcDatasSemanas(card.mes, card.ano, card.dias);
-                const dataCalc = datas[idx] || "";
+                // Se o usuário alterou manualmente, mostra a data manual; senão mostra a calculada
+                const dataManual = sem.data_dia ? fmtDateBR(sem.data_dia) : "";
+                const dataCalc   = datas[idx] || "";
+                const dataExibir = dataManual || dataCalc;
                 return (
                   <div style={{display:"flex",flexDirection:"column",minWidth:100}}>
                     <span style={{fontWeight:900,fontSize:"1.1rem",color:RGT.verde,lineHeight:1.1}}>{sem.numero}ª semana</span>
-                    {dataCalc && <span style={{fontSize:"0.7rem",color:RGT.textSub,fontWeight:600}}>{dataCalc}</span>}
+                    {dataExibir && (
+                      <span style={{fontSize:"0.7rem",color:dataManual?RGT.verde:RGT.textSub,fontWeight:700}}>
+                        {dataExibir}{dataManual ? " ✏️" : ""}
+                      </span>
+                    )}
                   </div>
                 );
               })()}
@@ -1111,19 +1124,19 @@ function QRScanner({ onDetected, onCancel, action, clientCode }) {
   function goMode(m){stopCamera();setNum("");setNumErr("");setPin(["","","",""]);setPinErr("");setCamMode(m);}
   function submitNum(){const v=numInput.trim();if(!v){setNumErr("Digite o código.");return;}if(String(v)===String(clientCode))onDetected(QR_TOKEN);else setNumErr("Código incorreto.");}
   async function submitPin(){
-  const v=pin.join("");
-  if(v.length<4){setPinErr("Digite o PIN completo.");return;}
-  try{
-    const res=await fetch(`${API}/checkin/pin/validate`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},
-      body:JSON.stringify({client_id:clientCode,pin:v}),
-    });
-    const data=await res.json();
-    if(data.ok){stopCamera();onDetected(QR_TOKEN);}
-    else setPinErr(data.msg||"PIN inválido.");
-  }catch{setPinErr("Erro de conexão. Tente outro método.");}
-}
+    const v=pin.join("");
+    if(v.length<4){setPinErr("Digite o PIN completo.");return;}
+    try{
+      const res=await fetch(`${API}/checkin/pin/validate`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json",Authorization:`Bearer ${token()}`},
+        body:JSON.stringify({client_id:clientCode,pin:v}),
+      });
+      const data=await res.json();
+      if(data.ok){stopCamera();onDetected(QR_TOKEN);}
+      else setPinErr(data.msg||"PIN inválido.");
+    }catch{setPinErr("Erro de conexão. Tente outro método.");}
+  }
   function handlePinDigit(idx,v){const d=v.replace(/\D/g,"").slice(-1);const n=[...pin];n[idx]=d;setPin(n);setPinErr("");if(d&&idx<3)pinRefs[idx+1].current?.focus();}
   function handlePinKey(idx,e){if(e.key==="Backspace"&&!pin[idx]&&idx>0)pinRefs[idx-1].current?.focus();}
 
@@ -1257,7 +1270,15 @@ function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile }) {
     checkOpen();const interval=setInterval(checkOpen,10000);return()=>clearInterval(interval);
   },[order.id]);
 
-  function onQRDetected(text){if(text.trim()!==QR_TOKEN){setError("QR Code inválido.");setStep("select_action");return;}setError("");setStep("confirming");}
+  function onQRDetected(text){
+    if(text.trim()!==QR_TOKEN){
+      setStep("select_action");
+      setTimeout(()=>setError("❌ QR Code inválido. Use o adesivo oficial SV Finance."),50);
+      return;
+    }
+    setError("");
+    setStep("confirming");
+  }
   function buildBody(){
     const base={lat:location?.lat||null,lon:location?.lon||null,notes:notes||null,qr_token:QR_TOKEN,pin:pinMode?pinValue:null,local_id:uuid()};
     if(action==="start")return{...base,kind:"start",client_id:order.client_id,order_id:order.id};

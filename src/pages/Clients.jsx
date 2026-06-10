@@ -392,7 +392,9 @@ export default function Clients() {
       || (c.document||"").includes(search)
       || (c.municipio||"").toLowerCase().includes(q)
       || (c.codigo||"").toLowerCase().includes(q);
-    const matchFreq = filterFreqCli === "all" || (c.contrato_tipo||"avulso") === filterFreqCli;
+    const matchFreq = filterFreqCli === "all"
+      || filterFreqCli === "sem_gps" ? !c.latitude
+      : (c.contrato_tipo||"avulso") === filterFreqCli;
     return matchSearch && matchFreq;
   });
 
@@ -567,6 +569,7 @@ export default function Clients() {
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             {[
               {v:"all",        l:"Todas"},
+              {v:"sem_gps",    l:"⚠️ Sem GPS"},
               {v:"semanal",    l:"🔵 Semanal"},
               {v:"quinzenal",  l:"🟢 Quinzenal"},
               {v:"mensal",     l:"🟡 Mensal"},
@@ -622,6 +625,11 @@ export default function Clients() {
                           <div style={{ fontWeight:600, color:theme.textPrimary, display:"flex", alignItems:"center", gap:6 }}>
                             {c.name}
                             {c.__pending && <span style={{ fontSize:9, background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.3)", color:"#f59e0b", borderRadius:6, padding:"1px 6px", fontWeight:700 }}>⏳ PENDENTE</span>}
+                            {isMobile && (
+                              <span title={c.latitude ? `GPS: ${c.latitude?.toFixed(4)}, ${c.longitude?.toFixed(4)}` : "Sem GPS cadastrado"}>
+                                {c.latitude ? "📍" : "⚠️"}
+                              </span>
+                            )}
                           </div>
                           {isMobile && (c.email||c.emails?.[0]) && <div style={{ fontSize:"0.75rem", color:theme.textMuted }}>{c.email||c.emails?.[0]}</div>}
                         </div>
