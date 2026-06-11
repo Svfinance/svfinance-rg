@@ -1,3 +1,16 @@
+/**
+ * Clients.jsx
+ *
+ * Correções aplicadas (11/06/2026 — PR2):
+ *  - Fix 1: cleanup AbortController no useEffect de buscarProximoCodigo
+ *  - Fix 2: submittingRef bloqueia duplo disparo "Criar Cliente e Cartão"
+ *  - Fix 3: geocode-cep passa `numero` junto com o CEP para melhor precisão
+ *  - Fix 3: feedback visual diferenciado por precisão do GPS
+ *           📍 verde  = endereço completo (confiável)
+ *           🟡 amarelo = logradouro sem número (aproximado)
+ *           ⚠️ laranja = só cidade (impreciso — admin deve salvar no local)
+ */
+
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTheme } from "../contexts/ThemeContext";
@@ -63,19 +76,21 @@ export default function Clients() {
   const [form,            setForm]            = useState(EMPTY_FORM);
   const [toast,           setToast]           = useState(null);
   const [cepLoading,      setCepLoading]      = useState(false);
-  const [geoStatus,       setGeoStatus]       = useState(null);
+  const [geoStatus,       setGeoStatus]       = useState(null); // null | 'numero' | 'logradouro' | 'cidade' | 'warn'
   const [criarCartaoApos, setCriarCartaoApos] = useState(false);
   const [filterFreqCli,   setFilterFreqCli]   = useState("all");
   const [codigoConflito,  setCodigoConflito]  = useState(null);
   const [detailTabCartao, setDetailTabCartao] = useState(false);
   const [filtroMesCartao, setFiltroMesCartao] = useState("");
 
-  // ── NOVO: pop-up pós-criação de cliente ───────────────────────────────────
-  // Exibido após POST /clients bem-sucedido — pergunta se quer criar cartão
+  // Pop-up pós-criação de cliente
   const [popupPosCliente, setPopupPosCliente] = useState(null); // { id, name }
 
+  // CORREÇÃO Fix 2: guard contra duplo disparo no botão "Criar Cliente e Cartão"
+  // useRef não causa re-render — só bloqueia re-entrada
+  const submittingRef = useRef(false);
+
   // ── Código automático — reativo ───────────────────────────────────────────
-  // CORREÇÃO: `proximoCodigo` fica em estado, atualizado após criar cliente
   const [proximoCodigo, setProximoCodigo] = useState("");
 
   async function buscarProximoCodigo() {
@@ -93,8 +108,26 @@ export default function Clients() {
     }
   }
 
-  // Busca o próximo código ao montar a página
-  useEffect(() => { buscarProximoCodigo(); }, []);
+  // CORREÇÃO Fix 1: AbortController cancela fetch pendente ao desmontar
+  // Evita warning "Can't perform a React state update on an unmounted component"
+  useEffect(() => {
+    const controller = new AbortController();
+    async function buscarInicial() {
+      if (!navigator.onLine) return;
+      try {
+        const res  = await fetch(`${API}/clients/proximo-codigo`, {
+          headers: { Authorization: `Bearer ${token()}` },
+          signal:  controller.signal,
+        });
+        const data = await res.json();
+        setProximoCodigo(data.codigo || "");
+      } catch (e) {
+        if (e.name !== "AbortError") console.error("buscarProximoCodigo:", e);
+      }
+    }
+    buscarInicial();
+    return () => controller.abort();
+  }, []);
 
   // ── Dados ─────────────────────────────────────────────────────────────────
   async function loadPending() {
@@ -143,7 +176,7 @@ export default function Clients() {
     return () => window.removeEventListener("sv_synced", onSynced);
   }, []);
 
-  // ── CEP ───────────────────────────────────────────────────────────────────
+  // ── CEP — CORREÇÃO Fix 3: passa numero junto para melhor precisão ─────────
   async function buscarCep(cep) {
     const limpo = cep.replace(/\D/g, "");
     if (limpo.length !== 8) return;
@@ -154,19 +187,35 @@ export default function Clients() {
       const res = await fetch(`${API}/clients/geocode-cep`, {
         method:  "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
-        body:    JSON.stringify({ cep: limpo }),
+        // CORREÇÃO: envia numero do formulário junto com o CEP
+        // Nominatim usa o número para encontrar o endereço exato (ex: loja 145 vs loja 200)
+        body:    JSON.stringify({ cep: limpo, numero: form.numero || "" }),
       });
       if (!res.ok) { showToast("CEP não encontrado.", "warn"); return; }
       const geo = await res.json();
       setForm(f => ({
         ...f,
-        cep: geo.cep, logradouro: geo.logradouro || f.logradouro,
-        bairro: geo.bairro || f.bairro, municipio: geo.municipio || f.municipio,
-        uf: geo.uf || f.uf,
+        cep:       geo.cep,
+        logradouro: geo.logradouro || f.logradouro,
+        bairro:    geo.bairro     || f.bairro,
+        municipio: geo.municipio  || f.municipio,
+        uf:        geo.uf         || f.uf,
       }));
-      setGeoStatus(geo.tem_gps ? "ok" : "warn");
+      // CORREÇÃO: geoStatus agora reflete a precisão real do geocode
+      // 'numero'     → 📍 verde  (endereço completo — confiável)
+      // 'logradouro' → amarelo  (aproximado)
+      // 'cidade'     → 'warn'   (impreciso — só centróide da cidade)
+      // null         → 'warn'   (sem GPS)
+      setGeoStatus(geo.precisao || (geo.tem_gps ? "logradouro" : "warn"));
     } catch { showToast("Erro ao buscar CEP.", "error"); }
     finally { setCepLoading(false); }
+  }
+
+  // Regeocodifica quando número muda após CEP já preenchido
+  async function onNumeroBlur() {
+    if (form.cep && form.cep.replace(/\D/g, "").length === 8 && form.numero) {
+      await buscarCep(form.cep);
+    }
   }
 
   // ── Helpers de lista (emails / phones) ───────────────────────────────────
@@ -194,7 +243,6 @@ export default function Clients() {
   // ── Modal criar/editar ────────────────────────────────────────────────────
   async function openCreate() {
     setEditing(null);
-    // CORREÇÃO: usa o proximoCodigo já em estado (reativo), busca fresco se online
     const codigo = navigator.onLine ? await buscarProximoCodigo() : proximoCodigo;
     setForm({ ...EMPTY_FORM, codigo: codigo || "", emails: [""], phones: [""] });
     setGeoStatus(null);
@@ -231,7 +279,8 @@ export default function Clients() {
       contrato_modelo:          c.contrato_modelo          || "",
       recorrencia:              c.recorrencia              || "",
     });
-    setGeoStatus(c.latitude ? "ok" : null);
+    // Mostra status de GPS existente ao abrir edição
+    setGeoStatus(c.latitude ? "numero" : null);
     setModalOpen(true);
   }
 
@@ -256,6 +305,11 @@ export default function Clients() {
     e.preventDefault();
     if (!form.name.trim()) { showToast("Nome é obrigatório.", "error"); return; }
 
+    // CORREÇÃO Fix 2: bloqueia re-entrada enquanto submit está em andamento
+    // Evita duplo disparo ao clicar "Criar Cliente e Cartão" rapidamente
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+
     const emailsFiltrados = form.emails.filter(e => e.trim());
     const phonesFiltrados = form.phones.filter(p => p.trim());
 
@@ -268,13 +322,14 @@ export default function Clients() {
     };
 
     if (!navigator.onLine) {
-      if (editing) { showToast("Edição precisa de internet.", "warn"); return; }
+      if (editing) { showToast("Edição precisa de internet.", "warn"); submittingRef.current = false; return; }
       const ref = tmpId("tmpcli");
       await enqueueMutation("client", payload, { tmp_ref: ref });
       showToast("📴 Cliente salvo offline — sincroniza ao reconectar.");
       sessionStorage.removeItem("sv_clients");
       closeModal();
       fetchClients();
+      submittingRef.current = false;
       return;
     }
 
@@ -284,7 +339,6 @@ export default function Clients() {
     try {
       const res = await _enviarPayload(payload, url, method);
 
-      // Conflito de código — backend retornou 409
       if (res.status === 409) {
         const data = await res.json();
         if (data.codigo_conflito) {
@@ -306,19 +360,15 @@ export default function Clients() {
         setCriarCartaoApos(false);
         closeModal();
 
-        // CORREÇÃO: atualiza o código sequencial sem precisar de F5
         buscarProximoCodigo();
         fetchClients();
 
         if (irParaCartao) {
-          // Botão "Criar Cliente e Cartão" → vai direto
           navigate(`/orders?client_id=${clienteId}&new=1`);
         } else if (!editing && clienteId) {
-          // Botão "Criar Cliente" → exibe pop-up de confirmação
           setPopupPosCliente({ id: clienteId, name: data.name || form.name });
           showToast(`Cliente criado! ${geoMsg}`);
         } else {
-          // Edição
           showToast(`Cliente atualizado! ${geoMsg}`);
         }
       } else {
@@ -335,6 +385,9 @@ export default function Clients() {
       } else {
         showToast("Erro de conexão.", "error");
       }
+    } finally {
+      // CORREÇÃO Fix 2: libera o guard independente do caminho de execução
+      submittingRef.current = false;
     }
   }
 
@@ -351,7 +404,7 @@ export default function Clients() {
         showToast("Cliente atualizado!");
         sessionStorage.removeItem("sv_clients");
         closeModal();
-        buscarProximoCodigo(); // CORREÇÃO: atualiza código após resolver conflito
+        buscarProximoCodigo();
         fetchClients();
       } else {
         const err = await res.json();
@@ -373,7 +426,7 @@ export default function Clients() {
         showToast("Cliente removido.");
         sessionStorage.removeItem("sv_clients");
         setDeleteConfirm(null);
-        buscarProximoCodigo(); // atualiza código após exclusão
+        buscarProximoCodigo();
         fetchClients();
       } else showToast("Erro ao remover.", "error");
     } catch { showToast("Erro de conexão.", "error"); }
@@ -414,8 +467,6 @@ export default function Clients() {
   }
 
   // ── Filtros ───────────────────────────────────────────────────────────────
-  // CORREÇÃO: lógica de filtro reescrita com if/else explícito
-  // Bug original: precedência do ternário fazia "all" entrar no branch errado
   const allClients = [...pending, ...clients];
   const filtered   = allClients.filter(c => {
     const q           = search.toLowerCase();
@@ -430,18 +481,37 @@ export default function Clients() {
       (c.codigo      || "").toLowerCase().includes(q)
     );
 
-    // CORREÇÃO: if/else explícito — sem ambiguidade de precedência
     let matchFreq;
     if (filterFreqCli === "all") {
-      matchFreq = true;                                          // todos
+      matchFreq = true;
     } else if (filterFreqCli === "sem_gps") {
-      matchFreq = !c.latitude;                                   // clientes sem GPS
+      matchFreq = !c.latitude;
     } else {
       matchFreq = (c.recorrencia || c.contrato_tipo || "avulso") === filterFreqCli;
     }
 
     return matchSearch && matchFreq;
   });
+
+  // ── Helpers de ícone/texto de precisão GPS ────────────────────────────────
+  // Usados no formulário para feedback visual ao admin
+  function geoIcone() {
+    if (geoStatus === "numero")     return "📍";
+    if (geoStatus === "logradouro") return "🟡";
+    return "⚠️";
+  }
+  function geoTexto() {
+    if (geoStatus === "numero")     return "📍 Localização salva pelo endereço completo";
+    if (geoStatus === "logradouro") return "🟡 Localização aproximada — confirme no local físico";
+    if (geoStatus === "cidade")     return "⚠️ Localização pela cidade — salve no local físico";
+    if (geoStatus === "warn")       return "⚠️ GPS não encontrado — salve a localização no local";
+    return "";
+  }
+  function geoCorTexto() {
+    if (geoStatus === "numero")     return "#22c55e";
+    if (geoStatus === "logradouro") return "#f59e0b";
+    return "#ef4444";
+  }
 
   // ── Estilos ───────────────────────────────────────────────────────────────
   const inputStyle = {
@@ -654,13 +724,11 @@ export default function Clients() {
               <tbody>
                 {filtered.map(c => (
                   <tr key={c.id} className="cl-row" style={{ borderBottom: `1px solid ${isGlass ? "rgba(255,255,255,0.15)" : theme.border}`, transition: "background 0.15s", opacity: c.__pending ? 0.85 : 1 }}>
-                    {/* Código */}
                     <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
                       <span style={{ fontSize: "0.78rem", fontWeight: 700, color: theme.textMuted, background: isGlass ? "rgba(255,255,255,0.2)" : `${theme.primary}15`, borderRadius: 6, padding: "2px 7px" }}>
                         {c.codigo || "—"}
                       </span>
                     </td>
-                    {/* Nome */}
                     <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <div style={{ width: 36, height: 36, borderRadius: "50%", background: isGlass ? "rgba(255,255,255,0.4)" : `${theme.primary}22`, border: `1px solid ${isGlass ? "rgba(255,255,255,0.5)" : `${theme.primary}44`}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "0.85rem", color: theme.primary, flexShrink: 0 }}>
@@ -690,20 +758,11 @@ export default function Clients() {
                         </span>
                       </td>
                     )}
-                    {/* AÇÕES */}
                     <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
                       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        <button
-                          onClick={() => fetchDetail(c.id)}
-                          title="Informações do cliente"
-                          style={{ background: "rgba(79,142,247,0.12)", color: "#4f8ef7", border: "1px solid rgba(79,142,247,0.3)", borderRadius: 8, padding: isMobile ? "5px 8px" : "5px 10px", cursor: "pointer", fontSize: "0.85rem", fontWeight: 800, fontFamily: "inherit" }}
-                        >!</button>
+                        <button onClick={() => fetchDetail(c.id)} title="Informações do cliente" style={{ background: "rgba(79,142,247,0.12)", color: "#4f8ef7", border: "1px solid rgba(79,142,247,0.3)", borderRadius: 8, padding: isMobile ? "5px 8px" : "5px 10px", cursor: "pointer", fontSize: "0.85rem", fontWeight: 800, fontFamily: "inherit" }}>!</button>
                         {rg && (
-                          <button
-                            onClick={() => navigate(`/orders?client_id=${c.id}&new=1`)}
-                            title="Criar Nova O.S"
-                            style={{ background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? "5px 8px" : "5px 11px", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap" }}
-                          >📋 {!isMobile && "Novo Cartão"}</button>
+                          <button onClick={() => navigate(`/orders?client_id=${c.id}&new=1`)} title="Criar Nova O.S" style={{ background: "#16a34a", color: "#fff", border: "none", borderRadius: 8, padding: isMobile ? "5px 8px" : "5px 11px", cursor: "pointer", fontSize: "0.78rem", fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap" }}>📋 {!isMobile && "Novo Cartão"}</button>
                         )}
                         <button style={{ background: isGlass ? "rgba(255,255,255,0.25)" : `${theme.primary}22`, border: `1px solid ${isGlass ? "rgba(255,255,255,0.5)" : `${theme.primary}44`}`, borderRadius: 8, padding: "5px 9px", cursor: "pointer", fontSize: "0.9rem" }} onClick={() => openEdit(c)}>✏️</button>
                         <button style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "5px 9px", cursor: "pointer", fontSize: "0.9rem" }} onClick={() => setDeleteConfirm(c)}>🗑️</button>
@@ -717,26 +776,19 @@ export default function Clients() {
         </div>
       </div>
 
-      {/* ── POP-UP PÓS-CRIAÇÃO DE CLIENTE ── */}
-      {/* NOVO: aparece após criar cliente com sucesso — pergunta se quer gerar cartão */}
+      {/* ── POP-UP PÓS-CRIAÇÃO ── */}
       {popupPosCliente && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.65)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1200, backdropFilter: "blur(6px)", padding: 16 }}>
           <div style={{ background: "#0a0f1e", border: "1px solid rgba(79,142,247,0.2)", borderRadius: 20, padding: isMobile ? "28px 20px" : 36, width: "100%", maxWidth: 400, boxShadow: "0 24px 80px rgba(0,0,0,0.7)", textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
-            <h2 style={{ margin: "0 0 8px", fontSize: "1.15rem", fontWeight: 700, color: "#e2e8f0" }}>
-              Cliente criado com sucesso!
-            </h2>
+            <h2 style={{ margin: "0 0 8px", fontSize: "1.15rem", fontWeight: 700, color: "#e2e8f0" }}>Cliente criado com sucesso!</h2>
             <p style={{ color: "#64748b", fontSize: "0.9rem", marginBottom: 28, lineHeight: 1.6 }}>
               Deseja criar um cartão de serviço para <strong style={{ color: "#e2e8f0" }}>{popupPosCliente.name}</strong> agora?
             </p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               <button
                 style={{ width: "100%", padding: "13px 0", background: "linear-gradient(135deg,#16a34a,#22c55e)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 14, boxShadow: "0 4px 20px rgba(22,163,74,0.3)" }}
-                onClick={() => {
-                  const id = popupPosCliente.id;
-                  setPopupPosCliente(null);
-                  navigate(`/orders?client_id=${id}&new=1`);
-                }}
+                onClick={() => { const id = popupPosCliente.id; setPopupPosCliente(null); navigate(`/orders?client_id=${id}&new=1`); }}
               >📋 Criar cartão agora</button>
               <button
                 style={{ width: "100%", padding: "12px 0", background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, color: "#64748b", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 14 }}
@@ -789,7 +841,6 @@ export default function Clients() {
 
                 {sectionTitle("👤", "Dados do Cliente")}
 
-                {/* Código — gerado automaticamente, exibição apenas */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {labelInput("Código interno")}
                   <div style={{ position: "relative" }}>
@@ -822,17 +873,8 @@ export default function Clients() {
                   {labelInput("Email(s)")}
                   {form.emails.map((em, i) => (
                     <div key={i} className="multi-field-row">
-                      <input
-                        style={inputStyle}
-                        type="email"
-                        placeholder={i === 0 ? "email@principal.com" : "email adicional..."}
-                        value={em}
-                        onChange={e => setEmailAt(i, e.target.value)}
-                        onFocus={focusIn} onBlur={focusOut}
-                      />
-                      {form.emails.length > 1 && (
-                        <button type="button" className="btn-remove-field" onClick={() => removeEmail(i)} title="Remover email">✕</button>
-                      )}
+                      <input style={inputStyle} type="email" placeholder={i === 0 ? "email@principal.com" : "email adicional..."} value={em} onChange={e => setEmailAt(i, e.target.value)} onFocus={focusIn} onBlur={focusOut} />
+                      {form.emails.length > 1 && <button type="button" className="btn-remove-field" onClick={() => removeEmail(i)} title="Remover email">✕</button>}
                     </div>
                   ))}
                   <button type="button" className="btn-add-field" onClick={addEmail}>+ Adicionar email</button>
@@ -843,17 +885,8 @@ export default function Clients() {
                   {labelInput("Telefone(s)")}
                   {form.phones.map((ph, i) => (
                     <div key={i} className="multi-field-row">
-                      <input
-                        style={inputStyle}
-                        type="tel"
-                        placeholder={i === 0 ? "(44) 99999-9999" : "telefone adicional..."}
-                        value={ph}
-                        onChange={e => setPhoneAt(i, e.target.value)}
-                        onFocus={focusIn} onBlur={focusOut}
-                      />
-                      {form.phones.length > 1 && (
-                        <button type="button" className="btn-remove-field" onClick={() => removePhone(i)} title="Remover telefone">✕</button>
-                      )}
+                      <input style={inputStyle} type="tel" placeholder={i === 0 ? "(44) 99999-9999" : "telefone adicional..."} value={ph} onChange={e => setPhoneAt(i, e.target.value)} onFocus={focusIn} onBlur={focusOut} />
+                      {form.phones.length > 1 && <button type="button" className="btn-remove-field" onClick={() => removePhone(i)} title="Remover telefone">✕</button>}
                     </div>
                   ))}
                   <button type="button" className="btn-add-field" onClick={addPhone}>+ Adicionar telefone</button>
@@ -861,28 +894,43 @@ export default function Clients() {
 
                 {sectionTitle("📍", "Endereço")}
 
+                {/* CEP */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {labelInput("CEP")}
                   <div style={{ position: "relative" }}>
                     <input style={{ ...inputStyle, paddingRight: 40 }} placeholder="00000-000" value={form.cep}
                       onChange={e => {
                         const v = e.target.value.replace(/\D/g, "").slice(0, 8);
-                        setForm({ ...form, cep: v });
+                        setForm(f => ({ ...f, cep: v }));
+                        // CORREÇÃO Fix 3: passa numero atual junto com o CEP
                         if (v.length === 8) buscarCep(v);
                       }}
                       onFocus={focusIn} onBlur={focusOut}
                     />
                     {cepLoading && <div style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", width: 16, height: 16, border: "2px solid rgba(79,142,247,0.3)", borderTop: "2px solid #4f8ef7", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />}
-                    {!cepLoading && geoStatus === "ok"   && <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#22c55e", fontSize: 14 }}>📍</span>}
-                    {!cepLoading && geoStatus === "warn" && <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#f59e0b", fontSize: 14 }}>⚠️</span>}
+                    {!cepLoading && geoStatus && geoStatus !== "warn" && <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", fontSize: 14 }}>{geoIcone()}</span>}
+                    {!cepLoading && geoStatus === "warn" && <span style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", color: "#ef4444", fontSize: 14 }}>⚠️</span>}
                   </div>
-                  {geoStatus === "ok"   && <span style={{ fontSize: 11, color: "#22c55e" }}>📍 Localização salva automaticamente</span>}
-                  {geoStatus === "warn" && <span style={{ fontSize: 11, color: "#f59e0b" }}>⚠️ CEP encontrado mas sem GPS preciso</span>}
+                  {/* CORREÇÃO Fix 3: feedback com nível de precisão */}
+                  {geoStatus && (
+                    <span style={{ fontSize: 11, color: geoCorTexto() }}>{geoTexto()}</span>
+                  )}
                 </div>
+
+                {/* Número — CORREÇÃO Fix 3: onBlur regeocodifica quando número muda */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {labelInput("Número")}
-                  <input style={inputStyle} placeholder="123" value={form.numero} onChange={e => setForm({ ...form, numero: e.target.value })} onFocus={focusIn} onBlur={focusOut} />
+                  <input
+                    style={inputStyle}
+                    placeholder="123"
+                    value={form.numero}
+                    onChange={e => setForm(f => ({ ...f, numero: e.target.value }))}
+                    onBlur={onNumeroBlur}
+                    onFocus={focusIn}
+                  />
+                  <span style={{ fontSize: 10, color: theme.textMuted }}>Preencha o número para localização mais precisa</span>
                 </div>
+
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {labelInput("Logradouro")}
                   <input style={inputStyle} placeholder="Rua, Av..." value={form.logradouro} onChange={e => setForm({ ...form, logradouro: e.target.value })} onFocus={focusIn} onBlur={focusOut} />
@@ -962,7 +1010,6 @@ export default function Clients() {
                   <input style={{ ...inputStyle, colorScheme }} type="date" value={form.contrato_fim} onChange={e => setForm({ ...form, contrato_fim: e.target.value })} onFocus={focusIn} onBlur={focusOut} />
                 </div>
 
-                {/* Dias de atendimento */}
                 {form.recorrencia && form.recorrencia !== "esporadico" && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, gridColumn: "1 / -1" }}>
                     {labelInput("Dias de atendimento")}
@@ -991,13 +1038,7 @@ export default function Clients() {
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, gridColumn: "1 / -1" }}>
                   {labelInput("Modelo / Texto do contrato")}
-                  <textarea
-                    style={{ ...inputStyle, resize: "vertical", minHeight: 100, fontFamily: "inherit" }}
-                    placeholder="Cole ou escreva o modelo de contrato aqui..."
-                    value={form.contrato_modelo}
-                    onChange={e => setForm({ ...form, contrato_modelo: e.target.value })}
-                    onFocus={focusIn} onBlur={focusOut}
-                  />
+                  <textarea style={{ ...inputStyle, resize: "vertical", minHeight: 100, fontFamily: "inherit" }} placeholder="Cole ou escreva o modelo de contrato aqui..." value={form.contrato_modelo} onChange={e => setForm({ ...form, contrato_modelo: e.target.value })} onFocus={focusIn} onBlur={focusOut} />
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, gridColumn: "1 / -1" }}>
@@ -1034,21 +1075,11 @@ export default function Clients() {
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, backdropFilter: "blur(4px)", padding: 16 }}>
           <div style={{ ...modalBg, borderRadius: 18, padding: 28, width: "100%", maxWidth: 420, boxShadow: "0 25px 60px rgba(0,0,0,0.6)" }}>
             <h2 style={{ margin: "0 0 12px", fontSize: "1.1rem", fontWeight: 700, color: "#f59e0b" }}>⚠️ Conflito de código</h2>
-            <p style={{ color: theme.textSecondary, marginBottom: 8, lineHeight: 1.6 }}>
-              Este cliente já possui o código <strong style={{ color: theme.textPrimary }}>{codigoConflito.codigo_atual}</strong>.
-            </p>
-            <p style={{ color: theme.textSecondary, marginBottom: 24, lineHeight: 1.6 }}>
-              Deseja substituir por <strong style={{ color: theme.primary }}>{codigoConflito.codigo_novo}</strong>?
-            </p>
+            <p style={{ color: theme.textSecondary, marginBottom: 8, lineHeight: 1.6 }}>Este cliente já possui o código <strong style={{ color: theme.textPrimary }}>{codigoConflito.codigo_atual}</strong>.</p>
+            <p style={{ color: theme.textSecondary, marginBottom: 24, lineHeight: 1.6 }}>Deseja substituir por <strong style={{ color: theme.primary }}>{codigoConflito.codigo_novo}</strong>?</p>
             <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button
-                style={{ background: theme.bgCard, color: theme.textSecondary, border: `1px solid ${theme.borderCard}`, borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer" }}
-                onClick={() => confirmarSubstituicaoCodigo(false)}
-              >Manter {codigoConflito.codigo_atual}</button>
-              <button
-                style={{ background: "#f59e0b", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 700, cursor: "pointer" }}
-                onClick={() => confirmarSubstituicaoCodigo(true)}
-              >Substituir por {codigoConflito.codigo_novo}</button>
+              <button style={{ background: theme.bgCard, color: theme.textSecondary, border: `1px solid ${theme.borderCard}`, borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer" }} onClick={() => confirmarSubstituicaoCodigo(false)}>Manter {codigoConflito.codigo_atual}</button>
+              <button style={{ background: "#f59e0b", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 700, cursor: "pointer" }} onClick={() => confirmarSubstituicaoCodigo(true)}>Substituir por {codigoConflito.codigo_novo}</button>
             </div>
           </div>
         </div>
@@ -1058,8 +1089,6 @@ export default function Clients() {
       {detailModal && detailClient && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 999, backdropFilter: "blur(4px)" }} onClick={() => setDetailModal(false)}>
           <div style={{ ...modalBg, borderRadius: 18, padding: isMobile ? "24px 20px" : 32, width: isMobile ? "92%" : "100%", maxWidth: 720, maxHeight: "90vh", overflowY: "auto", boxShadow: isGlass ? "0 20px 60px rgba(0,0,0,0.15)" : "0 25px 60px rgba(0,0,0,0.6)" }} onClick={e => e.stopPropagation()}>
-
-            {/* Cabeçalho */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                 <div style={{ width: 48, height: 48, borderRadius: "50%", background: isGlass ? "rgba(255,255,255,0.4)" : `${theme.primary}22`, border: `2px solid ${isGlass ? "rgba(255,255,255,0.6)" : `${theme.primary}44`}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "1.2rem", color: theme.primary }}>
@@ -1068,9 +1097,7 @@ export default function Clients() {
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <h2 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 700, color: theme.textPrimary }}>{detailClient.name}</h2>
-                    {detailClient.codigo && (
-                      <span style={{ fontSize: "0.75rem", fontWeight: 700, background: isGlass ? "rgba(255,255,255,0.3)" : `${theme.primary}15`, color: theme.primary, borderRadius: 6, padding: "2px 8px" }}>{detailClient.codigo}</span>
-                    )}
+                    {detailClient.codigo && <span style={{ fontSize: "0.75rem", fontWeight: 700, background: isGlass ? "rgba(255,255,255,0.3)" : `${theme.primary}15`, color: theme.primary, borderRadius: 6, padding: "2px 8px" }}>{detailClient.codigo}</span>}
                   </div>
                   <p style={{ margin: 0, fontSize: "0.8rem", color: theme.textMuted }}>
                     {detailClient.__pending ? "⏳ Aguardando sincronização" : `Cadastrado em ${detailClient.created_at?.split("-").reverse().join("/") || "—"}`}
@@ -1081,39 +1108,22 @@ export default function Clients() {
               <button style={{ background: isGlass ? "rgba(255,255,255,0.4)" : theme.bgCard, border: "none", color: theme.textPrimary, width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14, flexShrink: 0 }} onClick={() => setDetailModal(false)}>✕</button>
             </div>
 
-            {/* Abas */}
             <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
-              {[
-                { id: false, label: "📋 Dados" },
-                { id: true,  label: "🗂️ Cartões/OS" },
-              ].map(tab => (
-                <button key={String(tab.id)}
-                  style={{ padding: "8px 18px", borderRadius: 10, fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", border: "none", fontFamily: "inherit",
-                    background: detailTabCartao === tab.id ? theme.primary : (isGlass ? "rgba(255,255,255,0.2)" : theme.bgCard),
-                    color:      detailTabCartao === tab.id ? "#fff" : theme.textMuted,
-                  }}
-                  onClick={() => setDetailTabCartao(tab.id)}
-                >{tab.label}</button>
+              {[{ id: false, label: "📋 Dados" }, { id: true, label: "🗂️ Cartões/OS" }].map(tab => (
+                <button key={String(tab.id)} style={{ padding: "8px 18px", borderRadius: 10, fontWeight: 700, fontSize: "0.85rem", cursor: "pointer", border: "none", fontFamily: "inherit", background: detailTabCartao === tab.id ? theme.primary : (isGlass ? "rgba(255,255,255,0.2)" : theme.bgCard), color: detailTabCartao === tab.id ? "#fff" : theme.textMuted }} onClick={() => setDetailTabCartao(tab.id)}>{tab.label}</button>
               ))}
             </div>
 
-            {/* Aba Dados */}
             {!detailTabCartao && (
               <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 20, background: isGlass ? "rgba(255,255,255,0.15)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.3)" : theme.borderCard}`, borderRadius: 12, padding: "16px 20px" }}>
-                {/* Emails */}
                 <div>
                   <div style={{ fontSize: "0.72rem", color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Email(s)</div>
-                  {((detailClient.emails?.length ? detailClient.emails : [detailClient.email]).filter(Boolean)).map((em, i) => (
-                    <div key={i} style={{ fontSize: "0.9rem", color: theme.textPrimary }}>{em}</div>
-                  ))}
+                  {((detailClient.emails?.length ? detailClient.emails : [detailClient.email]).filter(Boolean)).map((em, i) => <div key={i} style={{ fontSize: "0.9rem", color: theme.textPrimary }}>{em}</div>)}
                   {!detailClient.email && !detailClient.emails?.length && <div style={{ fontSize: "0.9rem", color: theme.textMuted }}>—</div>}
                 </div>
-                {/* Telefones */}
                 <div>
                   <div style={{ fontSize: "0.72rem", color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 4 }}>Telefone(s)</div>
-                  {((detailClient.phones?.length ? detailClient.phones : [detailClient.phone]).filter(Boolean)).map((ph, i) => (
-                    <div key={i} style={{ fontSize: "0.9rem", color: theme.textPrimary }}>{ph}</div>
-                  ))}
+                  {((detailClient.phones?.length ? detailClient.phones : [detailClient.phone]).filter(Boolean)).map((ph, i) => <div key={i} style={{ fontSize: "0.9rem", color: theme.textPrimary }}>{ph}</div>)}
                   {!detailClient.phone && !detailClient.phones?.length && <div style={{ fontSize: "0.9rem", color: theme.textMuted }}>—</div>}
                 </div>
                 {[
@@ -1149,29 +1159,16 @@ export default function Clients() {
               </div>
             )}
 
-            {/* Aba Cartões/OS */}
             {detailTabCartao && !detailClient.__pending && (
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
                   <span style={{ fontSize: "0.8rem", color: theme.textMuted, fontWeight: 600 }}>Filtrar mês/ano:</span>
-                  <input
-                    type="month"
-                    style={{ ...inputStyle, width: "auto", colorScheme }}
-                    value={filtroMesCartao}
-                    onChange={e => setFiltroMesCartao(e.target.value)}
-                  />
-                  {filtroMesCartao && (
-                    <button style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: "0.8rem" }} onClick={() => setFiltroMesCartao("")}>✕ Limpar</button>
-                  )}
+                  <input type="month" style={{ ...inputStyle, width: "auto", colorScheme }} value={filtroMesCartao} onChange={e => setFiltroMesCartao(e.target.value)} />
+                  {filtroMesCartao && <button style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", color: "#ef4444", borderRadius: 8, padding: "6px 10px", cursor: "pointer", fontSize: "0.8rem" }} onClick={() => setFiltroMesCartao("")}>✕ Limpar</button>}
                 </div>
-
-                <p style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: theme.textMuted, margin: "0 0 10px 0" }}>
-                  📦 Ordens / O.S ({detailClient.orders?.length || 0})
-                </p>
+                <p style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: theme.textMuted, margin: "0 0 10px 0" }}>📦 Ordens / O.S ({detailClient.orders?.length || 0})</p>
                 {detailClient.orders?.length > 0 ? (() => {
-                  const ordFiltradas = filtroMesCartao
-                    ? detailClient.orders.filter(o => (o.created_at || "").startsWith(filtroMesCartao))
-                    : detailClient.orders;
+                  const ordFiltradas = filtroMesCartao ? detailClient.orders.filter(o => (o.created_at || "").startsWith(filtroMesCartao)) : detailClient.orders;
                   return ordFiltradas.length > 0 ? (
                     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                       {ordFiltradas.map(o => {
@@ -1185,57 +1182,18 @@ export default function Clients() {
                             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                               <span style={{ fontSize: "0.88rem", fontWeight: 600, color: theme.income }}>{fmt(o.total)}</span>
                               <span style={{ fontSize: "0.72rem", fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: s.bg, color: s.color }}>{STATUS_LABEL[o.status] || o.status}</span>
-                              {rg && (
-                                <button
-                                  style={{ background: "rgba(22,163,74,0.1)", color: "#16a34a", border: "1px solid rgba(22,163,74,0.3)", borderRadius: 8, padding: "3px 8px", cursor: "pointer", fontSize: "0.75rem", fontWeight: 700, fontFamily: "inherit" }}
-                                  onClick={() => { setDetailModal(false); navigate(`/orders?highlight=${o.id}`); }}
-                                >Ver</button>
-                              )}
+                              {rg && <button style={{ background: "rgba(22,163,74,0.1)", color: "#16a34a", border: "1px solid rgba(22,163,74,0.3)", borderRadius: 8, padding: "3px 8px", cursor: "pointer", fontSize: "0.75rem", fontWeight: 700, fontFamily: "inherit" }} onClick={() => { setDetailModal(false); navigate(`/orders?highlight=${o.id}`); }}>Ver</button>}
                             </div>
                           </div>
                         );
                       })}
                     </div>
-                  ) : (
-                    <p style={{ color: theme.textMuted, fontSize: "0.85rem" }}>Nenhuma O.S no período selecionado.</p>
-                  );
+                  ) : <p style={{ color: theme.textMuted, fontSize: "0.85rem" }}>Nenhuma O.S no período selecionado.</p>;
                 })() : <p style={{ color: theme.textMuted, fontSize: "0.85rem" }}>Nenhuma ordem cadastrada.</p>}
-
-                {detailClient.quotes?.length > 0 && (
-                  <>
-                    <p style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: theme.textMuted, margin: "20px 0 10px 0" }}>
-                      📋 Orçamentos ({detailClient.quotes.length})
-                    </p>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {detailClient.quotes.map(q => {
-                        const s = STATUS_COLOR[q.status] || STATUS_COLOR.draft;
-                        return (
-                          <div key={q.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: isGlass ? "rgba(255,255,255,0.15)" : theme.bgCard, border: `1px solid ${isGlass ? "rgba(255,255,255,0.3)" : theme.borderCard}`, borderRadius: 10, padding: "10px 14px" }}>
-                            <div>
-                              <span style={{ fontWeight: 600, color: theme.primary, fontSize: "0.88rem" }}>{q.number}</span>
-                              <span style={{ marginLeft: 8, fontSize: "0.75rem", color: theme.textMuted }}>{q.created_at?.split("-").reverse().join("/")}</span>
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                              <span style={{ fontSize: "0.88rem", fontWeight: 600, color: theme.income }}>{fmt(q.total)}</span>
-                              <span style={{ fontSize: "0.72rem", fontWeight: 600, padding: "2px 8px", borderRadius: 20, background: s.bg, color: s.color }}>{STATUS_LABEL[q.status] || q.status}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-
-                {rg && (
-                  <button
-                    style={{ marginTop: 20, background: "#16a34a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" }}
-                    onClick={() => { setDetailModal(false); navigate(`/orders?client_id=${detailClient.id}&new=1`); }}
-                  >📋 Gerar novo cartão para este cliente</button>
-                )}
+                {rg && <button style={{ marginTop: 20, background: "#16a34a", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", width: "100%" }} onClick={() => { setDetailModal(false); navigate(`/orders?client_id=${detailClient.id}&new=1`); }}>📋 Gerar novo cartão para este cliente</button>}
               </div>
             )}
 
-            {/* Rodapé */}
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 12, marginTop: 24, flexDirection: isMobile ? "column" : "row" }}>
               <button style={{ background: isGlass ? "rgba(255,255,255,0.3)" : theme.bgCard, color: theme.textSecondary, border: `1px solid ${isGlass ? "rgba(255,255,255,0.5)" : theme.borderCard}`, borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer", width: isMobile ? "100%" : "auto" }} onClick={() => setDetailModal(false)}>Fechar</button>
               {!detailClient.__pending && (
@@ -1247,9 +1205,8 @@ export default function Clients() {
                       navigator.geolocation.getCurrentPosition(async pos => {
                         try {
                           const res = await fetch(`${API}/clients/${detailClient.id}/set-location`, {
-                            method:  "POST",
-                            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
-                            body:    JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+                            method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
+                            body: JSON.stringify({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
                           });
                           const data = await res.json();
                           if (res.ok) { showToast("📍 Localização exata salva!"); fetchClients(); setDetailModal(false); }
@@ -1259,11 +1216,7 @@ export default function Clients() {
                     }}>
                     📍 Salvar localização exata
                   </button>
-                  <button
-                    style={{ background: theme.primaryGrad, color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer", boxShadow: `0 4px 15px ${theme.primary}44`, width: isMobile ? "100%" : "auto" }}
-                    onClick={() => { setDetailModal(false); openEdit(detailClient); }}>
-                    ✏️ Editar
-                  </button>
+                  <button style={{ background: theme.primaryGrad, color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer", boxShadow: `0 4px 15px ${theme.primary}44`, width: isMobile ? "100%" : "auto" }} onClick={() => { setDetailModal(false); openEdit(detailClient); }}>✏️ Editar</button>
                 </>
               )}
             </div>
@@ -1279,9 +1232,7 @@ export default function Clients() {
               <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 700, color: "#ef4444" }}>Excluir Cliente</h2>
               <button style={{ background: isGlass ? "rgba(255,255,255,0.4)" : theme.bgCard, border: "none", color: theme.textPrimary, width: 32, height: 32, borderRadius: 8, cursor: "pointer" }} onClick={() => setDeleteConfirm(null)}>✕</button>
             </div>
-            <p style={{ color: theme.textSecondary, marginBottom: 24 }}>
-              Excluir <strong style={{ color: theme.textPrimary }}>{deleteConfirm.name}</strong>? Esta ação não pode ser desfeita.
-            </p>
+            <p style={{ color: theme.textSecondary, marginBottom: 24 }}>Excluir <strong style={{ color: theme.textPrimary }}>{deleteConfirm.name}</strong>? Esta ação não pode ser desfeita.</p>
             <div style={{ display: "flex", gap: 12, flexDirection: isMobile ? "column" : "row", justifyContent: "flex-end" }}>
               <button style={{ background: isGlass ? "rgba(255,255,255,0.3)" : theme.bgCard, color: theme.textSecondary, border: `1px solid ${isGlass ? "rgba(255,255,255,0.5)" : theme.borderCard}`, borderRadius: 10, padding: "10px 20px", fontWeight: 600, cursor: "pointer", width: isMobile ? "100%" : "auto" }} onClick={() => setDeleteConfirm(null)}>Cancelar</button>
               <button style={{ background: "#ef4444", color: "#fff", border: "none", borderRadius: 10, padding: "10px 20px", fontWeight: 700, cursor: "pointer", width: isMobile ? "100%" : "auto" }} onClick={() => handleDelete(deleteConfirm.id)}>Excluir</button>
