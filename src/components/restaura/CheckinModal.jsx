@@ -7,17 +7,9 @@
  *  - Race condition mobile: `onQRDetected` ignora chamada se `loadingOpen` ainda true
  *  - Erro fixo na tela em todos os steps (não some automaticamente)
  *  - `sem_gps` tratado separadamente de `sem_coordenadas`
- *
- * Props:
- *   order           → objeto da OS (id, number, client_id, client_name, client_address)
- *   onClose()       → fecha o modal
- *   onSuccess(r)    → chamado após registro bem-sucedido
- *   theme           → objeto de tema do ThemeContext
- *   isGlass         → bool
- *   isMobile        → bool
- *   initialAction   → "start" | "finish" | null
- *                     Quando fornecida (acionado via botão de semana do cartão RG),
- *                     pula a tela de seleção e vai direto para o scanner.
+ *  - mounted.current = true no useEffect (garante true ao remontar)
+ *  - onQRDetected limpa PIN ao escanear de novo
+ *  - ErroFixo limpa PIN antes de voltar ao scanner
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -29,7 +21,6 @@ const token    = () => localStorage.getItem("token");
 const QR_TOKEN = "sv-checkin-universal";
 
 export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile, initialAction }) {
-  // Se initialAction foi passada (botão de semana do cartão), vai direto ao scanner
   const [step,        setStep]   = useState(initialAction ? "scanning" : "select_action");
   const [action,      setAction] = useState(initialAction || null);
   const [openChk,     setOpenChk]= useState(null);
@@ -43,9 +34,11 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
   const [pinValue,    setPinVal] = useState("");
   const [offlineMsg,  setOffMsg] = useState("");
 
-  // Ref para cancelar setError após unmount
   const mounted = useRef(true);
-  useEffect(() => { return () => { mounted.current = false; }; }, []);
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const now     = new Date();
   const horaFmt = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -63,12 +56,10 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
   }, []);
 
   // ── Verificar check-in aberto ──────────────────────────────────────────────
-  // localStorage tem prioridade sobre a API (fonte de verdade offline)
   useEffect(() => {
     const localKey = `sv_chk_open_${order.id}`;
 
     async function checkOpen() {
-      // 1. Lê localStorage PRIMEIRO
       const localRaw = localStorage.getItem(localKey);
       if (localRaw) {
         try {
@@ -84,13 +75,11 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         }
       }
 
-      // Sem internet: termina aqui
       if (!navigator.onLine) {
         if (mounted.current) setLO(false);
         return;
       }
 
-      // 2. Consulta API para confirmar ou negar
       try {
         const res  = await fetch(`${API}/checkin/open`, {
           headers: { Authorization: `Bearer ${token()}` },
@@ -100,20 +89,17 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         if (!mounted.current) return;
 
         if (data.open && String(data.order_id) === String(order.id)) {
-          // API confirma checkin aberto para ESTA OS
           const merged = { ...data, checkin_at: data.checkin_at || new Date().toISOString() };
           setOpenChk(merged);
           localStorage.setItem(localKey, JSON.stringify(merged));
         } else if (data.open && String(data.order_id) !== String(order.id)) {
-          // Checkin aberto é de OUTRA OS — não afeta esta
+          // checkin aberto é de outra OS — não afeta esta
         } else {
-          // API diz sem checkin aberto
-          // Só limpa se localStorage também não tinha nada (evita falso negativo)
           const localRaw2 = localStorage.getItem(localKey);
           if (!localRaw2) setOpenChk(null);
         }
       } catch {
-        // Falha de rede — mantém o que localStorage definiu
+        // falha de rede — mantém localStorage
       } finally {
         if (mounted.current) setLO(false);
       }
@@ -124,20 +110,29 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     return () => clearInterval(interval);
   }, [order.id]);
 
+  // ── Limpa estado ao voltar para scanner ───────────────────────────────────
+  function voltarParaScanner() {
+    setError("");
+    setPinMode(false);
+    setPinVal("");
+    setStep("scanning");
+  }
+
   // ── QR detectado ──────────────────────────────────────────────────────────
-  // CORREÇÃO race condition: ignora se loadingOpen ainda estiver ativo
   function onQRDetected(text) {
-    if (loadingOpen) return; // protege contra race condition no mobile
+    if (loadingOpen) return;
 
     if (text.trim() !== QR_TOKEN) {
       setStep("select_action");
-      // setTimeout evita que o setStep("select_action") limpe o erro
       setTimeout(() => {
         if (mounted.current) setError("❌ QR Code inválido. Use o adesivo oficial SV Finance.");
       }, 50);
       return;
     }
+    // CORREÇÃO: limpa PIN e erro ao detectar QR válido
     setError("");
+    setPinMode(false);
+    setPinVal("");
     setStep("confirming");
   }
 
@@ -212,21 +207,17 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
 
       if (!res.ok) {
         if (data.sem_coordenadas) {
-          // Cliente sem GPS — pede PIN do encarregado
           setPinMode(true);
           setError("📍 Cliente sem localização cadastrada. Digite o PIN do encarregado para confirmar sua presença.");
         } else if (data.sem_gps) {
-          // Colaborador sem GPS no celular
           setError("📡 " + (data.msg || "GPS não disponível. Ative a localização e tente novamente."));
         } else {
-          // Qualquer outro erro 400/404/etc — mostra mensagem do backend
           setError(data.msg || "Erro ao registrar. Tente novamente.");
         }
-        // sending é resetado no finally — não precisa chamar aqui
         return;
       }
 
-      // Sucesso online
+      // Sucesso
       if (action === "start" && data.checkin_id) {
         localStorage.setItem(localKey, JSON.stringify({
           ...data, open: true, order_id: order.id,
@@ -244,7 +235,6 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
       onSuccess(r);
 
     } catch (e) {
-      // Falha de rede — tenta salvar offline
       try {
         await enqueueCheckin(body);
         if (action === "start") await setOrderStatusOverlay(order.id, "in_progress");
@@ -261,12 +251,11 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
           setError("Erro de conexão: " + (e?.message || "verifique sua internet."));
       }
     } finally {
-      // SEMPRE reseta o sending — mesmo que tenha saído no return do !res.ok
       if (mounted.current) setSending(false);
     }
   }
 
-  // ── Estilos internos (dark) ────────────────────────────────────────────────
+  // ── Estilos ────────────────────────────────────────────────────────────────
   const S = {
     overlay:  { position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1100, backdropFilter: "blur(6px)" },
     card:     { width: "100%", maxWidth: 440, maxHeight: "92vh", overflowY: "auto", background: "#0a0f1e", border: "1px solid rgba(79,142,247,0.15)", borderRadius: 24, padding: isMobile ? "20px 16px" : 28, boxShadow: "0 24px 80px rgba(0,0,0,0.7)" },
@@ -276,7 +265,6 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     btnBlue:  { width: "100%", padding: "13px 0", background: "linear-gradient(135deg,#4f8ef7,#6366f1)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 14, marginBottom: 10, boxShadow: "0 4px 20px rgba(79,142,247,0.3)" },
     btnGreen: { width: "100%", padding: "13px 0", background: "linear-gradient(135deg,#22c55e,#16a34a)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 14, marginBottom: 10 },
     btnGhost: { width: "100%", padding: "11px 0", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, color: "#64748b", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 13, marginBottom: 8 },
-    // Erro com botão de fechar embutido — nunca some automaticamente
     errBox:   { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", padding: "12px 14px", borderRadius: 10, fontSize: 13, marginBottom: 14 },
     textarea: { width: "100%", padding: "11px 13px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#e2e8f0", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 14, resize: "none" },
     pinInput: { width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 10, color: "#e2e8f0", fontSize: 20, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "center", letterSpacing: "6px", marginBottom: 12 },
@@ -285,7 +273,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     close:    { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14 },
   };
 
-  // Componente de erro reutilizável — fixo, com botão fechar
+  // Erro fixo — nunca some, botão fechar obrigatório
   function ErroFixo({ msg, onTentarNovamente }) {
     return (
       <div style={S.errBox}>
@@ -338,34 +326,23 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         {step === "select_action" && (
           <>
             <div style={S.time}>
-              <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#e2e8f0", letterSpacing: "-1px" }}>
-                {horaFmt}
-              </div>
-              <div style={{ fontSize: 12, color: "#475569", textTransform: "capitalize" }}>
-                {dataFmt}
-              </div>
+              <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#e2e8f0", letterSpacing: "-1px" }}>{horaFmt}</div>
+              <div style={{ fontSize: 12, color: "#475569", textTransform: "capitalize" }}>{dataFmt}</div>
             </div>
 
-            {/* Banner offline */}
             {!navigator.onLine && (
               <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)", color: "#f59e0b", padding: "8px 12px", borderRadius: 8, fontSize: 12, marginBottom: 12, textAlign: "center" }}>
                 📴 Offline — registro será sincronizado depois.
               </div>
             )}
 
-            {/* Erro fixo — permanece até o usuário fechar */}
-            {error && (
-              <ErroFixo msg={error} />
-            )}
+            {error && <ErroFixo msg={error} />}
 
-            {/* Botão principal: Finalizar ou Iniciar */}
             {openChk ? (
               <>
                 <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 12, padding: 14, marginBottom: 14, textAlign: "center" }}>
                   <div style={{ color: "#f59e0b", fontWeight: 700, fontSize: 13 }}>⏱️ Serviço em andamento</div>
-                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>
-                    Entrada às {openChk.checkin_at?.slice(11, 16)}
-                  </div>
+                  <div style={{ color: "#64748b", fontSize: 12, marginTop: 4 }}>Entrada às {openChk.checkin_at?.slice(11, 16)}</div>
                 </div>
                 <button style={S.btnGreen} onClick={() => { setAction("finish"); setStep("scanning"); }}>
                   ✅ Finalizar serviço — Escanear QR
@@ -403,15 +380,10 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
               }}>
                 {action === "start" ? "📍 CHECK-IN · ENTRADA" : "✅ CHECK-OUT · SAÍDA"}
               </span>
-              <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#e2e8f0", letterSpacing: "-1px" }}>
-                {horaFmt}
-              </div>
-              <div style={{ fontSize: 12, color: "#475569", textTransform: "capitalize" }}>
-                {dataFmt}
-              </div>
+              <div style={{ fontSize: "1.8rem", fontWeight: 700, color: "#e2e8f0", letterSpacing: "-1px" }}>{horaFmt}</div>
+              <div style={{ fontSize: 12, color: "#475569", textTransform: "capitalize" }}>{dataFmt}</div>
             </div>
 
-            {/* Info de entrada quando finalizando */}
             {action === "finish" && openChk && (
               <div style={{ background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 12, color: "#4ade80", textAlign: "center" }}>
                 Entrada às {openChk.checkin_at?.slice(11, 16)}
@@ -425,7 +397,6 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
               onChange={e => setNotes(e.target.value)}
             />
 
-            {/* Campo PIN do encarregado (aparece quando sem_coordenadas) */}
             {pinMode && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ color: "#f59e0b", fontSize: 12, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>
@@ -441,14 +412,12 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
               </div>
             )}
 
-            {/* Endereço do cliente (nunca coordenadas brutas) */}
             {order.client_address && (
               <div style={{ fontSize: 12, marginBottom: 8, padding: "8px 12px", borderRadius: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#94a3b8" }}>
                 📍 {order.client_address}
               </div>
             )}
 
-            {/* Status GPS */}
             <div style={{
               fontSize: 12, marginBottom: 14, padding: "8px 12px", borderRadius: 8,
               background: location ? "rgba(34,197,94,0.08)"  : "rgba(245,158,11,0.08)",
@@ -458,15 +427,14 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
               {location ? "📡 GPS ativo — localização capturada" : "⏳ Aguardando GPS..."}
             </div>
 
-            {/* Erro fixo no step confirming — com botões de ação */}
+            {/* Erro fixo — botão "Tentar novamente" usa voltarParaScanner() que limpa PIN */}
             {error && (
               <ErroFixo
                 msg={error}
-                onTentarNovamente={!pinMode ? () => { setError(""); setStep("scanning"); } : null}
+                onTentarNovamente={!pinMode ? voltarParaScanner : null}
               />
             )}
 
-            {/* Botão confirmar */}
             <button
               style={{
                 ...(action === "start" ? S.btnBlue : S.btnGreen),
@@ -488,7 +456,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
             </button>
 
             {!pinMode && !error && (
-              <button style={S.btnGhost} onClick={() => setStep("scanning")} disabled={sending}>
+              <button style={S.btnGhost} onClick={voltarParaScanner} disabled={sending}>
                 ← Escanear novamente
               </button>
             )}
@@ -510,14 +478,12 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
                 : result?.action === "start" ? "Check-in registrado!" : "Serviço concluído!"}
             </div>
 
-            {/* Mensagem offline */}
             {offlineMsg && (
               <div style={{ background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)", borderRadius: 10, padding: "10px 14px", margin: "12px auto", fontSize: 12, color: "#f59e0b" }}>
                 {offlineMsg}
               </div>
             )}
 
-            {/* Duração do serviço */}
             {!result?.offline && result?.action === "finish" && result?.duration_str && (
               <div style={{ background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.15)", borderRadius: 14, padding: "14px 20px", margin: "14px auto", display: "inline-block" }}>
                 <div style={{ color: "#475569", fontSize: 11, marginBottom: 2 }}>Duração do serviço</div>
