@@ -280,7 +280,7 @@ export default function Clients() {
       recorrencia:              c.recorrencia              || "",
     });
     // Mostra status de GPS existente ao abrir edição
-    setGeoStatus(c.latitude ? "numero" : null);
+    setGeoStatus(null); // não interferir — geoStatus só muda via buscarCep()
     setModalOpen(true);
   }
 
