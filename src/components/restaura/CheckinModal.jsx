@@ -2,7 +2,7 @@
  * CheckinModal.jsx
  * Extraído de Orders.jsx — modal completo de check-in / check-out.
  *
- * Correções aplicadas (11/06/2026):
+ * Correções aplicadas (11/06/2026 — PR1):
  *  - Erro 400 sem feedback: `sending` sempre resetado no finally (blindagem dupla)
  *  - Race condition mobile: `onQRDetected` ignora chamada se `loadingOpen` ainda true
  *  - Erro fixo na tela em todos os steps (não some automaticamente)
@@ -10,6 +10,11 @@
  *  - mounted.current = true no useEffect (garante true ao remontar)
  *  - onQRDetected limpa PIN ao escanear de novo
  *  - ErroFixo limpa PIN antes de voltar ao scanner
+ *
+ * Correções aplicadas (11/06/2026 — PR2):
+ *  - onSuccess movido para dentro do guard mounted.current nos 2 paths offline
+ *    (path offline direto + fallback de rede no catch)
+ *    Evita chamar callback de pai desmontado → warning React + possível loop de estado
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -129,7 +134,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
       }, 50);
       return;
     }
-    // CORREÇÃO: limpa PIN e erro ao detectar QR válido
+    // Limpa PIN e erro ao detectar QR válido
     setError("");
     setPinMode(false);
     setPinVal("");
@@ -159,7 +164,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     const body     = buildBody();
     const localKey = `sv_chk_open_${order.id}`;
 
-    // Offline
+    // ── Offline ──────────────────────────────────────────────────────────────
     if (!navigator.onLine) {
       try {
         await enqueueCheckin(body);
@@ -180,8 +185,10 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
           setResult(r);
           setStep("success");
           setOffMsg("Sem internet — registro salvo e será sincronizado.");
+          // CORREÇÃO: onSuccess dentro do guard mounted — evita chamar callback
+          // de componente desmontado → warning React + possível loop de estado
+          onSuccess(r);
         }
-        onSuccess(r);
       } catch {
         if (mounted.current) setError("Não foi possível salvar offline.");
       } finally {
@@ -190,7 +197,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
       return;
     }
 
-    // Online
+    // ── Online ────────────────────────────────────────────────────────────────
     try {
       const endpoint = action === "start"
         ? `${API}/checkin/${order.client_id}/start`
@@ -217,7 +224,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         return;
       }
 
-      // Sucesso
+      // Sucesso online
       if (action === "start" && data.checkin_id) {
         localStorage.setItem(localKey, JSON.stringify({
           ...data, open: true, order_id: order.id,
@@ -231,10 +238,11 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
       if (mounted.current) {
         setResult(r);
         setStep("success");
+        onSuccess(r);
       }
-      onSuccess(r);
 
     } catch (e) {
+      // ── Fallback offline (erro de rede) ────────────────────────────────────
       try {
         await enqueueCheckin(body);
         if (action === "start") await setOrderStatusOverlay(order.id, "in_progress");
@@ -244,8 +252,9 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
           setResult(r);
           setStep("success");
           setOffMsg("Conexão instável — salvo offline.");
+          // CORREÇÃO: onSuccess dentro do guard mounted — mesmo motivo do path offline direto
+          onSuccess(r);
         }
-        onSuccess(r);
       } catch {
         if (mounted.current)
           setError("Erro de conexão: " + (e?.message || "verifique sua internet."));
