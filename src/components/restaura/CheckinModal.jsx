@@ -2,8 +2,11 @@
  * CheckinModal.jsx
  * Extraído de Orders.jsx — modal completo de check-in / check-out.
  *
- * Fluxo:
- *   select_action → scanning → confirming → success
+ * Correções aplicadas (11/06/2026):
+ *  - Erro 400 sem feedback: `sending` sempre resetado no finally (blindagem dupla)
+ *  - Race condition mobile: `onQRDetected` ignora chamada se `loadingOpen` ainda true
+ *  - Erro fixo na tela em todos os steps (não some automaticamente)
+ *  - `sem_gps` tratado separadamente de `sem_coordenadas`
  *
  * Props:
  *   order           → objeto da OS (id, number, client_id, client_name, client_address)
@@ -17,7 +20,7 @@
  *                     pula a tela de seleção e vai direto para o scanner.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { enqueueCheckin, uuid, setOrderStatusOverlay } from "../../offline/offlineDB";
 import QRScanner from "./QRScanner";
 
@@ -27,18 +30,22 @@ const QR_TOKEN = "sv-checkin-universal";
 
 export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass, isMobile, initialAction }) {
   // Se initialAction foi passada (botão de semana do cartão), vai direto ao scanner
-  const [step,       setStep]   = useState(initialAction ? "scanning" : "select_action");
-  const [action,     setAction] = useState(initialAction || null);
-  const [openChk,    setOpenChk]= useState(null);
-  const [location,   setLoc]    = useState(null);
-  const [notes,      setNotes]  = useState("");
-  const [sending,    setSending]= useState(false);
-  const [error,      setError]  = useState("");
-  const [result,     setResult] = useState(null);
-  const [loadingOpen,setLO]     = useState(true);
-  const [pinMode,    setPinMode]= useState(false);
-  const [pinValue,   setPinVal] = useState("");
-  const [offlineMsg, setOffMsg] = useState("");
+  const [step,        setStep]   = useState(initialAction ? "scanning" : "select_action");
+  const [action,      setAction] = useState(initialAction || null);
+  const [openChk,     setOpenChk]= useState(null);
+  const [location,    setLoc]    = useState(null);
+  const [notes,       setNotes]  = useState("");
+  const [sending,     setSending]= useState(false);
+  const [error,       setError]  = useState("");
+  const [result,      setResult] = useState(null);
+  const [loadingOpen, setLO]     = useState(true);
+  const [pinMode,     setPinMode]= useState(false);
+  const [pinValue,    setPinVal] = useState("");
+  const [offlineMsg,  setOffMsg] = useState("");
+
+  // Ref para cancelar setError após unmount
+  const mounted = useRef(true);
+  useEffect(() => { return () => { mounted.current = false; }; }, []);
 
   const now     = new Date();
   const horaFmt = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -66,21 +73,22 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
       if (localRaw) {
         try {
           const localData = JSON.parse(localRaw);
-          const ageMs = Date.now() - new Date(localData.checkin_at || 0).getTime();
+          const ageMs     = Date.now() - new Date(localData.checkin_at || 0).getTime();
           if (ageMs < 8 * 60 * 60 * 1000) {
-            setOpenChk(localData);
-            setLO(false);
+            if (mounted.current) setOpenChk(localData);
           } else {
             localStorage.removeItem(localKey);
           }
         } catch {
           localStorage.removeItem(localKey);
         }
-      } else {
-        setLO(true);
       }
 
-      if (!navigator.onLine) { setLO(false); return; }
+      // Sem internet: termina aqui
+      if (!navigator.onLine) {
+        if (mounted.current) setLO(false);
+        return;
+      }
 
       // 2. Consulta API para confirmar ou negar
       try {
@@ -89,6 +97,8 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         });
         const data = await res.json();
 
+        if (!mounted.current) return;
+
         if (data.open && String(data.order_id) === String(order.id)) {
           // API confirma checkin aberto para ESTA OS
           const merged = { ...data, checkin_at: data.checkin_at || new Date().toISOString() };
@@ -96,19 +106,16 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
           localStorage.setItem(localKey, JSON.stringify(merged));
         } else if (data.open && String(data.order_id) !== String(order.id)) {
           // Checkin aberto é de OUTRA OS — não afeta esta
-          // mantém o que o localStorage disse
         } else {
           // API diz sem checkin aberto
           // Só limpa se localStorage também não tinha nada (evita falso negativo)
           const localRaw2 = localStorage.getItem(localKey);
           if (!localRaw2) setOpenChk(null);
-          // Se localStorage tem dados mas API diz não → pode ser delay de sync
-          // Mantém localStorage por segurança
         }
       } catch {
         // Falha de rede — mantém o que localStorage definiu
       } finally {
-        setLO(false);
+        if (mounted.current) setLO(false);
       }
     }
 
@@ -117,11 +124,17 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     return () => clearInterval(interval);
   }, [order.id]);
 
-  // ── QR detectado — erro fica fixo na tela ─────────────────────────────────
+  // ── QR detectado ──────────────────────────────────────────────────────────
+  // CORREÇÃO race condition: ignora se loadingOpen ainda estiver ativo
   function onQRDetected(text) {
+    if (loadingOpen) return; // protege contra race condition no mobile
+
     if (text.trim() !== QR_TOKEN) {
       setStep("select_action");
-      setTimeout(() => setError("❌ QR Code inválido. Use o adesivo oficial SV Finance."), 50);
+      // setTimeout evita que o setStep("select_action") limpe o erro
+      setTimeout(() => {
+        if (mounted.current) setError("❌ QR Code inválido. Use o adesivo oficial SV Finance.");
+      }, 50);
       return;
     }
     setError("");
@@ -168,14 +181,16 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
           localStorage.removeItem(localKey);
         }
         const r = { action, offline: true };
-        setResult(r);
-        setStep("success");
-        setOffMsg("Sem internet — registro salvo e será sincronizado.");
+        if (mounted.current) {
+          setResult(r);
+          setStep("success");
+          setOffMsg("Sem internet — registro salvo e será sincronizado.");
+        }
         onSuccess(r);
       } catch {
-        setError("Não foi possível salvar offline.");
+        if (mounted.current) setError("Não foi possível salvar offline.");
       } finally {
-        setSending(false);
+        if (mounted.current) setSending(false);
       }
       return;
     }
@@ -193,14 +208,21 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
       });
       const data = await res.json();
 
+      if (!mounted.current) return;
+
       if (!res.ok) {
         if (data.sem_coordenadas) {
+          // Cliente sem GPS — pede PIN do encarregado
           setPinMode(true);
-          setError("Cliente sem localização cadastrada. Digite o PIN do encarregado.");
+          setError("📍 Cliente sem localização cadastrada. Digite o PIN do encarregado para confirmar sua presença.");
+        } else if (data.sem_gps) {
+          // Colaborador sem GPS no celular
+          setError("📡 " + (data.msg || "GPS não disponível. Ative a localização e tente novamente."));
         } else {
-          // Erro fixo — não some automaticamente
+          // Qualquer outro erro 400/404/etc — mostra mensagem do backend
           setError(data.msg || "Erro ao registrar. Tente novamente.");
         }
+        // sending é resetado no finally — não precisa chamar aqui
         return;
       }
 
@@ -215,8 +237,10 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
       }
 
       const r = { ...data, action };
-      setResult(r);
-      setStep("success");
+      if (mounted.current) {
+        setResult(r);
+        setStep("success");
+      }
       onSuccess(r);
 
     } catch (e) {
@@ -226,15 +250,19 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         if (action === "start") await setOrderStatusOverlay(order.id, "in_progress");
         else await setOrderStatusOverlay(order.id, "done");
         const r = { action, offline: true };
-        setResult(r);
-        setStep("success");
-        setOffMsg("Conexão instável — salvo offline.");
+        if (mounted.current) {
+          setResult(r);
+          setStep("success");
+          setOffMsg("Conexão instável — salvo offline.");
+        }
         onSuccess(r);
       } catch {
-        setError("Erro de conexão: " + (e.message || "verifique sua internet."));
+        if (mounted.current)
+          setError("Erro de conexão: " + (e?.message || "verifique sua internet."));
       }
     } finally {
-      setSending(false);
+      // SEMPRE reseta o sending — mesmo que tenha saído no return do !res.ok
+      if (mounted.current) setSending(false);
     }
   }
 
@@ -248,7 +276,8 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     btnBlue:  { width: "100%", padding: "13px 0", background: "linear-gradient(135deg,#4f8ef7,#6366f1)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 14, marginBottom: 10, boxShadow: "0 4px 20px rgba(79,142,247,0.3)" },
     btnGreen: { width: "100%", padding: "13px 0", background: "linear-gradient(135deg,#22c55e,#16a34a)", border: "none", borderRadius: 12, color: "#fff", fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: 14, marginBottom: 10 },
     btnGhost: { width: "100%", padding: "11px 0", background: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, color: "#64748b", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 13, marginBottom: 8 },
-    err:      { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", padding: "10px 14px", borderRadius: 10, fontSize: 13, marginBottom: 14 },
+    // Erro com botão de fechar embutido — nunca some automaticamente
+    errBox:   { background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.25)", color: "#f87171", padding: "12px 14px", borderRadius: 10, fontSize: 13, marginBottom: 14 },
     textarea: { width: "100%", padding: "11px 13px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, color: "#e2e8f0", fontSize: 14, fontFamily: "inherit", outline: "none", boxSizing: "border-box", marginBottom: 14, resize: "none" },
     pinInput: { width: "100%", padding: "12px 14px", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 10, color: "#e2e8f0", fontSize: 20, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "center", letterSpacing: "6px", marginBottom: 12 },
     time:     { textAlign: "center", marginBottom: 14 },
@@ -256,12 +285,34 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     close:    { background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", width: 32, height: 32, borderRadius: 8, cursor: "pointer", fontSize: 14 },
   };
 
+  // Componente de erro reutilizável — fixo, com botão fechar
+  function ErroFixo({ msg, onTentarNovamente }) {
+    return (
+      <div style={S.errBox}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>⚠️ Atenção</div>
+        <div style={{ lineHeight: 1.5 }}>{msg}</div>
+        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+          <button
+            style={{ flex: 1, padding: "7px 0", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
+            onClick={() => setError("")}
+          >✕ Fechar</button>
+          {onTentarNovamente && (
+            <button
+              style={{ flex: 1, padding: "7px 0", background: "rgba(79,142,247,0.15)", border: "1px solid rgba(79,142,247,0.3)", borderRadius: 8, color: "#4f8ef7", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
+              onClick={onTentarNovamente}
+            >↩ Tentar novamente</button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ── Loading inicial ────────────────────────────────────────────────────────
   if (loadingOpen) return (
     <div style={S.overlay}>
       <div style={S.card}>
         <div style={{ textAlign: "center", padding: "40px 0", color: "#475569" }}>
-          Verificando check-in aberto...
+          Verificando check-in...
         </div>
       </div>
     </div>
@@ -304,15 +355,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
 
             {/* Erro fixo — permanece até o usuário fechar */}
             {error && (
-              <div style={{ ...S.err, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div>{error}</div>
-                <button
-                  style={{ background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12, padding: "6px 0" }}
-                  onClick={() => setError("")}
-                >
-                  ✕ Fechar
-                </button>
-              </div>
+              <ErroFixo msg={error} />
             )}
 
             {/* Botão principal: Finalizar ou Iniciar */}
@@ -344,7 +387,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
             action={action}
             clientCode={order.client_id}
             onDetected={onQRDetected}
-            onCancel={() => setStep("select_action")}
+            onCancel={() => { setStep("select_action"); }}
           />
         )}
 
@@ -386,11 +429,11 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
             {pinMode && (
               <div style={{ marginBottom: 14 }}>
                 <div style={{ color: "#f59e0b", fontSize: 12, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>
-                  🔑 PIN do encarregado
+                  🔑 PIN do encarregado (6 dígitos) ou PIN do cliente (4 dígitos)
                 </div>
                 <input
                   style={S.pinInput}
-                  type="number" inputMode="numeric" placeholder="000000"
+                  type="number" inputMode="numeric" placeholder="——"
                   value={pinValue}
                   onChange={e => setPinVal(e.target.value.slice(0, 6))}
                   autoFocus
@@ -415,45 +458,39 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
               {location ? "📡 GPS ativo — localização capturada" : "⏳ Aguardando GPS..."}
             </div>
 
-            {/* Erro fixo no step confirming */}
+            {/* Erro fixo no step confirming — com botões de ação */}
             {error && (
-              <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)", color: "#f87171", padding: "12px 16px", borderRadius: 10, fontSize: 13, marginBottom: 14 }}>
-                <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Atenção</div>
-                <div>{error}</div>
-                {!pinMode && (
-                  <button
-                    style={{ marginTop: 10, width: "100%", padding: "8px 0", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
-                    onClick={() => { setError(""); setStep("scanning"); }}
-                  >
-                    ← Tentar escanear novamente
-                  </button>
-                )}
-              </div>
+              <ErroFixo
+                msg={error}
+                onTentarNovamente={!pinMode ? () => { setError(""); setStep("scanning"); } : null}
+              />
             )}
 
-            {/* Botão confirmar — só aparece se não há erro bloqueante (exceto se em modo PIN) */}
-            {(!error || pinMode) && (
-              <>
-                <button
-                  style={{
-                    ...(action === "start" ? S.btnBlue : S.btnGreen),
-                    opacity: (sending || !location) ? 0.6 : 1,
-                    cursor:  (sending || !location) ? "not-allowed" : "pointer",
-                  }}
-                  onClick={confirmar}
-                  disabled={sending || !location || (pinMode && pinValue.length < 4)}
-                >
-                  {sending      ? "Registrando..."
-                   : !location  ? "Aguardando GPS..."
-                   : pinMode    ? "✓ Validar PIN e confirmar"
-                   : action === "start" ? "✓ Confirmar entrada" : "✓ Confirmar saída"}
-                </button>
-                {!pinMode && (
-                  <button style={S.btnGhost} onClick={() => setStep("scanning")} disabled={sending}>
-                    ← Escanear novamente
-                  </button>
-                )}
-              </>
+            {/* Botão confirmar */}
+            <button
+              style={{
+                ...(action === "start" ? S.btnBlue : S.btnGreen),
+                opacity: (sending || !location || (pinMode && pinValue.length < 4)) ? 0.6 : 1,
+                cursor:  (sending || !location || (pinMode && pinValue.length < 4)) ? "not-allowed" : "pointer",
+              }}
+              onClick={confirmar}
+              disabled={sending || !location || (pinMode && pinValue.length < 4)}
+            >
+              {sending
+                ? "Registrando..."
+                : !location
+                  ? "Aguardando GPS..."
+                  : pinMode
+                    ? "✓ Validar PIN e confirmar"
+                    : action === "start"
+                      ? "✓ Confirmar entrada"
+                      : "✓ Confirmar saída"}
+            </button>
+
+            {!pinMode && !error && (
+              <button style={S.btnGhost} onClick={() => setStep("scanning")} disabled={sending}>
+                ← Escanear novamente
+              </button>
             )}
           </>
         )}

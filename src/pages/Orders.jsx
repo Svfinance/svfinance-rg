@@ -190,10 +190,16 @@ export default function Orders() {
   }
 
   // Pré-selecionar cliente vindo de ?client_id=X&new=1 (botão do Clients.jsx)
+  // CORREÇÃO: limpa os query params após usar — evita que F5 reabra o formulário
   useEffect(() => {
     const cid   = searchParams.get("client_id");
     const isNew = searchParams.get("new");
     if (!cid || !isNew) return;
+
+    // Remove os query params da URL imediatamente, antes de abrir o form
+    // replace: true para não criar entrada no histórico do navegador
+    navigate("/orders", { replace: true });
+
     const tryOpen = setInterval(() => {
       setClients(prev => {
         if (prev.length > 0) {
@@ -206,7 +212,9 @@ export default function Orders() {
       });
     }, 300);
     return () => clearInterval(tryOpen);
-  }, [searchParams]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // dependência removida: searchParams — o efeito deve rodar só uma vez no mount
+  // (rodar em cada mudança de searchParams causava loop de re-abertura do form)
 
   useEffect(() => {
     try { const idx = JSON.parse(localStorage.getItem("sv_rg_freq_idx") || "{}"); setFreqIndex(idx); } catch {}
