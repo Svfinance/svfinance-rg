@@ -723,7 +723,7 @@ export default function Clients() {
               </thead>
               <tbody>
                 {filtered.map(c => (
-                  <tr key={c.id} className="cl-row" style={{ borderBottom: `1px solid ${isGlass ? "rgba(255,255,255,0.15)" : theme.border}`, transition: "background 0.15s", opacity: c.__pending ? 0.85 : 1 }}>
+                  <tr key={c.id} className="cl-row" onClick={() => fetchDetail(c.id)} style={{ cursor: "pointer", borderBottom: `1px solid ${isGlass ? "rgba(255,255,255,0.15)" : theme.border}`, transition: "background 0.15s", opacity: c.__pending ? 0.85 : 1 }}>
                     <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
                       <span style={{ fontSize: "0.78rem", fontWeight: 700, color: theme.textMuted, background: isGlass ? "rgba(255,255,255,0.2)" : `${theme.primary}15`, borderRadius: 6, padding: "2px 7px" }}>
                         {c.codigo || "—"}
