@@ -567,7 +567,7 @@ export default function Orders() {
                   const isOverlay   = !!overlays[String(o.id)];
                   const podeCheckin = effStatus === "open" || effStatus === "in_progress";
                   return (
-                    <tr key={o.id} className="os-row" style={{ borderBottom: `1px solid ${rg ? RGT.verdeBd : theme.border}`, transition: "background 0.15s" }}>
+                    <tr key={o.id} className="os-row" onClick={() => openDetailOrder(o)} style={{ cursor: "pointer", borderBottom: `1px solid ${rg ? RGT.verdeBd : theme.border}`, transition: "background 0.15s" }}>
                       <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
                         <button style={{ background: "none", border: "none", fontWeight: 700, color: rg ? RGT.verde : theme.primary, cursor: "pointer", fontSize: "0.88rem", padding: 0, textDecoration: "underline" }} onClick={() => openDetailOrder(o)}>{o.number}</button>
                       </td>
