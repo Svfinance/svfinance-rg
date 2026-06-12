@@ -9,6 +9,14 @@
  * PR4: confirmandoRef bloqueia duplo disparo no botão "Confirmar entrada/saída"
  *      Evita que confirmar() seja chamado duas vezes causando 400 duplo no console
  *      e mensagem de erro piscando antes de fixar na tela
+ * PR5: SEPARA falha de rede real de erro do servidor.
+ *      ❌ ANTES: qualquer exceção (inclusive res.json() quebrando num 502 de
+ *         cold start do Render) caía no catch e virava "salvo offline → sucesso",
+ *         escondendo o erro real do servidor (a mensagem 400 nunca fixava na tela).
+ *      ✅ AGORA: só falha de REDE (fetch rejeitado, servidor não respondeu) salva
+ *         offline. Se o servidor RESPONDEU com erro (400/403/404/500), a mensagem
+ *         fixa na tela e nunca é tratada como offline.
+ *      Helper salvarOffline() centraliza o caminho offline (usado em 2 lugares).
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -154,6 +162,37 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     return { ...base, kind: "finish", checkin_id: openChk?.checkin_id, order_id: order.id };
   }
 
+  // ── Salvar offline (caminho único reutilizado) ─────────────────────────────
+  // PR5: usado tanto no offline conhecido quanto na falha de REDE real.
+  // NUNCA é chamado quando o servidor respondeu com erro — erro de servidor
+  // tem que aparecer fixo na tela.
+  async function salvarOffline(body, localKey, motivo) {
+    try {
+      await enqueueCheckin(body);
+      if (action === "start") {
+        await setOrderStatusOverlay(order.id, "in_progress");
+        localStorage.setItem(localKey, JSON.stringify({
+          open: true, order_id: order.id,
+          checkin_id: body.local_id,
+          checkin_at: new Date().toISOString(),
+          offline: true,
+        }));
+      } else {
+        await setOrderStatusOverlay(order.id, "done");
+        localStorage.removeItem(localKey);
+      }
+      const r = { action, offline: true };
+      if (mounted.current) {
+        setResult(r);
+        setStep("success");
+        setOffMsg(motivo || "Sem internet — registro salvo e será sincronizado.");
+        onSuccess(r);
+      }
+    } catch {
+      if (mounted.current) setError("Não foi possível salvar offline.");
+    }
+  }
+
   // ── Confirmar check-in / check-out ────────────────────────────────────────
   async function confirmar() {
     // PR4: bloqueia duplo disparo — evita 400 duplo e mensagem piscando
@@ -166,50 +205,43 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     const body     = buildBody();
     const localKey = `sv_chk_open_${order.id}`;
 
-    // ── Offline ──────────────────────────────────────────────────────────────
+    // ── Offline conhecido (sem internet) → salva direto ───────────────────────
     if (!navigator.onLine) {
-      try {
-        await enqueueCheckin(body);
-        if (action === "start") {
-          await setOrderStatusOverlay(order.id, "in_progress");
-          localStorage.setItem(localKey, JSON.stringify({
-            open: true, order_id: order.id,
-            checkin_id: body.local_id,
-            checkin_at: new Date().toISOString(),
-            offline: true,
-          }));
-        } else {
-          await setOrderStatusOverlay(order.id, "done");
-          localStorage.removeItem(localKey);
-        }
-        const r = { action, offline: true };
-        if (mounted.current) {
-          setResult(r);
-          setStep("success");
-          setOffMsg("Sem internet — registro salvo e será sincronizado.");
-          onSuccess(r);
-        }
-      } catch {
-        if (mounted.current) setError("Não foi possível salvar offline.");
-      } finally {
-        confirmandoRef.current = false;
-        if (mounted.current) setSending(false);
-      }
+      await salvarOffline(body, localKey, "Sem internet — registro salvo e será sincronizado.");
+      confirmandoRef.current = false;
+      if (mounted.current) setSending(false);
       return;
     }
 
-    // ── Online ────────────────────────────────────────────────────────────────
+    // ── Online → tenta o servidor ─────────────────────────────────────────────
     try {
       const endpoint = action === "start"
         ? `${API}/checkin/${order.client_id}/start`
         : `${API}/checkin/${openChk?.checkin_id}/finish`;
 
-      const res  = await fetch(endpoint, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
-        body:    JSON.stringify(body),
-      });
-      const data = await res.json();
+      // PR5: a falha de REDE (fetch rejeitado: sem resposta, DNS, timeout de
+      // conexão) é capturada AQUI, só nela salvamos offline.
+      let res;
+      try {
+        res = await fetch(endpoint, {
+          method:  "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token()}` },
+          body:    JSON.stringify(body),
+        });
+      } catch (netErr) {
+        await salvarOffline(body, localKey, "Conexão instável — salvo offline.");
+        return;
+      }
+
+      // PR5: o servidor RESPONDEU. A partir daqui NUNCA tratamos como offline.
+      // Se o corpo não vier como JSON (ex.: HTML de erro do Render no cold start),
+      // não quebra o fluxo nem cai em "sucesso offline" — vira erro fixo na tela.
+      let data = {};
+      try {
+        data = await res.json();
+      } catch {
+        data = {};
+      }
 
       if (!mounted.current) return;
 
@@ -220,11 +252,12 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         } else if (data.sem_gps) {
           setError("📡 " + (data.msg || "GPS não disponível. Ative a localização e tente novamente."));
         } else {
-          setError(data.msg || "Erro ao registrar. Tente novamente.");
+          setError(data.msg || `Erro ${res.status} ao registrar. Tente novamente.`);
         }
         return;
       }
 
+      // ── Sucesso real do servidor ────────────────────────────────────────────
       if (action === "start" && data.checkin_id) {
         localStorage.setItem(localKey, JSON.stringify({
           ...data, open: true, order_id: order.id,
@@ -241,22 +274,6 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         onSuccess(r);
       }
 
-    } catch (e) {
-      try {
-        await enqueueCheckin(body);
-        if (action === "start") await setOrderStatusOverlay(order.id, "in_progress");
-        else await setOrderStatusOverlay(order.id, "done");
-        const r = { action, offline: true };
-        if (mounted.current) {
-          setResult(r);
-          setStep("success");
-          setOffMsg("Conexão instável — salvo offline.");
-          onSuccess(r);
-        }
-      } catch {
-        if (mounted.current)
-          setError("Erro de conexão: " + (e?.message || "verifique sua internet."));
-      }
     } finally {
       confirmandoRef.current = false;
       if (mounted.current) setSending(false);
