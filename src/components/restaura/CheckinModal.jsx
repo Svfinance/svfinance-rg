@@ -38,7 +38,8 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
   const confirmandoRef = useRef(false);
 
   useEffect(() => {
-    mounted.current = true;
+    mounted.current        = true;
+    confirmandoRef.current = false; // reseta ao montar/remontar — evita ref travado entre sessões
     return () => { mounted.current = false; };
   }, []);
 
