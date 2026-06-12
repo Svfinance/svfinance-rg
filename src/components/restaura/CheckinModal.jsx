@@ -44,12 +44,17 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
   const mounted       = useRef(true);
   // PR4: guard contra duplo disparo no botão confirmar
   const confirmandoRef = useRef(false);
+  // PR6: step ao vivo via ref — usado para ignorar detecções órfãs do QRScanner
+  const stepRef        = useRef(step);
 
   useEffect(() => {
     mounted.current        = true;
     confirmandoRef.current = false; // reseta ao montar/remontar — evita ref travado entre sessões
     return () => { mounted.current = false; };
   }, []);
+
+  // PR6: mantém stepRef sincronizado com o step atual (sem closure velha)
+  useEffect(() => { stepRef.current = step; }, [step]);
 
   const now     = new Date();
   const horaFmt = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -131,6 +136,11 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
 
   // ── QR detectado ──────────────────────────────────────────────────────────
   function onQRDetected(text) {
+    // PR6: ignora qualquer detecção que chegue fora do passo de scanner.
+    // O QRScanner pode continuar disparando onDetected depois de desmontado
+    // (scan loop/câmera sem cleanup), o que rejogava "confirming" de volta
+    // para "confirming_location" — a tela que "piscava e voltava".
+    if (stepRef.current !== "scanning") return;
     if (loadingOpen) return;
 
     if (text.trim() !== QR_TOKEN) {
