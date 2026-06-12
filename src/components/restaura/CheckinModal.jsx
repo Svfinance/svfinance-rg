@@ -1,23 +1,14 @@
 /**
  * CheckinModal.jsx
  *
- * Correções aplicadas (11/06/2026 — PR1):
- *  - Erro 400 sem feedback: sending sempre resetado no finally
- *  - Race condition mobile: onQRDetected ignora se loadingOpen true
- *  - Erro fixo na tela em todos os steps
- *  - sem_gps tratado separadamente de sem_coordenadas
- *  - mounted.current garantido ao remontar
- *  - onQRDetected limpa PIN ao escanear de novo
- *
- * Correções aplicadas (11/06/2026 — PR2):
- *  - onSuccess dentro do guard mounted.current (2 ocorrências)
- *
- * Feature adicionada (11/06/2026 — PR3):
- *  - Step confirming_location: colaborador confirma explicitamente que está
- *    no local do cliente antes de registrar o check-in.
- *    Resolve o problema de check-in na loja errada em ambientes densos
- *    (shoppings, galerias) onde GPS não é preciso o suficiente.
- *    GPS continua gravado para auditoria pelo admin.
+ * PR1: sending resetado no finally, race condition mobile, erro fixo na tela,
+ *      sem_gps separado, mounted.current garantido, PIN limpo no QR
+ * PR2: onSuccess dentro do guard mounted.current (2 ocorrências)
+ * PR3: step confirming_location — confirmação de local antes do check-in
+ *      confirming_location só no start, setTimeout no erro do botão "local errado"
+ * PR4: confirmandoRef bloqueia duplo disparo no botão "Confirmar entrada/saída"
+ *      Evita que confirmar() seja chamado duas vezes causando 400 duplo no console
+ *      e mensagem de erro piscando antes de fixar na tela
  */
 
 import { useState, useEffect, useRef } from "react";
@@ -42,7 +33,10 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
   const [pinValue,    setPinVal] = useState("");
   const [offlineMsg,  setOffMsg] = useState("");
 
-  const mounted = useRef(true);
+  const mounted       = useRef(true);
+  // PR4: guard contra duplo disparo no botão confirmar
+  const confirmandoRef = useRef(false);
+
   useEffect(() => {
     mounted.current = true;
     return () => { mounted.current = false; };
@@ -126,7 +120,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     setStep("scanning");
   }
 
-  // ── QR detectado → vai para confirmação de local antes de confirmar ────────
+  // ── QR detectado ──────────────────────────────────────────────────────────
   function onQRDetected(text) {
     if (loadingOpen) return;
 
@@ -140,9 +134,8 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     setError("");
     setPinMode(false);
     setPinVal("");
-    // FEATURE PR3: vai para confirmação de local antes de confirmar
+    // confirming_location só no check-in (start) — check-out vai direto
     setStep(action === "start" ? "confirming_location" : "confirming");
-
   }
 
   // ── Monta body da requisição ───────────────────────────────────────────────
@@ -162,6 +155,10 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
 
   // ── Confirmar check-in / check-out ────────────────────────────────────────
   async function confirmar() {
+    // PR4: bloqueia duplo disparo — evita 400 duplo e mensagem piscando
+    if (confirmandoRef.current) return;
+    confirmandoRef.current = true;
+
     setSending(true);
     setError("");
     setOffMsg("");
@@ -194,6 +191,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
       } catch {
         if (mounted.current) setError("Não foi possível salvar offline.");
       } finally {
+        confirmandoRef.current = false;
         if (mounted.current) setSending(false);
       }
       return;
@@ -259,6 +257,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
           setError("Erro de conexão: " + (e?.message || "verifique sua internet."));
       }
     } finally {
+      confirmandoRef.current = false;
       if (mounted.current) setSending(false);
     }
   }
@@ -288,9 +287,15 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
         <div style={{ fontWeight: 700, marginBottom: 6 }}>⚠️ Atenção</div>
         <div style={{ lineHeight: 1.5 }}>{msg}</div>
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <button style={{ flex: 1, padding: "7px 0", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }} onClick={() => setError("")}>✕ Fechar</button>
+          <button
+            style={{ flex: 1, padding: "7px 0", background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#f87171", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
+            onClick={() => setError("")}
+          >✕ Fechar</button>
           {onTentarNovamente && (
-            <button style={{ flex: 1, padding: "7px 0", background: "rgba(79,142,247,0.15)", border: "1px solid rgba(79,142,247,0.3)", borderRadius: 8, color: "#4f8ef7", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }} onClick={onTentarNovamente}>↩ Tentar novamente</button>
+            <button
+              style={{ flex: 1, padding: "7px 0", background: "rgba(79,142,247,0.15)", border: "1px solid rgba(79,142,247,0.3)", borderRadius: 8, color: "#4f8ef7", fontWeight: 600, cursor: "pointer", fontFamily: "inherit", fontSize: 12 }}
+              onClick={onTentarNovamente}
+            >↩ Tentar novamente</button>
           )}
         </div>
       </div>
@@ -367,7 +372,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
           />
         )}
 
-        {/* ── CONFIRMING LOCATION — novo step PR3 ────────────────────────── */}
+        {/* ── CONFIRMING LOCATION ────────────────────────────────────────── */}
         {step === "confirming_location" && (
           <>
             <div style={{ textAlign: "center", marginBottom: 20 }}>
@@ -380,7 +385,6 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
               </div>
             </div>
 
-            {/* Card do cliente */}
             <div style={{ background: "rgba(79,142,247,0.06)", border: "1px solid rgba(79,142,247,0.2)", borderRadius: 14, padding: "16px 18px", marginBottom: 20 }}>
               <div style={{ fontWeight: 700, fontSize: "1rem", color: "#e2e8f0", marginBottom: 6 }}>
                 🏪 {order.client_name}
@@ -401,16 +405,11 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
               </div>
             </div>
 
-            {/* Aviso de responsabilidade */}
             <div style={{ background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
               ⚠️ Ao confirmar, sua localização GPS é registrada. Confirmações incorretas ficam gravadas para auditoria.
             </div>
 
-            {/* Botões */}
-            <button
-              style={S.btnGreen}
-              onClick={() => setStep("confirming")}
-            >
+            <button style={S.btnGreen} onClick={() => setStep("confirming")}>
               ✓ Sim, estou no local de {order.client_name}
             </button>
 
