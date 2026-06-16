@@ -41,16 +41,22 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
   const [pinValue,    setPinVal] = useState("");
   const [offlineMsg,  setOffMsg] = useState("");
 
-  const mounted       = useRef(true);
+  const mounted        = useRef(true);
   // PR4: guard contra duplo disparo no botão confirmar
   const confirmandoRef = useRef(false);
   // PR6: step ao vivo via ref — usado para ignorar detecções órfãs do QRScanner
   const stepRef        = useRef(step);
+  // PR7: bloqueia onQRDetected durante os 350ms da transição em voltarParaScanner
+  const transitingRef  = useRef(false);
+  const transTimerRef  = useRef(null);
 
   useEffect(() => {
     mounted.current        = true;
     confirmandoRef.current = false; // reseta ao montar/remontar — evita ref travado entre sessões
-    return () => { mounted.current = false; };
+    return () => {
+      mounted.current = false;
+      clearTimeout(transTimerRef.current); // PR7: evita callback de ref em componente desmontado
+    };
   }, []);
 
   // PR6: mantém stepRef sincronizado com o step atual (sem closure velha)
@@ -128,6 +134,12 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
 
   // ── Limpa estado ao voltar para scanner ───────────────────────────────────
   function voltarParaScanner() {
+    // PR7: bloqueia onQRDetected por 350ms — janela onde a instância anterior do
+    // scanner pode disparar uma detecção órfã antes de o novo ciclo de câmera iniciar.
+    transitingRef.current = true;
+    clearTimeout(transTimerRef.current);
+    transTimerRef.current = setTimeout(() => { transitingRef.current = false; }, 350);
+    confirmandoRef.current = false; // reseta junto para não bloquear o próximo confirmar
     setError("");
     setPinMode(false);
     setPinVal("");
@@ -140,7 +152,8 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     // O QRScanner pode continuar disparando onDetected depois de desmontado
     // (scan loop/câmera sem cleanup), o que rejogava "confirming" de volta
     // para "confirming_location" — a tela que "piscava e voltava".
-    if (stepRef.current !== "scanning") return;
+    if (stepRef.current !== "scanning") return;   // PR6
+    if (transitingRef.current) return;             // PR7: janela de 350ms pós voltarParaScanner
     if (loadingOpen) return;
 
     if (text.trim() !== QR_TOKEN) {

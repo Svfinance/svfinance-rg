@@ -23,9 +23,10 @@ const token     = () => localStorage.getItem("token");
 const QR_TOKEN  = "sv-checkin-universal";
 
 export default function QRScanner({ onDetected, onCancel, action, clientCode }) {
-  const videoRef  = useRef(null);
-  const readerRef = useRef(null);
-  const tmrRef    = useRef(null);
+  const videoRef   = useRef(null);
+  const readerRef  = useRef(null);
+  const tmrRef     = useRef(null);
+  const cleanupRef = useRef(false);
 
   const [mode,    setCamMode] = useState("camera");
   const [camErr,  setCamErr]  = useState("");
@@ -34,6 +35,12 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
   const [numErr,  setNumErr]  = useState("");
   const [pin,     setPin]     = useState("");
   const [pinErr,  setPinErr]  = useState("");
+
+  // PR7: garante que cleanupRef seja true quando o componente desmonta totalmente,
+  // cobrindo qualquer janela em que useEffect([mode]) ainda não tenha rodado cleanup.
+  useEffect(() => {
+    return () => { cleanupRef.current = true; };
+  }, []);
 
   // ── Para câmera ──────────────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
@@ -45,6 +52,10 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
   }, []);
 
   useEffect(() => {
+    // PR7: reseta no início de cada ciclo de modo — cobre o caso câmera→outro→câmera
+    // sem desmontar o componente, onde o cleanup anterior teria deixado a ref em true.
+    cleanupRef.current = false;
+
     if (mode !== "camera") return;
     let mounted = true;
     setCamRdy(false);
@@ -59,7 +70,10 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
         await reader.decodeFromConstraints(
           { video: { facingMode: { ideal: "environment" } } },
           videoRef.current,
-          (result) => { if (result) { stopCamera(); onDetected(result.getText()); } }
+          (result) => {
+            if (cleanupRef.current) return; // PR7: descarta detecções pós-desmontagem
+            if (result) { stopCamera(); onDetected(result.getText()); }
+          }
         );
         if (mounted) setCamRdy(true);
         tmrRef.current = setTimeout(() => {
@@ -77,7 +91,7 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
     }
 
     start();
-    return () => { mounted = false; stopCamera(); };
+    return () => { mounted = false; cleanupRef.current = true; stopCamera(); };
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Troca de modo: limpa estado anterior ────────────────────────────────────
