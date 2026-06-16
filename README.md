@@ -1,156 +1,121 @@
-# SV Finance Control — Frontend
+# svfinance-rg
 
-![SV Finance](public/logo.gif)
+> Frontend React de implementação customizada — **SV Soluções**.
+> Instância piloto: **Restaura Glass** (`restauraglass.svfinance.com.br`).
 
-> Sistema SaaS de controle financeiro para pessoas físicas e empresas.  
-> Desenvolvido com React + Vite, hospedado na Vercel.
-
----
-
-## 🚀 Stack
-
-- **React 18** + Vite
-- **React Router DOM** — navegação SPA
-- **Recharts** — gráficos e analytics
-- **Context API** — tema e autenticação
-- **CSS-in-JS** (inline styles) — sem dependência de UI libs
-- **Vercel** — deploy automático via GitHub
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev)
+[![Vite](https://img.shields.io/badge/Vite-5.x-646CFF?logo=vite&logoColor=white)](https://vitejs.dev)
+[![PWA](https://img.shields.io/badge/PWA-VitePWA-5A0FC8?logo=pwa)](https://vite-pwa-org.netlify.app)
+[![Deploy](https://img.shields.io/badge/Deploy-Vercel-black?logo=vercel)](https://vercel.com)
+[![License](https://img.shields.io/badge/License-Proprietary-red)](./LICENSE)
 
 ---
 
-## 🌐 URLs
+## Sobre
 
-| Ambiente   | URL                                                      |
-|------------|----------------------------------------------------------|
-| Produção   | https://finance-control-web-five.vercel.app              |
-| Domínio    | https://svfinance.com.br *(em configuração)*             |
-| API        | https://finance-control-api-production.up.railway.app/api|
+Template base para implementações **SV Soluções** — ERPs customizados por nicho com alta margem e recorrência mensal. Cada nova empresa implementada via SV Soluções nasce como fork/cópia deste repo.
+
+A instância atual serve a **Restaura Glass** (limpeza e restauração de vidros), nicho `clean` com módulos operacionais específicos: cartão de serviço mensal, check-in presencial com QR + GPS, e controle de ocorrências.
+
+**URL de produção:** `https://restauraglass.svfinance.com.br`
 
 ---
 
-## 📁 Estrutura do Projeto
+## Diferenças vs svfinance-app
+
+| Aspecto | svfinance-app | svfinance-rg |
+|---|---|---|
+| Público | SaaS self-service | Implementação sob contrato |
+| Tema padrão | Azul escuro (`blue`) | Verde limpo (`clean`) |
+| Sidebar | Flat sem grupos | Grupos: Operacional / Financeiro / Relatórios |
+| PWA | Não | ✅ VitePWA autoUpdate |
+| Módulo cartão RG | Não | ✅ LimpezaServiceCard |
+| Check-in QR + GPS | Compartilhado | Customizado para field service |
+| `isRG()` | Nunca | Sempre true (por hostname) |
+
+---
+
+## Stack
+
+| Tecnologia | Uso |
+|---|---|
+| React 19 + Vite | Framework e bundler |
+| VitePWA | PWA com autoUpdate por hash de build |
+| React Router DOM | Roteamento SPA |
+| @zxing/browser | Leitura QR Code (check-in presencial) |
+| Estilos inline JS | Sem Tailwind, sem CSS modules |
+
+---
+
+## Estrutura
+
 ```
-finance-control-web/
-├── public/
-│   └── logo.gif                  # Favicon e ícone mobile
-├── src/
-│   ├── assets/                   # Imagens, GIFs, SVGs
-│   ├── components/
-│   │   ├── layout/
-│   │   │   ├── PageLayout.jsx    # Layout base + sino de notificações
-│   │   │   └── Sidebar.jsx       # Menu lateral (PF e PJ)
-│   │   └── ProtectedRoute.jsx    # Proteção de rotas por role
-│   ├── contexts/
-│   │   └── ThemeContext.jsx      # Tema global (4 opções)
-│   ├── pages/
-│   │   ├── Login.jsx             # Auth: login, cadastro, verificação, reset
-│   │   ├── Dashboard.jsx         # Dashboard PF e PJ
-│   │   ├── Transactions.jsx      # Transações (PF e PJ)
-│   │   ├── Bills.jsx             # Contas a pagar/receber
-│   │   ├── Goals.jsx             # Metas financeiras (PF)
-│   │   ├── Analytics.jsx         # Gráficos e relatórios
-│   │   ├── Products.jsx          # Produtos e serviços (PJ)
-│   │   ├── Clients.jsx           # Clientes (PJ)
-│   │   ├── Quotes.jsx            # Orçamentos com PDF (PJ)
-│   │   ├── Sales.jsx             # Vendas / Pedidos / OS (PJ)
-│   │   ├── Team.jsx              # Equipe e roles (PJ admin)
-│   │   └── Settings.jsx          # Temas visuais
-│   ├── services/
-│   │   └── api.js                # Funções de comunicação com a API
-│   ├── themes/
-│   │   └── themes.js             # 4 temas: blue, glass, aurora, gray
-│   ├── App.jsx                   # Rotas principais
-│   └── main.jsx                  # Entry point
-├── index.html
-├── vite.config.js
-└── package.json
-```
----
-
-## 🎨 Temas Disponíveis
-
-| Tema    | Descrição                        |
-|---------|----------------------------------|
-| Blue    | Escuro com tons de azul (padrão) |
-| Glass   | Claro com glassmorphism          |
-| Aurora  | Escuro com gradientes vibrantes  |
-| Gray    | Escuro neutro cinza/prata        |
-
----
-
-## 👥 Tipos de Conta
-
-### Pessoa Física (PF)
-Dashboard · Transações · Contas · Analytics · Metas 🎯 · Temas
-
-### Empresa (PJ)
-Dashboard · Clientes · Transações · Contas · Analytics · Produtos · Orçamentos · Vendas · Equipe · Temas
-
-### Roles (PJ)
-| Role      | Permissões                                      |
-|-----------|-------------------------------------------------|
-| admin     | Acesso total                                    |
-| financial | Transações, Contas, Analytics                   |
-| stock     | Produtos e Estoque                              |
-| seller    | Vendas e Orçamentos (próprias vendas)           |
-| viewer    | Somente leitura                                 |
-
----
-
-## ⚙️ Variáveis de Ambiente
-
-Cria um arquivo `.env` na raiz:
-
-```env
-VITE_API_URL=https://finance-control-api-production.up.railway.app/api
+src/
+├── App.jsx
+├── services/api.js
+├── utils/
+│   └── isRG.js              # Detecção por hostname (importar daqui)
+├── contexts/
+│   ├── ThemeContext.jsx      # CACHE_VERSION="rg-v3"
+│   ├── NichoContext.jsx
+│   └── PlanContext.jsx
+├── themes/
+│   └── themes.js             # DEFAULT_THEME="clean"
+├── components/
+│   ├── layout/
+│   │   ├── Sidebar.jsx       # isRG embutido diretamente aqui
+│   │   └── PageLayout.jsx
+│   └── restaura/
+│       ├── RGBackground.jsx
+│       └── WifiAccess.jsx    # (pendente)
+└── pages/
+    ├── Orders.jsx            # Cartão RG + 4 botões de ocorrência
+    ├── Clients.jsx           # Filtro de frequência + botão cartão
+    └── ...
 ```
 
 ---
 
-## 🛠️ Rodando Localmente
+## Configuração local
 
 ```bash
-# Instalar dependências
+git clone git@github.com:Svfinance/svfinance-rg.git
+cd svfinance-rg
 npm install
-
-# Rodar em desenvolvimento
 npm run dev
-
-# Build para produção
-npm run build
 ```
 
-Acesse: `http://localhost:5173`
+---
+
+## Criando nova implementação SV Soluções
+
+1. Fork deste repo → `svfinance-novaempresa`
+2. Alterar `DEFAULT_THEME` em `themes/themes.js`
+3. Ajustar hostname em `utils/isRG.js`
+4. Customizar módulos do nicho
+5. Configurar DNS e Vercel para o novo subdomínio
+6. Registrar nova empresa no banco (`company_id` novo)
+7. Atualizar `org-ia/00_blueprint.md` do svfinance-api
 
 ---
 
-## 🚀 Deploy
+## Regras críticas
 
-O deploy é automático via **GitHub + Vercel**.  
-Qualquer push na branch `main` dispara um novo deploy.
+```javascript
+// isRG: SEMPRE por hostname — nunca company_id ou localStorage
+const isRG = window.location.hostname.includes('restauraglass');
 
----
+// No Sidebar.jsx: isRG embutido diretamente (não importar externamente)
+// Import externo causa erro MIME no Vite em produção
 
-## 📦 Funcionalidades Principais
-
-- ✅ Autenticação com verificação de email (Resend)
-- ✅ Recuperação de senha por email
-- ✅ Multi-tenant (empresas isoladas)
-- ✅ Dashboard financeiro com comparativos
-- ✅ Transações e contas recorrentes
-- ✅ Metas financeiras com progresso visual
-- ✅ Orçamentos com geração de PDF (2 temas)
-- ✅ Vendas com Pedido (PED) e Ordem de Serviço (OS)
-- ✅ Controle de estoque com movimentações
-- ✅ SKU de produtos
-- ✅ Analytics com 7 tipos de gráficos
-- ✅ Sistema de notificações globais 🔔
-- ✅ 4 temas visuais personalizáveis
-- ✅ Responsivo (mobile e desktop)
+// CACHE_VERSION: incrementar ao alterar assets cacheados pelo PWA
+// Atual: "rg-v3"
+```
 
 ---
 
-## 👨‍💻 Desenvolvido por
+## Cliente ativo
 
-**Guilherme Salvatini**  
-[github.com/Salvatini95](https://github.com/Salvatini95)
+| Cliente | company_id | Nicho |
+|---|---|---|
+| Restaura Glass | 20 | Limpeza e restauração de vidros |
