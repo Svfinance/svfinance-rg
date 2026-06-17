@@ -6,57 +6,120 @@
 
 ## Sessão atual
 
-**Data:** 15/06/2026
+**Data:** 17/06/2026
 **Repo foco:** svfinance-rg
-**Tarefa ativa:** PR7 — QRScanner cleanup + Sidebar mobile (seletor de estilo)
-**Modelo/effort:** SonCoder/high (bug com race condition assíncrona + análise cross-file)
+**Tarefa ativa:** PR7 encerrado — aguardando teste em produção
+**Modelo/effort:** SonCoder/high (diagnóstico de race condition + análise da API do @zxing/browser)
 
 ---
 
-## Estado no início desta sessão (15/06)
+## Estado no início desta sessão (17/06)
 
 **Migration HEAD:** `pin_cliente_add_01`
 **Branch:** `main`
 
-**Contexto:** retomada do roteiro de teste a partir do bug crítico deixado em 12/06 — "Escanear novamente" pisca a tela quando há erro fixado — seguido do segundo bug crítico: seletor de estilo da Sidebar não funciona em mobile.
-
----
-
-## Diagnóstico desta sessão
-
-### Bug 1 — "Escanear novamente" pisca a tela (RESOLVIDO — aplicar PR7)
-
-**Causa raiz:** `QRScanner.jsx` não tinha proteção contra detecções disparadas **após desmontagem do componente**. O `useEffect` só rodava `stopCamera()` no cleanup ligado à troca de `mode` — mas quando `CheckinModal` desmonta/remonta o `QRScanner` inteiro via `voltarParaScanner()` → `setStep("scanning")`, o loop de leitura da instância anterior podia disparar `onDetected` numa janela entre o unmount e o reset efetivo da câmera.
-
-Mesmo mecanismo do PR6 (sessão 11-12/06), mas disparado pelo botão "← Escanear novamente" em vez de "✓ Sim, estou no local". O `stepRef` do PR6 não cobria esse caso porque `voltarParaScanner()` já setava `step = "scanning"` *antes* da detecção órfã chegar.
-
-### Bug 2 — Sidebar mobile: seletor de modelo não funciona (DIAGNOSTICADO — fix pendente de aplicação)
-
-**Causa raiz:** em `Sidebar.jsx`, `getMobileStyle()` e `setMobileStyleLS()` existem mas são funções locais **sem `export`**. `Settings.jsx` só tem acesso às versões exportadas (`getSidebarStyle`, `setSidebarStyleLS` — as de **desktop**). Resultado: o seletor em mobile estava chamando a função de desktop, sem efeito no `SidebarMobile`.
-
-Bug em aberto desde 11/06 (3ª sessão), nunca diagnosticado porque `Settings.jsx` nunca tinha sido enviado para análise.
+**Contexto:** continuação do PR7. Fix original (cleanupRef + transitingRef + guards) já estava comitado (0901efa), mas o bug "Escanear novamente" persistia em produção. Diagnóstico com logs temporários revelou que o botão da tela `confirming_location` não passava por `voltarParaScanner()`. Na sequência, análise do pacote @zxing/browser instalado revelou que `reader.reset()` nunca existiu — a stream de câmera jamais foi parada corretamente.
 
 ---
 
 ## O que foi entregue nesta sessão
 
-### PR7 — `QRScanner.jsx` (entregue, aplicar)
-- `cleanupRef` (ref booleana) setada `true`:
-  - No cleanup do `useEffect` de desmontagem total (novo `useEffect([])`)
-  - No cleanup do `useEffect` de troca de `mode`
-- Callback de `decodeFromConstraints` checa `if (cleanupRef.current) return` **antes** de `onDetected` — detecções pós-desmontagem descartadas na origem.
+### PR7 — Etapa 2: botão "Escanear novamente" em `confirming_location` (`CheckinModal.jsx`)
 
-### PR7 — `CheckinModal.jsx` (entregue, aplicar)
-- `transitingRef` setado `true` por 350ms dentro de `voltarParaScanner()`.
-- `onQRDetected` com três guards em sequência:
-  ```js
-  if (stepRef.current !== "scanning") return;   // PR6
-  if (transitingRef.current) return;              // PR7 — novo
-  if (loadingOpen) return;
-  ```
-- `voltarParaScanner()` também reseta `confirmandoRef.current = false`.
+**Causa raiz encontrada:** existiam dois botões "← Escanear novamente" em `CheckinModal.jsx`:
+- Linha 473 (`confirming_location`): `onClick={() => setStep("scanning")}` — chamada direta, sem passar por `voltarParaScanner()`, pulando todos os guards (transitingRef, confirmandoRef, setError, setPinMode, setPinVal).
+- Linha 566 (`confirming`): `onClick={voltarParaScanner}` — correto.
 
-### Fix documentado — `Sidebar.jsx` (NÃO aplicado ainda — aguarda Settings.jsx)
+O fluxo real do bug era: Iniciar serviço → scanner → QR lido → "Você está no local correto?" → clique em "← Escanear novamente" (linha 473) → `setStep("scanning")` direto → scanner remontado sem guards → detecção imediata/piscar.
+
+**Fix:** unificar linha 473 para `onClick={voltarParaScanner}`.
+
+---
+
+### PR8 — `QRScanner.jsx`: stream de câmera nunca era parada + AbortError
+
+**Problema 1 — `reader.reset()` não existe no @zxing/browser:**
+Verificado no fonte do pacote instalado (`browser-0.2.0.tgz`): `BrowserMultiFormatReader` e `BrowserCodeReader` não têm método `reset()`. O `try { readerRef.current.reset(); } catch {}` sempre jogava `TypeError` silencioso. A MediaStream (e seus tracks) **nunca era parada** — LED da câmera do celular continuava aceso após cada scan, e a stream ficava ativa até o GC.
+
+**API correta:** `decodeFromConstraints` retorna um objeto `controls` com `controls.stop()`. Esse método chama `finalizeCallback`, que executa `disposeMediaStream(stream)` (`track.stop()` em todos os tracks) + `cleanVideoSource(video)` (`srcObject = null`).
+
+**Fix:** renomear `readerRef` → `controlsRef`, capturar o retorno de `decodeFromConstraints` e chamar `controls.stop()` no `stopCamera()`.
+
+**Race condition adicional corrigida:** se o componente desmontar enquanto `decodeFromConstraints` ainda está abrindo a câmera (antes de resolver), `controlsRef.current` é null no momento do cleanup. Fix: após `decodeFromConstraints` resolver, checkar `if (!mounted) { stopCamera(); return; }` para parar a stream mesmo que o cleanup já tenha rodado.
+
+**Problema 2 — AbortError no console:**
+`tryPlayVideo` (dentro do @zxing) faz `await videoElement.play()`. Se o React remove o `<video>` do DOM antes do `play()` resolver, o browser rejeita com `AbortError: The play() request was interrupted because the media was removed from the document`. O @zxing captura e loga `console.warn('It was not possible to play the video.', error)`.
+
+**Fix:** mover o `<video>` para fora do bloco `{mode === "camera" && ...}`, mantendo-o sempre no DOM. Visibilidade controlada por `display: none` na div wrapper. O React não remove mais o elemento — `play()` nunca encontra o elemento ausente.
+
+---
+
+## Arquivos alterados nesta sessão (comitados)
+
+```
+src/components/restaura/CheckinModal.jsx  ← PR7 etapa 2: linha 473 → voltarParaScanner()
+src/components/restaura/QRScanner.jsx     ← PR8: readerRef→controlsRef, reset()→stop(), <video> sempre no DOM
+org-ia/05_estado.md                       ← este arquivo
+```
+
+---
+
+## Status dos bugs
+
+| Bug | Status |
+|---|---|
+| Bug 1 — "Escanear novamente" pisca / trava | ✅ Fix aplicado e comitado — **aguardando teste em produção** |
+| Bug 2 — LED câmera não apagava após scan | ✅ Fix aplicado e comitado — **aguardando teste em produção** |
+| Bug 3 — Sidebar mobile / seletor de estilo | ⬜ Bloqueado — não tocado nesta sessão |
+
+---
+
+## Roteiro de teste em produção (pendente)
+
+```
+Teste do Bug 1 (Escanear novamente):
+  1. Abrir O.S nova → Iniciar serviço → Escanear QR
+  2. Na tela "Você está no local correto?" → clicar "← Escanear novamente"
+  3. Scanner deve abrir limpo, sem piscar
+  4. Repetir 3x — não deve ser intermitente
+
+Teste do Bug 2 (stream de câmera / LED):
+  5. Após qualquer scan bem-sucedido → fechar o modal
+  6. Confirmar que o LED da câmera do celular apaga imediatamente
+  7. Abrir modal novamente → câmera deve iniciar do zero sem estado residual
+```
+
+---
+
+## Próximo passo exato (ordem de execução)
+
+```
+1. Testar roteiro acima em produção (restauraglass.svfinance.com.br)
+2. Se aprovado: seguir para Bug 3 (Sidebar mobile)
+   a. Enviar Settings.jsx para análise — sem ele o bug não fecha
+   b. Aplicar fix em Sidebar.jsx (exportar getMobileStyle/setMobileStyleLS)
+   c. Ajustar chamada correta em Settings.jsx
+3. Mudar RAIO_CHECKIN_METROS de 3 para 25 no Render — só após validar GPS real
+4. Seguir para múltiplos endereços/filiais (migration enderecos_filiais_01,
+   down_revision = pin_cliente_add_01)
+```
+
+---
+
+## Pontos de atenção válidos (carregar para toda sessão futura no svfinance-rg)
+
+1. `RAIO_CHECKIN_METROS=3` no Render é **temporário** — mudar para 25 só depois de validar GPS real dos clientes (ainda não validado)
+2. Migration HEAD: `pin_cliente_add_01`
+3. O.S "suja" de testes antigos confunde estado — sempre criar O.S nova para retestar
+4. Conta de teste `contazero@teste.com.br` (senha 123456) — remover antes de onboarding de clientes reais
+5. `isRG()` sempre por hostname — nunca `company_id`; embutido em `Sidebar.jsx` como `_isRGHost()`, importado de `../utils/isRG` no resto do código
+6. Antes de qualquer CTRL+H: sempre confirmar o trecho exato do arquivo atual
+7. **@zxing/browser v0.2.0 não tem `reset()`** — o método correto de parada é `controls.stop()` (retorno de `decodeFromConstraints`)
+
+---
+
+## Fix documentado pendente — Bug 3: Sidebar mobile (`Sidebar.jsx`)
+
 ```js
 // Localizar:
 const MOBILE_STYLE_KEY = "sv_mobile_style";
@@ -74,61 +137,15 @@ export function setStyleAdaptive(s) {
 }
 ```
 
-**Bloqueado:** `Settings.jsx` ainda não foi analisado. Sem ele não dá para confirmar qual chamada exata precisa trocar para `setMobileStyleLS` ou `setStyleAdaptive`.
+**Bloqueado:** `Settings.jsx` ainda não foi analisado. Sem ele não dá para confirmar qual chamada exata precisa trocar.
 
 ---
 
-## Arquivos alterados nesta sessão (pendentes de aplicar no repo real)
-
-```
-src/components/restaura/QRScanner.jsx     ← PR7 (cleanupRef) — pronto para aplicar
-src/components/restaura/CheckinModal.jsx  ← PR7 (transitingRef + reset confirmandoRef) — pronto para aplicar
-src/components/Sidebar.jsx                ← fix documentado, NÃO aplicado (aguarda Settings.jsx)
-```
-
----
-
-## Regras de trabalho ativas (specíficas deste repo, além do sv-protocol)
-
-- **Regra CTRL+H:** nenhum find-and-replace é proposto sem antes confirmar o texto exato no arquivo atual (string pode ter divergido desde a última leitura).
-- **Diagnóstico antes de código:** todo bug é rastreado até a causa raiz (linha por linha do fluxo assíncrono) antes de qualquer fix.
-- **Guard layering:** bugs de duplo disparo/detecção órfã exigem múltiplas refs em camadas (componente + callback) — um guard único não basta com race conditions assíncronas. Padrão atual: `stepRef` (PR6) + `transitingRef` (PR7) + `confirmandoRef` (PR4) coexistindo no mesmo componente.
-- **Teste limpo:** O.S nova a cada rodada de teste (O.S "suja" confunde estado) + limpar `localStorage`/`sessionStorage`/`IndexedDB` antes de retestar.
-
----
-
-## Pontos de atenção válidos (carregar para toda sessão futura no svfinance-rg)
-
-1. `RAIO_CHECKIN_METROS=3` no Render é **temporário** — mudar para 25 só depois de validar GPS real dos clientes (ainda não validado)
-2. Migration HEAD: `pin_cliente_add_01`
-3. O.S "suja" de testes antigos confunde estado — sempre criar O.S nova para retestar
-4. Conta de teste `contazero@teste.com.br` (senha 123456) — remover antes de onboarding de clientes reais
-5. `isRG()` sempre por hostname — nunca `company_id`; embutido em `Sidebar.jsx` como `_isRGHost()`, importado de `../utils/isRG` no resto do código
-6. Antes de qualquer CTRL+H: sempre confirmar o trecho exato do arquivo atual
-
----
-
-## Próximo passo exato (ordem de execução)
-
-```
-1. Aplicar PR7 em QRScanner.jsx e CheckinModal.jsx (código já pronto acima)
-2. Enviar Settings.jsx para o Claude Code analisar — sem ele o bug 2 não fecha
-3. Aplicar o fix em Sidebar.jsx + a chamada correta em Settings.jsx
-4. Testar roteiro:
-   a. Forçar erro fixo na tela (check-in fora do raio)
-   b. Clicar "← Escanear novamente" → scanner deve abrir limpo, sem piscar
-   c. Repetir 3x para garantir que não é intermitente
-5. Testar check-out completo da O.S desta sessão (finish → 200 + duração na tela)
-6. Mudar RAIO_CHECKIN_METROS de 3 para 25 no Render — só após validar GPS real
-7. Seguir para múltiplos endereços/filiais (migration enderecos_filiais_01,
-   down_revision = pin_cliente_add_01)
-```
-
----
-
-## Decisões tomadas nesta sessão
+## Decisões tomadas (acumulado)
 
 | Decisão | Alternativa descartada | Motivo |
 |---|---|---|
 | Guard em camadas (cleanupRef + transitingRef + stepRef) | Um único guard global de "scanner ocupado" | Race conditions assíncronas do scanner de QR não são cobertas por um guard só — cada camada intercepta um timing diferente |
 | Exportar funções de mobile separadas em vez de unificar com desktop | Unificar getSidebarStyle para detectar mobile internamente | Manter funções desktop/mobile separadas evita side-effects cruzados; `setStyleAdaptive()` decide qual usar, sem misturar a lógica interna das duas |
+| `controls.stop()` em vez de `reader.reset()` | Manter `reader.reset()` com fallback manual | `reset()` não existe na API — `controls.stop()` é o único caminho correto documentado pelo @zxing/browser |
+| `<video>` sempre no DOM via `display: none` | Patch em `videoElement.play` para suprimir AbortError | DOM persistence elimina a causa raiz; patch seria monkey-patching de API do browser |

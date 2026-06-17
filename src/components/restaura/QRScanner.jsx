@@ -23,10 +23,10 @@ const token     = () => localStorage.getItem("token");
 const QR_TOKEN  = "sv-checkin-universal";
 
 export default function QRScanner({ onDetected, onCancel, action, clientCode }) {
-  const videoRef   = useRef(null);
-  const readerRef  = useRef(null);
-  const tmrRef     = useRef(null);
-  const cleanupRef = useRef(false);
+  const videoRef    = useRef(null);
+  const controlsRef = useRef(null);
+  const tmrRef      = useRef(null);
+  const cleanupRef  = useRef(false);
 
   const [mode,    setCamMode] = useState("camera");
   const [camErr,  setCamErr]  = useState("");
@@ -45,9 +45,9 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
   // ── Para câmera ──────────────────────────────────────────────────────────────
   const stopCamera = useCallback(() => {
     clearTimeout(tmrRef.current);
-    if (readerRef.current) {
-      try { readerRef.current.reset(); } catch {}
-      readerRef.current = null;
+    if (controlsRef.current) {
+      try { controlsRef.current.stop(); } catch {}
+      controlsRef.current = null;
     }
   }, []);
 
@@ -63,11 +63,10 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
 
     async function start() {
       await new Promise(r => setTimeout(r, 400));
-      if (!mounted || !videoRef.current) { setCamErr("Câmera não encontrada."); return; }
+      if (!mounted || !videoRef.current) { if (mounted) setCamErr("Câmera não encontrada."); return; }
       try {
         const reader = new BrowserMultiFormatReader();
-        readerRef.current = reader;
-        await reader.decodeFromConstraints(
+        const controls = await reader.decodeFromConstraints(
           { video: { facingMode: { ideal: "environment" } } },
           videoRef.current,
           (result) => {
@@ -75,18 +74,20 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
             if (result) { stopCamera(); onDetected(result.getText()); }
           }
         );
-        if (mounted) setCamRdy(true);
+        controlsRef.current = controls;
+        if (!mounted) { stopCamera(); return; } // desmontou enquanto câmera abria
+        setCamRdy(true);
         tmrRef.current = setTimeout(() => {
           if (mounted && mode === "camera")
             setCamErr("Não foi possível ler o QR. Tente outro método.");
         }, 25000);
       } catch (e) {
-        if (mounted)
-          setCamErr(
-            e?.name === "NotAllowedError"
-              ? "Permissão negada. Use outro método."
-              : "Câmera indisponível. Use outro método."
-          );
+        if (!mounted) return;
+        setCamErr(
+          e?.name === "NotAllowedError"
+            ? "Permissão negada. Use outro método."
+            : "Câmera indisponível. Use outro método."
+        );
       }
     }
 
@@ -184,35 +185,34 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
       </div>
 
       {/* ── CÂMERA ─────────────────────────────────────────────────────────── */}
-      {mode === "camera" && (
-        <>
-          <div style={S.sub}>Aponte para o adesivo QR Code SV Finance</div>
-          {camErr && <div style={S.err}>{camErr}</div>}
-          <div style={{ position: "relative", marginBottom: 8 }}>
-            <video
-              ref={videoRef} muted playsInline
-              style={{ ...S.video, opacity: camReady ? 1 : 0.4 }}
-            />
-            {/* Mira de leitura */}
-            {camReady && (
-              <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-                <div style={{ width: 170, height: 170, position: "relative" }}>
-                  {[
-                    { top: 0,    left: 0,    borderTop:    "3px solid #4f8ef7", borderLeft:   "3px solid #4f8ef7" },
-                    { top: 0,    right: 0,   borderTop:    "3px solid #4f8ef7", borderRight:  "3px solid #4f8ef7" },
-                    { bottom: 0, left: 0,    borderBottom: "3px solid #4f8ef7", borderLeft:   "3px solid #4f8ef7" },
-                    { bottom: 0, right: 0,   borderBottom: "3px solid #4f8ef7", borderRight:  "3px solid #4f8ef7" },
-                  ].map((s, i) => (
-                    <div key={i} style={{ position: "absolute", width: 20, height: 20, ...s }} />
-                  ))}
-                </div>
-              </div>
-            )}
+      {mode === "camera" && <div style={S.sub}>Aponte para o adesivo QR Code SV Finance</div>}
+      {mode === "camera" && camErr && <div style={S.err}>{camErr}</div>}
+
+      {/* <video> sempre no DOM — evita AbortError de play() interrompido por remoção do elemento */}
+      <div style={{ position: "relative", marginBottom: 8, display: mode === "camera" ? "block" : "none" }}>
+        <video
+          ref={videoRef} muted playsInline
+          style={{ ...S.video, opacity: camReady ? 1 : 0.4 }}
+        />
+        {/* Mira de leitura */}
+        {camReady && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            <div style={{ width: 170, height: 170, position: "relative" }}>
+              {[
+                { top: 0,    left: 0,    borderTop:    "3px solid #4f8ef7", borderLeft:   "3px solid #4f8ef7" },
+                { top: 0,    right: 0,   borderTop:    "3px solid #4f8ef7", borderRight:  "3px solid #4f8ef7" },
+                { bottom: 0, left: 0,    borderBottom: "3px solid #4f8ef7", borderLeft:   "3px solid #4f8ef7" },
+                { bottom: 0, right: 0,   borderBottom: "3px solid #4f8ef7", borderRight:  "3px solid #4f8ef7" },
+              ].map((s, i) => (
+                <div key={i} style={{ position: "absolute", width: 20, height: 20, ...s }} />
+              ))}
+            </div>
           </div>
-          {!camReady && !camErr && (
-            <div style={{ color: "#475569", fontSize: 12, marginBottom: 8 }}>Iniciando câmera...</div>
-          )}
-        </>
+        )}
+      </div>
+
+      {mode === "camera" && !camReady && !camErr && (
+        <div style={{ color: "#475569", fontSize: 12, marginBottom: 8 }}>Iniciando câmera...</div>
       )}
 
       {/* ── CÓDIGO NUMÉRICO ────────────────────────────────────────────────── */}
