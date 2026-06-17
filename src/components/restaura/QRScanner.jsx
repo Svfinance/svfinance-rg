@@ -52,11 +52,9 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
   }, []);
 
   useEffect(() => {
-    console.log('[QR-DEBUG] useEffect mode disparado. mode:', mode, 'cleanupRef antes do reset:', cleanupRef.current);
     // PR7: reseta no início de cada ciclo de modo — cobre o caso câmera→outro→câmera
     // sem desmontar o componente, onde o cleanup anterior teria deixado a ref em true.
     cleanupRef.current = false;
-    console.log('[QR-DEBUG] cleanupRef resetado para false');
 
     if (mode !== "camera") return;
     let mounted = true;
@@ -73,7 +71,6 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
           { video: { facingMode: { ideal: "environment" } } },
           videoRef.current,
           (result) => {
-            console.log('[QR-DEBUG] callback decode disparado. cleanupRef:', cleanupRef.current);
             if (cleanupRef.current) return; // PR7: descarta detecções pós-desmontagem
             if (result) { stopCamera(); onDetected(result.getText()); }
           }
