@@ -134,6 +134,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
 
   // ── Limpa estado ao voltar para scanner ───────────────────────────────────
   function voltarParaScanner() {
+    console.log('[PR7-DEBUG] voltarParaScanner chamado, step atual:', stepRef.current);
     // PR7: bloqueia onQRDetected por 350ms — janela onde a instância anterior do
     // scanner pode disparar uma detecção órfã antes de o novo ciclo de câmera iniciar.
     transitingRef.current = true;
@@ -144,10 +145,12 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     setPinMode(false);
     setPinVal("");
     setStep("scanning");
+    console.log('[PR7-DEBUG] step setado para scanning');
   }
 
   // ── QR detectado ──────────────────────────────────────────────────────────
   function onQRDetected(text) {
+    console.log('[PR7-DEBUG] onQRDetected disparado. stepRef:', stepRef.current, 'transitingRef:', transitingRef.current, 'loadingOpen:', loadingOpen);
     // PR6: ignora qualquer detecção que chegue fora do passo de scanner.
     // O QRScanner pode continuar disparando onDetected depois de desmontado
     // (scan loop/câmera sem cleanup), o que rejogava "confirming" de volta
