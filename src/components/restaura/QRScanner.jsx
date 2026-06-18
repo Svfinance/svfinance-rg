@@ -28,9 +28,10 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
   const tmrRef      = useRef(null);
   const cleanupRef  = useRef(false);
 
-  const [mode,    setCamMode] = useState("camera");
-  const [camErr,  setCamErr]  = useState("");
-  const [camReady,setCamRdy]  = useState(false);
+  const [mode,      setCamMode]  = useState("camera");
+  const [camErr,    setCamErr]   = useState("");
+  const [camReady,  setCamRdy]   = useState(false);
+  const [showRetry, setShowRetry]= useState(false);
   const [numInput,setNum]     = useState("");
   const [numErr,  setNumErr]  = useState("");
   const [pin,     setPin]     = useState("");
@@ -78,9 +79,11 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
         if (!mounted) { stopCamera(); return; } // desmontou enquanto câmera abria
         setCamRdy(true);
         tmrRef.current = setTimeout(() => {
-          if (mounted && mode === "camera")
+          if (mounted && mode === "camera") {
             setCamErr("Não foi possível ler o QR. Tente outro método.");
-        }, 25000);
+            setShowRetry(true);
+          }
+        }, 30000);
       } catch (e) {
         if (!mounted) return;
         setCamErr(
@@ -92,7 +95,7 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
     }
 
     start();
-    return () => { mounted = false; cleanupRef.current = true; stopCamera(); };
+    return () => { mounted = false; cleanupRef.current = true; stopCamera(); setShowRetry(false); };
   }, [mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Troca de modo: limpa estado anterior ────────────────────────────────────
@@ -213,6 +216,12 @@ export default function QRScanner({ onDetected, onCancel, action, clientCode }) 
 
       {mode === "camera" && !camReady && !camErr && (
         <div style={{ color: "#475569", fontSize: 12, marginBottom: 8 }}>Iniciando câmera...</div>
+      )}
+
+      {mode === "camera" && showRetry && (
+        <button style={S.btnG} onClick={() => { setShowRetry(false); goMode("camera"); }}>
+          ↩ Escanear novamente
+        </button>
       )}
 
       {/* ── CÓDIGO NUMÉRICO ────────────────────────────────────────────────── */}

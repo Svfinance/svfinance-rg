@@ -167,7 +167,7 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
     setPinMode(false);
     setPinVal("");
     // confirming_location só no check-in (start) — check-out vai direto
-    setStep(action === "start" ? "confirming_location" : "confirming");
+    setStep("confirming_location");
   }
 
   // ── Monta body da requisição ───────────────────────────────────────────────
@@ -460,16 +460,13 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
                 setStep("select_action");
                 setTimeout(() => {
                   if (mounted.current)
-                    setError("❌ Check-in cancelado. Vá até o local correto antes de registrar.");
+                    setError(`❌ ${action === "start" ? "Check-in" : "Check-out"} cancelado. Vá até o local correto antes de registrar.`);
                 }, 50);
               }}
             >
               ✗ Não, estou no local errado
             </button>
 
-            <button style={S.btnGhost} onClick={voltarParaScanner}>
-              ← Escanear novamente
-            </button>
           </>
         )}
 
@@ -559,11 +556,6 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
                       : "✓ Confirmar saída"}
             </button>
 
-            {!pinMode && !error && (
-              <button style={S.btnGhost} onClick={voltarParaScanner} disabled={sending}>
-                ← Escanear novamente
-              </button>
-            )}
           </>
         )}
 
