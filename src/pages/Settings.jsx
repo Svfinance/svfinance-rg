@@ -15,6 +15,11 @@ function useIsMobile() {
   useEffect(() => { const h = () => setM(window.innerWidth <= 768); window.addEventListener("resize",h); return ()=>window.removeEventListener("resize",h); }, []);
   return m;
 }
+function useIsTablet() {
+  const [t, setT] = useState(window.innerWidth > 768 && window.innerWidth <= 1024);
+  useEffect(() => { const h = () => setT(window.innerWidth > 768 && window.innerWidth <= 1024); window.addEventListener("resize",h); return ()=>window.removeEventListener("resize",h); }, []);
+  return t;
+}
 
 const isRGUser = () => String(localStorage.getItem("company_id") || "") === RG_COMPANY_ID;
 
@@ -31,6 +36,7 @@ export default function Settings() {
   const { theme, themeId, changeTheme, themes } = useTheme();
   const isGlass  = themeId === "glass" || themeId === "gray";
   const isMobile = useIsMobile();
+  const isTablet = useIsTablet();
   const role     = localStorage.getItem("role") || "viewer";
   const isAdmin  = role === "admin";
   const rg = isRG();
@@ -174,6 +180,7 @@ export default function Settings() {
       `}</style>
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen}/>
       <div style={{ flex:1, padding:isMobile?"72px 16px 40px":"32px 40px", overflowY:"auto", position:"relative", zIndex:1 }}>
+        <div style={{ maxWidth:1400, margin:"0 auto" }}>
 
         {/* HEADER */}
         <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:28 }}>
@@ -242,7 +249,7 @@ export default function Settings() {
             </div>
             <div style={card}>
               <h2 style={{ fontSize:"1rem", fontWeight:700, margin:"0 0 24px", color:theme.textPrimary }}>📍 Endereço Fiscal</h2>
-              <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":"1fr 1fr 1fr", gap:18 }}>
+              <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr":isTablet?"1fr 1fr":"1fr 1fr 1fr", gap:18 }}>
                 <div style={field}>
                   <label style={lbl}>CEP *</label>
                   <div style={{ display:"flex", gap:8 }}>
@@ -407,6 +414,7 @@ export default function Settings() {
             </div>
           </>
         )}
+        </div>
       </div>
 
       {toast && <div style={{ position:"fixed", bottom:isMobile?16:28, right:isMobile?16:28, left:isMobile?16:"auto", color:"#fff", padding:"12px 22px", borderRadius:12, fontWeight:600, fontSize:"0.9rem", zIndex:9999, boxShadow:"0 8px 30px rgba(0,0,0,0.4)", background:toast.type==="error"?"#ef4444":theme.primaryGrad, textAlign:isMobile?"center":"left" }}>{toast.msg}</div>}
