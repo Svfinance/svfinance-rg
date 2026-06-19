@@ -623,7 +623,7 @@ function SidebarDock({ menuItems, groups, theme, isGlass, convex = true, mobile 
   );
 }
 
-const MOBILE_STYLES = [
+export const MOBILE_STYLES = [
   { id:"dock",       icon:"⬤", label:"Dock",        desc:"Bolinhas flutuantes (padrão)" },
   { id:"vertical",   icon:"▐", label:"Lateral",      desc:"Desliza da esquerda" },
   { id:"right",      icon:"▌", label:"Dir. Lateral", desc:"Desliza da direita"  },

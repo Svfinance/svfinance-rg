@@ -3,7 +3,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
-import { getSidebarStyle, getMobileStyle, setStyleAdaptive } from "../components/layout/Sidebar";
+import { getSidebarStyle, getMobileStyle, setStyleAdaptive, MOBILE_STYLES } from "../components/layout/Sidebar";
 import { RG_THEMES } from "../themes/themes";
 import { isRG } from "../utils/isRG";
 
@@ -332,12 +332,12 @@ export default function Settings() {
             <div style={card}>
                 <h2 style={{ fontSize:"1rem", fontWeight:700, margin:"0 0 6px", color:theme.textPrimary }}>🗂️ Estilo do Sidebar</h2>
                 <p style={{ color:theme.textMuted, fontSize:"0.82rem", margin:"0 0 24px" }}>Salvo automaticamente.</p>
-                <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(4,1fr)", gap:16 }}>
-                  {[
+                <div style={{ display:"grid", gridTemplateColumns:isMobile?"1fr 1fr":"repeat(3,1fr)", gap:16 }}>
+                  {(isMobile ? MOBILE_STYLES : [
                     {id:"vertical",     label:"Lateral",     icon:"▐", desc:"Sidebar lateral retrátil — expande no hover"},
                     {id:"horizontal",   label:"Horizontal",  icon:"▬", desc:"Barra no topo com navegação horizontal"},
                     {id:"dock_concave", label:"Côncavo",     icon:"⬤", desc:"Dock côncavo — aparece na lateral direita"},
-                  ].map(s => {
+                  ]).map(s => {
                     const isAct = sidebarStyle === s.id;
                     return (
                       <div key={s.id} onClick={()=>handleSidebarStyle(s.id)} style={{ borderRadius:16, padding:20, cursor:"pointer", transition:"all 0.2s", background:isAct?(isGlass?"rgba(255,255,255,0.3)":`${theme.primary}18`):(isGlass?"rgba(255,255,255,0.1)":"rgba(255,255,255,0.03)"), border:`2px solid ${isAct?theme.primary:isGlass?"rgba(255,255,255,0.3)":theme.borderCard}`, boxShadow:isAct?`0 0 20px ${theme.primary}33`:"none", position:"relative" }}>
