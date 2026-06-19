@@ -529,11 +529,11 @@ export default function CheckinModal({ order, onClose, onSuccess, theme, isGlass
               {location ? "📡 GPS ativo — localização capturada" : "⏳ Aguardando GPS..."}
             </div>
 
-            {error && (
-              <ErroFixo
-                msg={error}
-                onTentarNovamente={!pinMode ? voltarParaScanner : null}
-              />
+            {error && <ErroFixo msg={error} />}
+            {error && !pinMode && (
+              <button style={S.btnGhost} onClick={() => setPinMode(true)}>
+                🔑 Solicitar PIN de autorização
+              </button>
             )}
 
             <button
