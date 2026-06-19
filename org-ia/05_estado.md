@@ -6,9 +6,9 @@
 
 ## Sessão atual
 
-**Data:** 18/06/2026
+**Data:** 19/06/2026
 **Repo foco:** svfinance-rg
-**Tarefa ativa:** PR9 e PR10 encerrados — aguardando teste em produção
+**Tarefa ativa:** Bug 3 + responsividade Settings encerrados — aguardando teste em produção
 **Modelo/effort:** SonCoder/high
 
 ---
@@ -40,11 +40,26 @@ e lê de `sv_mobile_style`. Nunca se cruzavam: Settings não afetava o sidebar n
   - `handleSidebarStyle`: `setSidebarStyleLS(s)` → `setStyleAdaptive(s)`; evento manual removido
     (já despachado internamente por `setSidebarStyleLS` / `setMobileStyleLS`).
 
-**Nota:** no mobile, o Settings mostra estilos desktop (Lateral / Horizontal / Côncavo).
-`vertical` e `horizontal` existem nos dois mundos e funcionam normalmente.
-`dock_concave` não existe em `MOBILE_STYLES` — SidebarMobile o renderiza como painel lateral
-(else branch). Não é erro, mas o usuário mobile pode preferir usar o ⚙ dentro do próprio
-sidebar para acessar os estilos exclusivos do mobile (Dock, Dir. Lateral, Bottom Sheet).
+**Fix adicional (Bug 3b — 19/06):** Settings exibia opções desktop no mobile. `dock_concave` e
+`vertical` renderizavam o mesmo painel lateral no `SidebarMobile` (else branch), dando impressão
+de que nada mudava.
+- `MOBILE_STYLES` exportado de `Sidebar.jsx`
+- `Settings.jsx`: `isMobile ? MOBILE_STYLES : DESKTOP_STYLES` no picker de estilos
+- Grid mobile: `1fr 1fr` (5 opções: Dock / Lateral / Dir. Lateral / Bottom Sheet / Top Bar)
+- Grid desktop: `repeat(3,1fr)` (3 opções: Lateral / Horizontal / Côncavo)
+
+---
+
+### Responsividade Settings.jsx (`Settings.jsx`)
+
+**Problema:** layout sem `maxWidth` esticava em 4K/ultrawide; sem breakpoint tablet causava
+Endereço Fiscal com 3 colunas apertadas em 769–1024px.
+
+**Fix:**
+- Hook `useIsTablet()` adicionado (769–1024px), variável `isTablet` no componente
+- Wrapper `maxWidth: 1400px, margin: "0 auto"` em todo o conteúdo do Settings
+- Endereço Fiscal: `1fr 1fr 1fr` → `isTablet ? "1fr 1fr" : "1fr 1fr 1fr"`
+- Demais grids de 2 colunas mantidos no tablet (aceitáveis em ~475px por coluna)
 
 ---
 
@@ -84,8 +99,8 @@ sidebar para acessar os estilos exclusivos do mobile (Dock, Dir. Lateral, Bottom
 ```
 src/components/restaura/CheckinModal.jsx  ← PR9 + PR10
 src/components/restaura/QRScanner.jsx     ← PR10
-src/components/layout/Sidebar.jsx         ← Bug 3
-src/pages/Settings.jsx                    ← Bug 3
+src/components/layout/Sidebar.jsx         ← Bug 3 + Bug 3b (MOBILE_STYLES export)
+src/pages/Settings.jsx                    ← Bug 3 + Bug 3b + responsividade
 org-ia/05_estado.md                       ← este arquivo
 ```
 
@@ -99,7 +114,8 @@ org-ia/05_estado.md                       ← este arquivo
 | Bug 2 — LED câmera não apagava após scan | ✅ Comitado (PR8) |
 | PR9 — GPS no checkout | ✅ Comitado — **aguardando teste em produção** |
 | PR10 — Timer retry + PIN de autorização | ✅ Comitado — **aguardando teste em produção** |
-| Bug 3 — Sidebar mobile / seletor de estilo | ✅ Comitado — **aguardando teste em produção** |
+| Bug 3 — Sidebar mobile / seletor de estilo | ✅ Comitado (d427a9a) |
+| Responsividade Settings (tablet + 4K) | ✅ Comitado (d427a9a) |
 
 ---
 
@@ -165,3 +181,6 @@ PR10 (timer + PIN):
 | Botão "🔑 Solicitar PIN" no lugar de "↩ Escanear novamente" | Manter Escanear novamente como fallback | Fora do raio, escanear de novo não resolve — PIN é o único desbloqueio válido |
 | Timer retry 30s com `showRetry` state | Sempre mostrar botão de retry | Evita distração visual — botão só aparece quando câmera realmente falhou |
 | `setStyleAdaptive` no Settings em vez de `setSidebarStyleLS` direto | Manter chamada desktop e adicionar chamada mobile separada | Uma função única detecta viewport e grava na chave correta — evita duplicidade de lógica |
+| Settings mostra `MOBILE_STYLES` no mobile em vez de opções desktop | Manter opções únicas para todos | Opções desktop (dock_concave) não existem em MOBILE_STYLES — visual sem efeito real no mobile |
+| `maxWidth: 1400px` no wrapper do Settings | maxWidth por seção | Um único wrapper cobre todos os cards de uma vez; 1400px cobre resoluções de notebook e monitores comuns sem cortar |
+| `useIsTablet` como hook separado de `useIsMobile` | Ternário inline ou media query CSS | Mesma convenção do `useIsMobile` já existente — consistência no padrão do arquivo |
