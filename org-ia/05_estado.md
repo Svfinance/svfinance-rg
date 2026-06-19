@@ -6,87 +6,96 @@
 
 ## Sessão atual
 
-**Data:** 17/06/2026
+**Data:** 18/06/2026
 **Repo foco:** svfinance-rg
-**Tarefa ativa:** PR7 encerrado — aguardando teste em produção
-**Modelo/effort:** SonCoder/high (diagnóstico de race condition + análise da API do @zxing/browser)
+**Tarefa ativa:** PR9 e PR10 encerrados — aguardando teste em produção
+**Modelo/effort:** SonCoder/high
 
 ---
 
-## Estado no início desta sessão (17/06)
+## Estado no início desta sessão (18/06)
 
 **Migration HEAD:** `pin_cliente_add_01`
 **Branch:** `main`
 
-**Contexto:** continuação do PR7. Fix original (cleanupRef + transitingRef + guards) já estava comitado (0901efa), mas o bug "Escanear novamente" persistia em produção. Diagnóstico com logs temporários revelou que o botão da tela `confirming_location` não passava por `voltarParaScanner()`. Na sequência, análise do pacote @zxing/browser instalado revelou que `reader.reset()` nunca existiu — a stream de câmera jamais foi parada corretamente.
+**Contexto:** PR7 e PR8 já em produção (commits d0de93e e 9bc6a17). Roteiro de validação
+pendente. Dois novos itens implementados nesta sessão.
 
 ---
 
 ## O que foi entregue nesta sessão
 
-### PR7 — Etapa 2: botão "Escanear novamente" em `confirming_location` (`CheckinModal.jsx`)
+### PR9 — Checkout com validação de GPS (`CheckinModal.jsx`)
 
-**Causa raiz encontrada:** existiam dois botões "← Escanear novamente" em `CheckinModal.jsx`:
-- Linha 473 (`confirming_location`): `onClick={() => setStep("scanning")}` — chamada direta, sem passar por `voltarParaScanner()`, pulando todos os guards (transitingRef, confirmandoRef, setError, setPinMode, setPinVal).
-- Linha 566 (`confirming`): `onClick={voltarParaScanner}` — correto.
+**Causa raiz:** `onQRDetected` enviava checkout direto para `confirming`, pulando
+`confirming_location`. O colaborador finalizava serviço sem confirmar presença no local.
 
-O fluxo real do bug era: Iniciar serviço → scanner → QR lido → "Você está no local correto?" → clique em "← Escanear novamente" (linha 473) → `setStep("scanning")` direto → scanner remontado sem guards → detecção imediata/piscar.
-
-**Fix:** unificar linha 473 para `onClick={voltarParaScanner}`.
+**Fix:**
+- `setStep(action === "start" ? "confirming_location" : "confirming")` → `setStep("confirming_location")`
+- Mensagem de erro do botão "Não, estou no local errado" virou action-aware:
+  `"❌ ${action === "start" ? "Check-in" : "Check-out"} cancelado."`
+- Texto do botão "Sim, estou no local de [X]" já era genérico — sem ajuste necessário.
 
 ---
 
-### PR8 — `QRScanner.jsx`: stream de câmera nunca era parada + AbortError
+### PR10 — Timer retry no scanner + PIN de autorização (`QRScanner.jsx` + `CheckinModal.jsx`)
 
-**Problema 1 — `reader.reset()` não existe no @zxing/browser:**
-Verificado no fonte do pacote instalado (`browser-0.2.0.tgz`): `BrowserMultiFormatReader` e `BrowserCodeReader` não têm método `reset()`. O `try { readerRef.current.reset(); } catch {}` sempre jogava `TypeError` silencioso. A MediaStream (e seus tracks) **nunca era parada** — LED da câmera do celular continuava aceso após cada scan, e a stream ficava ativa até o GC.
+**QRScanner.jsx:**
+- `showRetry` state adicionado
+- Timer de erro ajustado de 25s → 30s; ao disparar: `setCamErr` + `setShowRetry(true)`
+- Cleanup reseta `showRetry` ao trocar de modo
+- Botão "↩ Escanear novamente" aparece apenas quando `showRetry === true` (após 30s sem leitura)
 
-**API correta:** `decodeFromConstraints` retorna um objeto `controls` com `controls.stop()`. Esse método chama `finalizeCallback`, que executa `disposeMediaStream(stream)` (`track.stop()` em todos os tracks) + `cleanVideoSource(video)` (`srcObject = null`).
-
-**Fix:** renomear `readerRef` → `controlsRef`, capturar o retorno de `decodeFromConstraints` e chamar `controls.stop()` no `stopCamera()`.
-
-**Race condition adicional corrigida:** se o componente desmontar enquanto `decodeFromConstraints` ainda está abrindo a câmera (antes de resolver), `controlsRef.current` é null no momento do cleanup. Fix: após `decodeFromConstraints` resolver, checkar `if (!mounted) { stopCamera(); return; }` para parar a stream mesmo que o cleanup já tenha rodado.
-
-**Problema 2 — AbortError no console:**
-`tryPlayVideo` (dentro do @zxing) faz `await videoElement.play()`. Se o React remove o `<video>` do DOM antes do `play()` resolver, o browser rejeita com `AbortError: The play() request was interrupted because the media was removed from the document`. O @zxing captura e loga `console.warn('It was not possible to play the video.', error)`.
-
-**Fix:** mover o `<video>` para fora do bloco `{mode === "camera" && ...}`, mantendo-o sempre no DOM. Visibilidade controlada por `display: none` na div wrapper. O React não remove mais o elemento — `play()` nunca encontra o elemento ausente.
+**CheckinModal.jsx:**
+- Botão "← Escanear novamente" removido de `confirming_location`
+- Botão "← Escanear novamente" removido de `confirming`
+- `ErroFixo` em `confirming` perdeu `onTentarNovamente` → `voltarParaScanner` (era o caminho remanescente)
+- Substituído por botão "🔑 Solicitar PIN de autorização" → `setPinMode(true)`, visível quando `error && !pinMode`
 
 ---
 
 ## Arquivos alterados nesta sessão (comitados)
 
 ```
-src/components/restaura/CheckinModal.jsx  ← PR7 etapa 2: linha 473 → voltarParaScanner()
-src/components/restaura/QRScanner.jsx     ← PR8: readerRef→controlsRef, reset()→stop(), <video> sempre no DOM
+src/components/restaura/CheckinModal.jsx  ← PR9 + PR10
+src/components/restaura/QRScanner.jsx     ← PR10
 org-ia/05_estado.md                       ← este arquivo
 ```
 
 ---
 
-## Status dos bugs
+## Status dos bugs / features
 
-| Bug | Status |
+| Item | Status |
 |---|---|
-| Bug 1 — "Escanear novamente" pisca / trava | ✅ Fix aplicado e comitado — **aguardando teste em produção** |
-| Bug 2 — LED câmera não apagava após scan | ✅ Fix aplicado e comitado — **aguardando teste em produção** |
-| Bug 3 — Sidebar mobile / seletor de estilo | ⬜ Bloqueado — não tocado nesta sessão |
+| Bug 1 — "Escanear novamente" pisca / trava | ✅ Comitado (PR7) |
+| Bug 2 — LED câmera não apagava após scan | ✅ Comitado (PR8) |
+| PR9 — GPS no checkout | ✅ Comitado — **aguardando teste em produção** |
+| PR10 — Timer retry + PIN de autorização | ✅ Comitado — **aguardando teste em produção** |
+| Bug 3 — Sidebar mobile / seletor de estilo | ⬜ Bloqueado — aguarda Settings.jsx |
 
 ---
 
-## Roteiro de teste em produção (pendente)
+## Roteiro de teste em produção (pendente — todos os PRs)
 
 ```
-Teste do Bug 1 (Escanear novamente):
+PR7 + PR8 (scanner):
   1. Abrir O.S nova → Iniciar serviço → Escanear QR
-  2. Na tela "Você está no local correto?" → clicar "← Escanear novamente"
-  3. Scanner deve abrir limpo, sem piscar
-  4. Repetir 3x — não deve ser intermitente
+  2. Na tela "Você está no local correto?" → clicar "Sim" → confirmar entrada
+  3. Fechar modal → confirmar LED da câmera apaga
+  4. Reabrir modal → câmera inicia do zero
 
-Teste do Bug 2 (stream de câmera / LED):
-  5. Após qualquer scan bem-sucedido → fechar o modal
-  6. Confirmar que o LED da câmera do celular apaga imediatamente
-  7. Abrir modal novamente → câmera deve iniciar do zero sem estado residual
+PR9 (GPS no checkout):
+  5. Com check-in aberto → "Finalizar serviço — Escanear QR"
+  6. Escanear → tela "Você está no local correto?" deve aparecer (novidade)
+  7. Confirmar → checkout registrado normalmente
+  8. Forçar erro de raio → tela de erro aparece com botão "🔑 Solicitar PIN"
+
+PR10 (timer + PIN):
+  9. Abrir scanner → aguardar 30s sem escanear → erro + botão "↩ Escanear novamente" aparecem
+  10. Clicar "↩ Escanear novamente" → câmera reinicia limpa
+  11. Forçar fora do raio no check-in → botão "🔑 Solicitar PIN de autorização" aparece
+  12. Clicar → campo de PIN aparece e fluxo existente funciona normalmente
 ```
 
 ---
@@ -115,6 +124,7 @@ Teste do Bug 2 (stream de câmera / LED):
 5. `isRG()` sempre por hostname — nunca `company_id`; embutido em `Sidebar.jsx` como `_isRGHost()`, importado de `../utils/isRG` no resto do código
 6. Antes de qualquer CTRL+H: sempre confirmar o trecho exato do arquivo atual
 7. **@zxing/browser v0.2.0 não tem `reset()`** — o método correto de parada é `controls.stop()` (retorno de `decodeFromConstraints`)
+8. `sem_coordenadas` → `setPinMode(true)` já é ativado diretamente em `confirmar()` — botão "🔑 Solicitar PIN" não aparece nesse caso porque `pinMode` já é `true`
 
 ---
 
@@ -149,3 +159,6 @@ export function setStyleAdaptive(s) {
 | Exportar funções de mobile separadas em vez de unificar com desktop | Unificar getSidebarStyle para detectar mobile internamente | Manter funções desktop/mobile separadas evita side-effects cruzados; `setStyleAdaptive()` decide qual usar, sem misturar a lógica interna das duas |
 | `controls.stop()` em vez de `reader.reset()` | Manter `reader.reset()` com fallback manual | `reset()` não existe na API — `controls.stop()` é o único caminho correto documentado pelo @zxing/browser |
 | `<video>` sempre no DOM via `display: none` | Patch em `videoElement.play` para suprimir AbortError | DOM persistence elimina a causa raiz; patch seria monkey-patching de API do browser |
+| `confirming_location` para checkout também | Manter checkout direto no confirming | Consistência de auditoria — checkout sem confirmação de local era ponto cego |
+| Botão "🔑 Solicitar PIN" no lugar de "↩ Escanear novamente" | Manter Escanear novamente como fallback | Fora do raio, escanear de novo não resolve — PIN é o único desbloqueio válido |
+| Timer retry 30s com `showRetry` state | Sempre mostrar botão de retry | Evita distração visual — botão só aparece quando câmera realmente falhou |
