@@ -3,7 +3,7 @@ import { useTheme } from "../contexts/ThemeContext";
 import PageLayout from "../components/layout/PageLayout";
 import Sidebar from "../components/layout/Sidebar";
 import logoGif from "../assets/video.gif";
-import { getSidebarStyle, setSidebarStyleLS } from "../components/layout/Sidebar";
+import { getSidebarStyle, getMobileStyle, setStyleAdaptive } from "../components/layout/Sidebar";
 import { RG_THEMES } from "../themes/themes";
 import { isRG } from "../utils/isRG";
 
@@ -37,7 +37,7 @@ export default function Settings() {
 
   const [sidebarOpen, setSidebarOpen]       = useState(false);
   const [activeSection, setActiveSection]   = useState("empresa");
-  const [sidebarStyle, setSidebarStyleState]= useState(getSidebarStyle());
+  const [sidebarStyle, setSidebarStyleState]= useState(isMobile ? getMobileStyle() : getSidebarStyle());
   const [toast, setToast]                   = useState(null);
 
   // empresa
@@ -82,8 +82,7 @@ export default function Settings() {
   }, []);
 
   function handleSidebarStyle(s) {
-    setSidebarStyleLS(s); setSidebarStyleState(s);
-    window.dispatchEvent(new Event("sv_sidebar_style_changed"));
+    setStyleAdaptive(s); setSidebarStyleState(s);
     showToast("Estilo de sidebar aplicado!");
   }
 

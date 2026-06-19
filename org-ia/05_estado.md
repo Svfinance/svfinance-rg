@@ -23,6 +23,31 @@ pendente. Dois novos itens implementados nesta sessão.
 
 ---
 
+## O que foi entregue nesta sessão (continuação 18/06)
+
+### Bug 3 — Sidebar mobile / seletor de estilo (`Sidebar.jsx` + `Settings.jsx`)
+
+**Causa raiz:** `handleSidebarStyle` em `Settings.jsx` chamava `setSidebarStyleLS(s)` — grava em
+`sv_sidebar_style` e dispara `sv_sidebar_style_changed`. `SidebarMobile` ouve `sv_mobile_style_changed`
+e lê de `sv_mobile_style`. Nunca se cruzavam: Settings não afetava o sidebar no mobile.
+
+**Fix:**
+- `Sidebar.jsx`: `getMobileStyle` e `setMobileStyleLS` exportados; `setStyleAdaptive` adicionado
+  (detecta `window.innerWidth <= 768` e chama o setter correto).
+- `Settings.jsx`:
+  - Import: `setSidebarStyleLS` removido → `getMobileStyle` + `setStyleAdaptive` adicionados.
+  - State init: `getSidebarStyle()` → `isMobile ? getMobileStyle() : getSidebarStyle()`.
+  - `handleSidebarStyle`: `setSidebarStyleLS(s)` → `setStyleAdaptive(s)`; evento manual removido
+    (já despachado internamente por `setSidebarStyleLS` / `setMobileStyleLS`).
+
+**Nota:** no mobile, o Settings mostra estilos desktop (Lateral / Horizontal / Côncavo).
+`vertical` e `horizontal` existem nos dois mundos e funcionam normalmente.
+`dock_concave` não existe em `MOBILE_STYLES` — SidebarMobile o renderiza como painel lateral
+(else branch). Não é erro, mas o usuário mobile pode preferir usar o ⚙ dentro do próprio
+sidebar para acessar os estilos exclusivos do mobile (Dock, Dir. Lateral, Bottom Sheet).
+
+---
+
 ## O que foi entregue nesta sessão
 
 ### PR9 — Checkout com validação de GPS (`CheckinModal.jsx`)
@@ -59,6 +84,8 @@ pendente. Dois novos itens implementados nesta sessão.
 ```
 src/components/restaura/CheckinModal.jsx  ← PR9 + PR10
 src/components/restaura/QRScanner.jsx     ← PR10
+src/components/layout/Sidebar.jsx         ← Bug 3
+src/pages/Settings.jsx                    ← Bug 3
 org-ia/05_estado.md                       ← este arquivo
 ```
 
@@ -72,7 +99,7 @@ org-ia/05_estado.md                       ← este arquivo
 | Bug 2 — LED câmera não apagava após scan | ✅ Comitado (PR8) |
 | PR9 — GPS no checkout | ✅ Comitado — **aguardando teste em produção** |
 | PR10 — Timer retry + PIN de autorização | ✅ Comitado — **aguardando teste em produção** |
-| Bug 3 — Sidebar mobile / seletor de estilo | ⬜ Bloqueado — aguarda Settings.jsx |
+| Bug 3 — Sidebar mobile / seletor de estilo | ✅ Comitado — **aguardando teste em produção** |
 
 ---
 
@@ -104,12 +131,8 @@ PR10 (timer + PIN):
 
 ```
 1. Testar roteiro acima em produção (restauraglass.svfinance.com.br)
-2. Se aprovado: seguir para Bug 3 (Sidebar mobile)
-   a. Enviar Settings.jsx para análise — sem ele o bug não fecha
-   b. Aplicar fix em Sidebar.jsx (exportar getMobileStyle/setMobileStyleLS)
-   c. Ajustar chamada correta em Settings.jsx
-3. Mudar RAIO_CHECKIN_METROS de 3 para 25 no Render — só após validar GPS real
-4. Seguir para múltiplos endereços/filiais (migration enderecos_filiais_01,
+2. Mudar RAIO_CHECKIN_METROS de 3 para 25 no Render — só após validar GPS real
+3. Seguir para múltiplos endereços/filiais (migration enderecos_filiais_01,
    down_revision = pin_cliente_add_01)
 ```
 
@@ -128,27 +151,6 @@ PR10 (timer + PIN):
 
 ---
 
-## Fix documentado pendente — Bug 3: Sidebar mobile (`Sidebar.jsx`)
-
-```js
-// Localizar:
-const MOBILE_STYLE_KEY = "sv_mobile_style";
-function getMobileStyle()    { return localStorage.getItem(MOBILE_STYLE_KEY) || "dock"; }
-function setMobileStyleLS(s) { localStorage.setItem(MOBILE_STYLE_KEY, s); window.dispatchEvent(new Event("sv_mobile_style_changed")); }
-
-// Substituir por:
-const MOBILE_STYLE_KEY = "sv_mobile_style";
-export function getMobileStyle()    { return localStorage.getItem(MOBILE_STYLE_KEY) || "dock"; }
-export function setMobileStyleLS(s) { localStorage.setItem(MOBILE_STYLE_KEY, s); window.dispatchEvent(new Event("sv_mobile_style_changed")); }
-
-export function setStyleAdaptive(s) {
-  if (window.innerWidth <= 768) setMobileStyleLS(s);
-  else setSidebarStyleLS(s);
-}
-```
-
-**Bloqueado:** `Settings.jsx` ainda não foi analisado. Sem ele não dá para confirmar qual chamada exata precisa trocar.
-
 ---
 
 ## Decisões tomadas (acumulado)
@@ -162,3 +164,4 @@ export function setStyleAdaptive(s) {
 | `confirming_location` para checkout também | Manter checkout direto no confirming | Consistência de auditoria — checkout sem confirmação de local era ponto cego |
 | Botão "🔑 Solicitar PIN" no lugar de "↩ Escanear novamente" | Manter Escanear novamente como fallback | Fora do raio, escanear de novo não resolve — PIN é o único desbloqueio válido |
 | Timer retry 30s com `showRetry` state | Sempre mostrar botão de retry | Evita distração visual — botão só aparece quando câmera realmente falhou |
+| `setStyleAdaptive` no Settings em vez de `setSidebarStyleLS` direto | Manter chamada desktop e adicionar chamada mobile separada | Uma função única detecta viewport e grava na chave correta — evita duplicidade de lógica |

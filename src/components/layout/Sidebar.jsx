@@ -25,8 +25,9 @@ export function getAutoHide()        { return localStorage.getItem(AUTOHIDE_KEY)
 export function setAutoHideLS(v)     { localStorage.setItem(AUTOHIDE_KEY, String(v)); }
 
 const MOBILE_STYLE_KEY = "sv_mobile_style";
-function getMobileStyle()    { return localStorage.getItem(MOBILE_STYLE_KEY) || "dock"; }
-function setMobileStyleLS(s) { localStorage.setItem(MOBILE_STYLE_KEY, s); window.dispatchEvent(new Event("sv_mobile_style_changed")); }
+export function getMobileStyle()    { return localStorage.getItem(MOBILE_STYLE_KEY) || "dock"; }
+export function setMobileStyleLS(s) { localStorage.setItem(MOBILE_STYLE_KEY, s); window.dispatchEvent(new Event("sv_mobile_style_changed")); }
+export function setStyleAdaptive(s) { if (window.innerWidth <= 768) setMobileStyleLS(s); else setSidebarStyleLS(s); }
 
 function useIsMobile() {
   const [m, setM] = useState(window.innerWidth <= 768);
