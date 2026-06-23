@@ -494,7 +494,7 @@ export default function Clients() {
     }
 
     return matchSearch && matchFreq;
-  });
+  }).sort((a, b) => (a.name || "").localeCompare(b.name || "", "pt-BR"));
 
   // ── Helpers de ícone/texto de precisão GPS ────────────────────────────────
   // Usados no formulário para feedback visual ao admin

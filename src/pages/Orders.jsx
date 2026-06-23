@@ -341,7 +341,7 @@ export default function Orders() {
     return freqOk &&
       (filterStatus === "all" || st === filterStatus) &&
       (o.number.toLowerCase().includes(search.toLowerCase()) || o.client_name.toLowerCase().includes(search.toLowerCase()));
-  });
+  }).sort((a, b) => (a.client_name || "").localeCompare(b.client_name || "", "pt-BR"));
   const countBy = (s) => orders.filter(o => effectiveStatus(o) === s).length;
 
   // ── Estilos padrão (não-RG) ─────────────────────────────────────────────────
