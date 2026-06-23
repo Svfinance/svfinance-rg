@@ -428,7 +428,10 @@ export default function Clients() {
         setDeleteConfirm(null);
         buscarProximoCodigo();
         fetchClients();
-      } else showToast("Erro ao remover.", "error");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.msg || "Erro ao remover. Tente novamente.", "error");
+      }
     } catch { showToast("Erro de conexão.", "error"); }
   }
 

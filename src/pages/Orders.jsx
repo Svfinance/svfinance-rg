@@ -322,7 +322,10 @@ export default function Orders() {
     try {
       const res = await fetch(`${API}/orders/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token()}` } });
       if (res.ok) { showToast("O.S removida."); setDeleteConfirm(null); cacheInvalidate("sv_orders"); fetchAll(); }
-      else showToast("Erro ao remover.", "error");
+      else {
+        const data = await res.json().catch(() => ({}));
+        showToast(data.msg || "Erro ao remover. Tente novamente.", "error");
+      }
     } catch { showToast("Erro de conexão.", "error"); }
   }
 
