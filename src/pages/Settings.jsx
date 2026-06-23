@@ -335,9 +335,6 @@ export default function Settings() {
         {/* TEMAS */}
         {activeSection==="temas" && (
           <>
-            <div style={{ fontSize:11, color:"#94a3b8", marginBottom:12, fontFamily:"monospace" }}>
-              [debug] innerWidth: {window.innerWidth}px | isMobile: {isMobile ? "true" : "false"} | isTablet: {isTablet ? "true" : "false"}
-            </div>
             {/* Sidebar styles */}
             <div style={card}>
                 <h2 style={{ fontSize:"1rem", fontWeight:700, margin:"0 0 6px", color:theme.textPrimary }}>🗂️ Estilo do Sidebar</h2>
