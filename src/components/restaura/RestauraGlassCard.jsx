@@ -55,6 +55,11 @@ function fmtDateBR(iso) {
   const d = iso.length > 10 ? new Date(iso) : new Date(iso + "T00:00:00");
   return d.toLocaleDateString("pt-BR");
 }
+function fmtMonthYear(d) {
+  if (!d) return "";
+  const dt = d.length > 10 ? new Date(d) : new Date(d + "T00:00:00");
+  return `${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
+}
 
 function calcProximaData(dias) {
   const map  = { seg: 1, ter: 2, qua: 3, qui: 4, sex: 5, sab: 6 };
@@ -589,7 +594,7 @@ export default function RestauraGlassCard({ order, theme, isMobile, onCheckinCli
         <div style={{ flex: 1 }}>
           <div style={{ fontWeight: 900, fontSize: "1.2rem", color: RGT.verde, letterSpacing: "-0.5px" }}>RestauraGlass<sup style={{ fontSize: "0.55rem" }}>®</sup></div>
           <div style={{ fontSize: "0.65rem", letterSpacing: "0.1em", color: RGT.textSub, textTransform: "uppercase" }}>Especialista em limpeza de vidros</div>
-          <div style={{ fontSize: "0.82rem", fontWeight: 600, marginTop: 4, color: RGT.text }}>{order.number} — {order.client_name}</div>
+          <div style={{ fontSize: "0.82rem", fontWeight: 600, marginTop: 4, color: RGT.text }}>{fmtMonthYear(order.created_at) || order.number} — {order.client_name}</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: "0.72rem", color: RGT.textSub }}>Status</div>

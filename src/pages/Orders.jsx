@@ -69,6 +69,11 @@ function fmtDate(d) {
   const [y, m, dd] = d.split("-");
   return `${dd}/${m}/${y}`;
 }
+function fmtMonthYear(d) {
+  if (!d) return "";
+  const dt = d.length > 10 ? new Date(d) : new Date(d + "T00:00:00");
+  return `${String(dt.getMonth() + 1).padStart(2, "0")}/${dt.getFullYear()}`;
+}
 function useIsMobile() {
   const [m, setM] = useState(window.innerWidth <= 768);
   useEffect(() => {
@@ -558,7 +563,7 @@ export default function Orders() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.88rem", minWidth: isMobile ? "580px" : "unset" }}>
               <thead>
                 <tr>
-                  {(isMobile ? ["Número","Cliente","Status","Check-in","Ações"] : ["Número","Cliente","Origem","Total","Criado em","Status","Check-in","Ações"]).map(h => (
+                  {(isMobile ? [rg?"Período":"Número","Cliente","Status","Check-in","Ações"] : [rg?"Período":"Número","Cliente","Origem","Total","Criado em","Status","Check-in","Ações"]).map(h => (
                     <th key={h} style={{ textAlign: "left", padding: "12px 16px", color: rg ? RGT.textSub : theme.textMuted, fontWeight: 600, fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", background: rg ? "rgba(255,255,255,0.5)" : "transparent", borderBottom: `1px solid ${rg ? RGT.verdeBd : theme.borderCard}`, whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -572,7 +577,7 @@ export default function Orders() {
                   return (
                     <tr key={o.id} className="os-row" onClick={() => openDetailOrder(o)} style={{ cursor: "pointer", borderBottom: `1px solid ${rg ? RGT.verdeBd : theme.border}`, transition: "background 0.15s" }}>
                       <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
-                        <button style={{ background: "none", border: "none", fontWeight: 700, color: rg ? RGT.verde : theme.primary, cursor: "pointer", fontSize: "0.88rem", padding: 0, textDecoration: "underline" }} onClick={() => openDetailOrder(o)}>{o.number}</button>
+                        <button style={{ background: "none", border: "none", fontWeight: 700, color: rg ? RGT.verde : theme.primary, cursor: "pointer", fontSize: "0.88rem", padding: 0, textDecoration: "underline" }} onClick={() => openDetailOrder(o)}>{rg ? (fmtMonthYear(o.created_at) || o.number) : o.number}</button>
                       </td>
                       <td style={{ padding: "12px 16px", verticalAlign: "middle" }}>
                         <div style={{ fontWeight: 600, color: rg ? RGT.text : theme.textPrimary }}>{o.client_name}</div>
